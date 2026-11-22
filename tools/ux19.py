@@ -1,0 +1,17 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox'])
+    pg=b.new_page(viewport={'width':1300,'height':850});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(1500)
+    C=lambda sel:pg.evaluate("s=>{const b=document.querySelector(s);if(b)b.click();return !!b}",sel)
+    BT=lambda t:pg.evaluate("t=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes(t));if(b)b.click();return !!b}",t)
+    C('#pn2 [data-t=sheet]');pg.wait_for_timeout(300)
+    print(pg.evaluate("[...document.querySelectorAll('#pn2 .row button')].map(b=>b.textContent).slice(0,8)"))
+    print(BT('Quản lý / xóa tileset'));pg.wait_for_timeout(300)
+    BT('Chọn tất cả (đang lọc)');pg.wait_for_timeout(200);pg.screenshot(path='ux19a.png')
+    BT('Xóa các mục đã chọn');pg.wait_for_timeout(300);BT('Đồng ý');pg.wait_for_timeout(600)
+    C('#pn2 [data-t=sheet]');pg.wait_for_timeout(300)
+    print(pg.evaluate("document.querySelector('#pn2').innerText.slice(0,300)"))
+    print(BT('Quản lý / xóa tileset'));pg.wait_for_timeout(300);print(BT('Hiện lại tileset gốc'));pg.wait_for_timeout(300);C('#pn2 [data-t=sheet]');pg.wait_for_timeout(300);print(pg.evaluate("[...document.querySelectorAll('#pn2 .row button')].map(b=>b.textContent).slice(0,4)"))
+    C('#pn2 [data-t=res]');pg.wait_for_timeout(500);print(pg.evaluate("document.querySelector('#pn2').innerText.match(/Tìm thấy[^\\n]*/)?.[0]"))
+    pg.screenshot(path='ux19b.png');print(errs);b.close()
