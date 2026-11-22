@@ -1,0 +1,20 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+    pg=b.new_page(viewport={'width':1400,'height':900});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(900)
+    pg.evaluate("[...document.querySelectorAll('.tabbtn')].find(b=>b.dataset.v==='3d').click()");pg.wait_for_timeout(1500)
+    pg.evaluate("t=>[...document.querySelectorAll('#pn3 .ptab')].find(b=>b.textContent.includes(t)).click()","Mô hình")
+    with pg.expect_file_chooser() as fc: pg.evaluate("[...document.querySelectorAll('#pn3 button')].find(b=>b.textContent.includes('Nhập gói mô hình')).click()")
+    fc.value.set_files(['/tmp/k3d/all/kenney_survival-kit.zip']);pg.wait_for_timeout(5000)
+    c=pg.query_selector('#cv3').bounding_box()
+    pick=lambda n:pg.evaluate("n=>[...document.querySelectorAll('#pn3 .pbody button[title]')].find(x=>x.textContent.trim()===n).click()",n)
+    pick('tree');pg.wait_for_timeout(800)
+    # set fit: h=2
+    print(errs)
+    print(pg.evaluate("(document.querySelector('#pn3').innerText.match(/Đang chọn[\\s\\S]{0,300}/)||['none'])[0]"))
+    pg.evaluate("()=>{const r=[...document.querySelectorAll('#pn3 .row')].find(x=>x.textContent.includes('Cỡ khi đặt'));const s=r.querySelector('select');s.value='h';s.dispatchEvent(new Event('change'));const i=r.querySelector('input');i.value='2';i.dispatchEvent(new Event('input'))}")
+    pg.mouse.click(c['x']+400,c['y']+c['height']*0.75);pg.wait_for_timeout(1200)
+    print(pg.evaluate("document.querySelector('#pn3').innerText.match(/Kích thước[^\\n]*/g)"))
+    print(pg.evaluate("document.querySelector('#pn3').innerText.match(/cỡ ×[^ ]*/g)"))
+    pg.screenshot(path='m40.png',clip={'x':0,'y':300,'width':1400,'height':600});print(errs)

@@ -1,0 +1,63 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+    pg=b.new_page(viewport={'width':1400,'height':800});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.add_init_script("window.prompt=()=>null;window.confirm=()=>false;window.alert=()=>{}")
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(900)
+    E=lambda js:pg.evaluate(js)
+    tab=lambda t:pg.evaluate("t=>[...document.querySelectorAll('#pn2 .ptab')].find(b=>b.textContent.includes(t)).click()",t)
+    clk=lambda t:pg.evaluate("t=>[...document.querySelectorAll('#pn2 button')].find(b=>b.textContent.includes(t)).click()",t)
+    dl=lambda:pg.evaluate("[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='200')")
+    okb=lambda i=0:(pg.wait_for_timeout(250),pg.evaluate("i=>{const o=[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='200');o[o.length-1].querySelectorAll('button')[i].click()}",i),pg.wait_for_timeout(250))
+    # upload 3 sheets
+    tab('Tệp')
+    with pg.expect_file_chooser() as fc: clk('Ảnh tileset')
+    fc.value.set_files(['/tmp/mt/img0.png','/tmp/mt/img1.png','/tmp/mt/img2.png'])
+    pg.wait_for_timeout(600);okb();okb();pg.wait_for_timeout(900)
+    print('sheets',E("window.__e2.sheets().map(s=>s.name)"))
+    n0=E("window.__e2.sheets().length")
+    # draw tile of last sheet on map: choose in tileset tab
+    tab('Tileset')
+    cv=pg.query_selector('#pn2 .sheetwrap canvas');bb=cv.bounding_box()
+    pg.mouse.click(bb['x']+8,bb['y']+8)
+    tab('Công cụ');clk('✏ Vẽ')
+    c=pg.query_selector('#cv2').bounding_box()
+    pts=[(c['x']+200+i*40,c['y']+200) for i in range(4)]
+    for x,y in pts: pg.mouse.click(x,y)
+    M=lambda:E("(()=>{const m=window.__e2.map();return {n:m.layers.map(l=>l.filter(v=>v).length),ents:m.ents.length}})()")
+    print('after draw',M())
+    # add an enemy via obj tool
+    tab('Đối tượng')
+    # select area
+    tab('Công cụ');clk('⬚ Chọn vùng')
+    pg.mouse.move(c['x']+190,c['y']+190);pg.mouse.down();pg.mouse.move(c['x']+300,c['y']+260,steps=5);pg.mouse.up()
+    pg.wait_for_timeout(200)
+    print('panel has copy btn',E("[...document.querySelectorAll('#pn2 button')].some(b=>b.textContent.includes('Sao chép'))"))
+    pg.keyboard.press('Control+c');pg.wait_for_timeout(200)
+    print('clip',E("window.__e2.hasClip()"))
+    pg.keyboard.press('Control+v');pg.wait_for_timeout(200)
+    pg.mouse.move(c['x']+300,c['y']+450);pg.mouse.down();pg.mouse.move(c['x']+305,c['y']+452,steps=3);pg.mouse.up();pg.wait_for_timeout(200)
+    pg.mouse.move(c['x']+500,c['y']+450);pg.mouse.down();pg.mouse.up();pg.wait_for_timeout(200)
+    print('after 2 pastes',M())
+    pg.screenshot(path='m31a.png')
+    pg.keyboard.press('Escape')
+    # delete: use manage
+    tab('Tileset');clk('Quản lý')
+    pg.wait_for_timeout(300)
+    print(E("[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='200')[0].innerText.slice(0,400)"))
+    pg.screenshot(path='m31b.png')
+    # check first custom (idx4) and delete it
+    pg.evaluate("[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='200')[0].querySelectorAll('input[type=checkbox]')[0].click()")
+    pg.evaluate("[...[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='200')[0].querySelectorAll('button')].find(b=>b.textContent.includes('Xóa các')).click()")
+    pg.wait_for_timeout(300);print(E("[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='200').map(d=>d.innerText.slice(0,200))"))
+    okb(0);pg.wait_for_timeout(500)
+    print('sheets now',E("window.__e2.sheets().map(s=>s.name)"),M())
+    # delete rest: choose all unused
+    tab('Tileset');clk('Quản lý');pg.wait_for_timeout(200)
+    pg.evaluate("[...[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='200')[0].querySelectorAll('button')].find(b=>b.textContent.includes('chưa dùng')).click()")
+    pg.evaluate("[...[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='200')[0].querySelectorAll('button')].find(b=>b.textContent.includes('Xóa các')).click()")
+    pg.wait_for_timeout(300);okb(0);pg.wait_for_timeout(500)
+    print('sheets after unused delete',E("window.__e2.sheets().map(s=>s.name)"),M())
+    # remap check: tiles on map reference valid sheets
+    print('valid',E("(()=>{const m=window.__e2.map(),n=window.__e2.sheets().length;let bad=0;for(const l of m.layers)for(const v of l)if(v&&((v-1)>>3>>12)>=n)bad++;return bad})()"))
+    pg.screenshot(path='m31c.png');print(errs)

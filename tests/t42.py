@@ -1,0 +1,22 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+    pg=b.new_page(viewport={'width':1400,'height':900});errs=[];pg.on('console',lambda m:print('C',m.text) if 'GL' not in m.text else None);pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(900)
+    pg.evaluate("[...document.querySelectorAll('.tabbtn')].find(b=>b.dataset.v==='3d').click()");pg.wait_for_timeout(1500)
+    n=lambda:pg.evaluate("document.querySelectorAll('#pn3 .mat').length")
+    n0=n()
+    with pg.expect_file_chooser() as fc: pg.evaluate("[...document.querySelectorAll('#pn3 button')].find(b=>b.textContent.includes('Từ gói .zip')).click()")
+    fc.value.set_files(['/tmp/k3d/all/kenney_survival-kit.zip']);pg.wait_for_timeout(2500)
+    print(n0,n(),pg.evaluate("[...document.querySelectorAll('div')].filter(d=>d.style.zIndex==='200').length"))
+    pg.screenshot(path='m42a.png')
+    # confirm dialog maybe
+    pg.evaluate("()=>{const c=[...document.querySelectorAll('input[type=checkbox]')];c.slice(4,10).forEach(x=>x.click())}");pg.wait_for_timeout(300)
+    pg.evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Dùng các ảnh đã chọn')).click()");pg.wait_for_timeout(2500)
+    print('sau nap',n())
+    pg.evaluate("[...document.querySelectorAll('#pn3 button')].find(b=>b.textContent.includes('Quản lý / xóa chất liệu')).click()");pg.wait_for_timeout(400)
+    pg.evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Chọn tên Preview')).click()");pg.wait_for_timeout(200)
+    pg.screenshot(path='m42b.png')
+    pg.evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Xóa đã chọn')).click()");pg.wait_for_timeout(400)
+    pg.evaluate("()=>{const o=[...document.querySelectorAll('div')].filter(d=>d.style.zIndex==='200').pop();const bs=o.querySelectorAll('button');console.log([...bs].map(b=>b.textContent));bs[0].click();}");pg.wait_for_timeout(600)
+    print('sau xoa',n(),errs)

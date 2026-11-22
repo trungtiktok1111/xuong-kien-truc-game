@@ -1,0 +1,33 @@
+from playwright.sync_api import sync_playwright
+import glob
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox'])
+    pg=b.new_page(viewport={'width':1400,'height':900});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.add_init_script("window.prompt=()=>null;window.confirm=()=>false;window.alert=()=>{}")
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(900)
+    tab=lambda t:pg.evaluate("t=>[...document.querySelectorAll('#pn2 .ptab')].find(b=>b.textContent.includes(t)).click()",t)
+    clk=lambda sel,t:pg.evaluate("([s,t])=>[...document.querySelectorAll(s+' button')].find(b=>b.textContent.includes(t)).click()",[sel,t])
+    dlg=lambda:(pg.wait_for_timeout(400),pg.evaluate("[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='200')[0].querySelectorAll('button')[0].click()"))
+    tab('Tệp')
+    with pg.expect_file_chooser() as fc: clk('#pn2','Ảnh tileset')
+    fc.value.set_files(sorted(glob.glob('/tmp/an6/*/*.png')))
+    dlg();pg.wait_for_timeout(500)
+    if pg.evaluate("[...document.querySelectorAll('div')].some(d=>d.style.zIndex=='200')"):dlg()
+    pg.wait_for_timeout(1500)
+    tab('Hoạt ảnh');clk('#pn2','TẠO TỰ ĐỘNG');pg.wait_for_timeout(300)
+    print(pg.evaluate("[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='150')[0].innerText"))
+    clk('body','Tạo các bộ');pg.wait_for_timeout(500)
+    print(pg.evaluate("JSON.stringify([window.__e2.gameData().cfg.heroAnim,window.__e2.gameData().cfg.anims.length])"))
+    pg.screenshot(path='b3.png',clip={'x':1000,'y':100,'width':400,'height':800})
+    pg.evaluate("()=>{const c=window.__e2.gameData().cfg.anims[0];}")
+    clk('#pn2','Hình bị cắt');pg.wait_for_timeout(300)
+    ovt=lambda:pg.evaluate("[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='160')[0].innerText")
+    print(ovt()[:200])
+    # làm sai: bấm + cột 2 lần rồi tự đoán
+    clk('body','+');clk('body','+');print(ovt().split('\n')[3])
+    pg.evaluate("[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='160')[0].querySelectorAll('button')").__class__
+    pg.evaluate("[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='160')[0].querySelectorAll('button').forEach(b=>{if(b.textContent.includes('Tự đoán'))b.click()})")
+    print(ovt().split('\n')[3])
+    pg.screenshot(path='b4.png')
+    pg.evaluate("[...document.querySelectorAll('div')].filter(d=>d.style.zIndex=='160')[0].querySelectorAll('button').forEach(b=>{if(b.textContent.includes('Xong'))b.click()})")
+    pg.wait_for_timeout(200);print(pg.evaluate("JSON.stringify(window.__e2.gameData().cfg.anims[0].st.idle)"));print(errs)

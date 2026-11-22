@@ -1,0 +1,15 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+    ctx=b.new_context(viewport={'width':1400,'height':800});pg=ctx.new_page();errs=[];pg.on('pageerror',lambda e:errs.append(str(e)));pg.on('dialog',lambda d:d.accept(d.default_value))
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(900)
+    tab=lambda t:pg.evaluate("t=>[...document.querySelectorAll('#pn2 .ptab')].find(b=>b.textContent.includes(t)).click()",t)
+    clk=lambda t:pg.evaluate("t=>[...document.querySelectorAll('#pn2 button')].find(b=>b.textContent.includes(t)).click()",t)
+    tab('Tệp')
+    with pg.expect_file_chooser() as fc: clk('Ảnh tileset')
+    fc.value.set_files(['/tmp/mt/big.png','/tmp/mt/img0.png']);pg.wait_for_timeout(2500)
+    print('sau tải:',pg.evaluate("window.__e2.sheets().map(s=>s.name)"))
+    tab('Tileset');print(pg.evaluate("document.querySelector('#pn2').innerText.split('\\n').filter(t=>t.includes('Ảnh đã tải')).join(' ')")[:300])
+    pg.wait_for_timeout(1500)
+    pg.reload();pg.wait_for_timeout(2500)
+    print('sau tải lại trang:',pg.evaluate("window.__e2.sheets().map(s=>s.name)"),errs)

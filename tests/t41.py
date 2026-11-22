@@ -1,0 +1,22 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+    pg=b.new_page(viewport={'width':1400,'height':900});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(900)
+    pg.evaluate("[...document.querySelectorAll('.tabbtn')].find(b=>b.dataset.v==='3d').click()");pg.wait_for_timeout(1500)
+    tab=lambda t:pg.evaluate("t=>[...document.querySelectorAll('#pn3 .ptab')].find(b=>b.textContent.includes(t)).click()",t)
+    tab('Mô hình')
+    with pg.expect_file_chooser() as fc: pg.evaluate("[...document.querySelectorAll('#pn3 button')].find(b=>b.textContent.includes('Nhập gói mô hình')).click()")
+    fc.value.set_files(['/tmp/k3d/all/kenney_nature-kit.zip']);pg.wait_for_timeout(9000)
+    pg.screenshot(path='m41a.png')
+    # hotkeys: place tree, ctrl+c ctrl+v
+    c=pg.query_selector('#cv3').bounding_box()
+    pg.evaluate("[...document.querySelectorAll('#pn3 .pbody button[title]')][0].click()");pg.wait_for_timeout(300)
+    pg.mouse.click(c['x']+400,c['y']+c['height']*0.75);pg.wait_for_timeout(1500)
+    pg.keyboard.press('Control+c');pg.keyboard.press('Control+v');pg.keyboard.press('Control+v');pg.wait_for_timeout(800)
+    print(pg.evaluate("document.querySelector('#pn3').innerText.match(/\\d+ mô hình trong cảnh/)[0]"))
+    pg.keyboard.press('Delete');pg.wait_for_timeout(300)
+    print(pg.evaluate("document.querySelector('#pn3').innerText.match(/\\d+ mô hình trong cảnh/)[0]"))
+    pg.keyboard.press('Control+z');pg.wait_for_timeout(500)
+    print(pg.evaluate("document.querySelector('#pn3').innerText.match(/\\d+ mô hình trong cảnh/)[0]"))
+    print(errs)
