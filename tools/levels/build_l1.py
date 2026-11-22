@@ -7,6 +7,18 @@ def rs(im,size):
     ch=[Image.fromarray(pm[...,i]).resize(size,Image.BOX if size[0]<=im.width else Image.BICUBIC) for i in range(4)];o=np.stack([np.asarray(c) for c in ch],axis=2).astype(np.float32)
     al2=np.clip(o[...,3:4],1,255)/255.0;rgb=np.clip(o[...,:3]/al2,0,255);m=o[...,3]<20;rgb[m]=0;o[...,3][m]=0
     return Image.fromarray(np.concatenate([rgb,o[...,3:4]],axis=2).astype(np.uint8),'RGBA')
+from scipy import ndimage as ndi
+def defringe(im,core_t=200,lo=130,hi=200):
+    a=np.asarray(im.convert('RGBA')).copy()
+    rgbf=a[...,:3].astype(np.int16);mn=rgbf.min(axis=2);sp=rgbf.max(axis=2)-mn
+    near=ndi.distance_transform_edt(a[...,3]>40)<14
+    white=(mn>175)&(sp<55)&near;a[...,3][white]=0
+    al=a[...,3].astype(np.float32)
+    core=al>=core_t;idx=ndi.distance_transform_edt(~core,return_indices=True)[1]
+    rgb=a[...,:3][idx[0],idx[1]];edge=~core
+    out=a.copy();out[...,:3][edge]=rgb[edge]
+    t=np.clip((al-lo)/(hi-lo),0,1);t=t*t*(3-2*t);out[...,3]=(t*255).astype(np.uint8)
+    return Image.fromarray(out,'RGBA')
 def b64(im):
     b=io.BytesIO();im.save(b,'PNG',optimize=True);return 'data:image/png;base64,'+base64.b64encode(b.getvalue()).decode()
 j=json.load(open('/tmp/base_anim.json'))
@@ -29,7 +41,7 @@ for i,t in enumerate(tiles):nen.paste(t,((i%NC)*64,(i//NC)*64))
 # ---- sheet vật: mỗi vật cắt thành khối ô 64px
 VC=16;vat_rows=[];blocks={}
 def add_obj(key,path,wc):
-    im=Image.open(T+path).convert('RGBA');s=wc*64/im.width;im=rs(im,(wc*64,max(1,round(im.height*s))))
+    im=defringe(Image.open(T+path).convert('RGBA'));s=wc*64/im.width;im=rs(im,(wc*64,max(1,round(im.height*s))))
     hc=math.ceil(im.height/64);canvas=Image.new('RGBA',(wc*64,hc*64));canvas.paste(im,(0,hc*64-im.height))
     blocks[key]=(wc,hc,canvas)
 objs={'tram':('Sprites/Kien-truc/Tram-dich.png',8),'ren':('Sprites/Kien-truc/Lo-ren.png',7),'leu':('Sprites/Kien-truc/Leu-thuong-nhan.png',6),
