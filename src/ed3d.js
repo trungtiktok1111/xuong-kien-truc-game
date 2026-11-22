@@ -252,7 +252,7 @@ export function init3D(root){
   function hintTxt(){if(mode==='build')return '<b>Đặt khối</b>: kéo chuột trái = đặt liên tục · <b>chuột phải</b> = xoá · Shift+kéo = đường ngang/dọc · <b>giữ C + kéo = đường chéo</b> · Ctrl+kéo = cả vùng · R xoay · Tab đổi hình · 1–9 chọn nhanh · Q/E hạ/nâng tầng · +/− chiều cao';
     if(mode==='erase')return '<b>Xoá</b>: kéo trái = xoá liên tục · Shift+kéo = xoá đường · C+kéo = xoá chéo · <b>Ctrl+kéo = xoá cả vùng</b> (ô Cao = số tầng xoá) · hoặc M chọn vùng rồi Delete';
     if(mode==='paint')return '<b>Tô màu</b>: kéo = tô liên tục · Shift/Ctrl+kéo = tô đường/vùng';
-    if(mode==='stamp')return '<b>Đặt mẫu</b>: di chuột để chọn vị trí (khung vàng) · bấm = đặt (đặt được nhiều lần) · Ctrl+Z hoàn tác · Esc = thoát';
+    if(mode==='stamp')return '<b>Đặt mẫu</b>: di chuột để chọn vị trí (khung vàng) · bấm = đặt 1 bản · <b>Shift+kéo = đặt thành hàng thẳng</b> · <b>Ctrl+kéo = đặt thành lưới</b> · Ctrl+Z hoàn tác · Esc = thoát';
     if(mode==='sel')return '<b>Chọn</b>: bấm vào khối/mô hình để sửa (Shift+bấm = thêm · Ctrl+kéo = quét khung) · Delete xóa · R xoay · mũi tên dời · kéo trái xoay · Space+kéo = di chuyển · số 1–9 hoặc B để đặt khối';return '';}
   function hbPick(i){const [s,m]=hb[i];shape=s;matI=Math.min(m,MATS.length-1);mode='build';tab='build';draw();toast('Ô '+(i+1)+': '+(SHAPES.find(x=>x[0]===s)||[0,s])[1]+' · '+MATS[matI].n);}
   function hbSave(i){hb[i]=[shape,matI];lsSet('thk_hb3',hb);hbDraw();toast('Đã lưu vào ô '+(i+1));}
@@ -265,11 +265,12 @@ export function init3D(root){
   const pos=e=>{const r=cv.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top,cx:e.clientX,cy:e.clientY};};
   cv.addEventListener('pointerdown',e=>{e.preventDefault();cv.setPointerCapture(e.pointerId);const p=pos(e);P.set(e.pointerId,p);
     if(P.size===1&&e.pointerType==='mouse'&&e.button===0&&paintable()&&!space&&!e.altKey){stroke={auto:false,diag:cHeld,dirv:lockDir,line:!lockDir&&(cHeld||(e.shiftKey&&!(e.ctrlKey||e.metaKey))),box:!lockDir&&(e.ctrlKey||e.metaKey),start:null,last:null,y:0,pushed:false,n:0};strokeStep(p,true);return;}
+    if(P.size===1&&mode==='stamp'&&clip3&&e.pointerType==='mouse'&&e.button===0&&(e.shiftKey||e.ctrlKey||e.metaKey)&&!space){const t=pickAt(p.cx,p.cy);if(t){stampD={start:t.cell.slice(),cur:t.cell.slice(),kind:(e.ctrlKey||e.metaKey)?'box':'line'};stampPreview();}return;}
     if(P.size===1&&mode==='sel'&&e.pointerType==='mouse'&&e.button===0&&(e.ctrlKey||e.metaKey)&&!space){marqStart(p.cx,p.cy,e.shiftKey);return;}
     if(P.size===1)g1={x:p.cx,y:p.cy,t:performance.now(),moved:false,pan:e.button===1||space||(e.button===0&&e.shiftKey),rc:e.button===2,lx:p.cx,ly:p.cy,ax:cam.az,ae:cam.el};
     if(P.size===2){g1=null;const [a,b]=[...P.values()];g2={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2,dist:cam.dist};}});
   cv.addEventListener('pointermove',e=>{const p=pos(e);if(P.has(e.pointerId))P.set(e.pointerId,p);
-    lastMP=p;if(marq){marq.x1=p.cx;marq.y1=p.cy;marqUpd();return;}if(!stroke)hoverArrows(p);
+    lastMP=p;if(stampD){const t=pickAt(p.cx,p.cy);if(t){stampD.cur=[t.cell[0],stampD.start[1],t.cell[2]];stampPreview();}return;}if(marq){marq.x1=p.cx;marq.y1=p.cy;marqUpd();return;}if(!stroke)hoverArrows(p);
     if(stroke&&P.size===1){strokeStep(p,false);return;}
     if(P.size===2&&g2){const [a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),ccx=(a.x+b.x)/2,ccy=(a.y+b.y)/2;cam.dist=Math.max(4,Math.min(600,g2.dist*g2.d/d));
       const k=cam.dist*.0016;const rx=Math.cos(cam.az),rz=-Math.sin(cam.az);const dx=(ccx-g2.cx),dy=(ccy-g2.cy);cam.tx-=rx*dx*k;cam.tz-=rz*dx*k;cam.ty+=dy*k;g2.cx=ccx;g2.cy=ccy;return;}
@@ -278,7 +279,7 @@ export function init3D(root){
         else{cam.az=g1.ax-dx*.008;cam.el=Math.max(.05,Math.min(1.5,g1.ae+dy*.006));}g1.lx=p.cx;g1.ly=p.cy;}}
     if(e.pointerType==='mouse'&&clip3&&(mode==='area'||mode==='stamp')&&!(g1&&g1.moved)){const t=pickAt(p.cx,p.cy);if(t){lastCell=t.cell.slice();pasteGhost(lastCell);}else pasteGhost(null);}
     if(e.pointerType==='mouse'&&(mode==='build'||(mode==='prop'&&pmode==='place'))&&!(g1&&g1.moved)){const t=pickAt(p.cx,p.cy);if(t&&inb(...t.cell)){ghost.geometry=mode==='prop'?GEO.cube:GEO[shape];ghost.position.set(t.cell[0]+.5,t.cell[1]+.5,t.cell[2]+.5);ghost.rotation.y=mode==='prop'?0:rot*Math.PI/2;ghost.visible=true;}else ghost.visible=false;}});
-  const up=e=>{const p=P.get(e.pointerId);P.delete(e.pointerId);if(marq){marqEnd();return;}if(stroke){strokeEnd();}if(P.size===0&&g1){if(!g1.moved&&performance.now()-g1.t<500){if(g1.rc)rightErase(g1.x,g1.y);else if(!g1.pan)act(g1.x,g1.y);}g1=null;}if(P.size<2)g2=null;ghost.visible=false;};
+  const up=e=>{const p=P.get(e.pointerId);P.delete(e.pointerId);if(stampD){stampEnd();return;}if(marq){marqEnd();return;}if(stroke){strokeEnd();}if(P.size===0&&g1){if(!g1.moved&&performance.now()-g1.t<500){if(g1.rc)rightErase(g1.x,g1.y);else if(!g1.pan)act(g1.x,g1.y);}g1=null;}if(P.size<2)g2=null;ghost.visible=false;};
   cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);cv.addEventListener('contextmenu',e=>e.preventDefault());
   const panBy=(dx,dy)=>{const rx=Math.cos(cam.az),rz=-Math.sin(cam.az),fx=-Math.sin(cam.az),fz=-Math.cos(cam.az);cam.tx+=-rx*dx+fx*dy;cam.tz+=-rz*dx+fz*dy;};
   function panKey(K,k){const st=Math.max(.3,cam.dist*.06);if(K==='w'||k==='ArrowUp')panBy(0,-st/.0016*.0016);if(K==='s'||k==='ArrowDown')panBy(0,st);if(K==='a'||k==='ArrowLeft')panBy(st,0);if(K==='d'||k==='ArrowRight')panBy(-st,0);if(k==='PageUp')cam.ty+=st;if(k==='PageDown')cam.ty-=st;}
@@ -458,10 +459,10 @@ export function init3D(root){
     if(cut){pushUndo();for(const [dx,dy,dz] of vs)delV(ar.lo[0]+dx,ar.lo[1]+dy,ar.lo[2]+dz,true);const ids=new Set(arProps().map(q=>q.id));props=props.filter(q=>!ids.has(q.id));syncProps();refreshVis();changed();}
     toast((cut?'Đã cắt ':'Đã sao chép ')+vs.length+' khối'+(ps.length?' + '+ps.length+' mô hình':''));draw();}
   function delArea(){if(!arDone())return;pushUndo();let n=0;for(const k of [...V.keys()]){const [x,y,z]=k.split(',').map(Number);if(inAr(x,y,z)){delV(x,y,z,true);n++;}}const ids=new Set(arProps().map(q=>q.id));props=props.filter(q=>!ids.has(q.id));selP=null;syncProps();refreshVis();changed();draw();toast('Đã xóa '+n+' khối');}
-  function pasteAt(c){if(!clip3){toast('Chưa có vùng nào được sao chép');return;}c=[Math.max(0,Math.min(GX-1,c[0])),Math.max(0,c[1]),Math.max(0,Math.min(GZ-1,c[2]))];pushUndo();let n=0;
+  function pasteAt(c,quiet){if(!clip3){toast('Chưa có vùng nào được sao chép');return 0;}c=[Math.max(0,Math.min(GX-1,c[0])),Math.max(0,c[1]),Math.max(0,Math.min(GZ-1,c[2]))];if(!quiet)pushUndo();let n=0;
     for(const [dx,dy,dz,sh,m,r] of clip3.v){const x=c[0]+dx,y=c[1]+dy,z=c[2]+dz;if(inb(x,y,z)){setV(x,y,z,sh,Math.min(m,MATS.length-1),r,true);n++;}}
     for(const q of clip3.p){props.push({...JSON.parse(JSON.stringify(q)),id:uid(),x:c[0]+q.x,y:c[1]+q.y,z:c[2]+q.z});}
-    syncProps();refreshVis();changed();draw();toast('Đã dán '+n+' khối'+(clip3.p.length?' + '+clip3.p.length+' mô hình':''));}
+    if(quiet)return n;syncProps();refreshVis();changed();draw();toast('Đã dán '+n+' khối'+(clip3.p.length?' + '+clip3.p.length+' mô hình':''));return n;}
   let tplRep=false;
   function makeStamp(n){const sn=snap();const ids=new Set((props||[]).map(q=>q.id));let ok=false;
     try{clearAll();TPL[n]();const vs=[];let lo=[1e9,1e9,1e9],hi=[-1e9,-1e9,-1e9];for(const [k,v] of V){const c=k.split(',').map(Number);for(let i=0;i<3;i++){lo[i]=Math.min(lo[i],c[i]);hi[i]=Math.max(hi[i],c[i]);}vs.push([c,v]);}
@@ -469,6 +470,15 @@ export function init3D(root){
       if(vs.length){clip3={v:vs.map(([c,v])=>[c[0]-lo[0],c[1]-lo[1],c[2]-lo[2],v.s,v.m,v.r]),p:np.map(q=>({...JSON.parse(JSON.stringify(q)),x:q.x-lo[0],y:q.y-lo[1],z:q.z-lo[2]})),size:[hi[0]-lo[0]+1,hi[1]-lo[1]+1,hi[2]-lo[2]+1]};lastClip='stamp';ok=true;}}
     catch(err){console.error(err);}
     props=(props||[]).filter(q=>ids.has(q.id));load(sn);refreshVis();syncProps();return ok;}
+  // đặt mẫu thành hàng / lưới: Shift+kéo = hàng thẳng, Ctrl+kéo = lưới
+  let stampD=null;const stBoxes=[];
+  function stampPlan(){const d=stampD;if(!d||!clip3)return [];const sz=clip3.size,dx=d.cur[0]-d.start[0],dz=d.cur[2]-d.start[2];const out=[];const sx=Math.sign(dx)||1,sz2=Math.sign(dz)||1;
+    if(d.kind==='line'){if(Math.abs(dx)>=Math.abs(dz)){const n=Math.floor(Math.abs(dx)/sz[0])+1;for(let i=0;i<n;i++)out.push([d.start[0]+i*sx*sz[0],d.start[1],d.start[2]]);}else{const n=Math.floor(Math.abs(dz)/sz[2])+1;for(let i=0;i<n;i++)out.push([d.start[0],d.start[1],d.start[2]+i*sz2*sz[2]]);}}
+    else{const nx=Math.floor(Math.abs(dx)/sz[0])+1,nz=Math.floor(Math.abs(dz)/sz[2])+1;for(let i=0;i<nx;i++)for(let j=0;j<nz;j++)out.push([d.start[0]+i*sx*sz[0],d.start[1],d.start[2]+j*sz2*sz[2]]);}
+    return out.slice(0,400);}
+  function stampPreview(){const pl=stampPlan();for(let i=0;i<Math.max(pl.length,stBoxes.length);i++){if(i<pl.length){if(!stBoxes[i])stBoxes[i]=mkBox(0xffd24a);setBox(stBoxes[i],pl[i],clip3.size);}else if(stBoxes[i])stBoxes[i].visible=false;}if(pgH)pgH.visible=false;toast('Sẽ đặt '+pl.length+' bản — thả chuột để đặt');}
+  function stampEnd(){const d=stampD;stampD=null;const pl=[];if(d){d.cur=d.cur||d.start;stampD=d;pl.push(...stampPlan());stampD=null;}for(const b of stBoxes)b.visible=false;if(!pl.length)return;
+    pushUndo();let n=0;for(const c of pl)n+=pasteAt(c,true);syncProps();refreshVis();changed();draw();toast('Đã đặt '+pl.length+' bản ('+n+' khối)');}
   function pasteGhost(c){if(!clip3||!c){if(pgH)pgH.visible=false;return;}if(!pgH)pgH=mkBox(0xffd24a);setBox(pgH,c,clip3.size);}
   // ===== chọn & sửa khối đã xây =====
   let selV=new Set(),selVH=null,shH=false,lastSel={k:'',t:0},selStep=1;const GROUND=new Set([9,10,11,12]);
@@ -588,7 +598,7 @@ export function init3D(root){
       body.append(el('div',{class:'row'},btn(grid.visible?'Lưới: bật':'Lưới: tắt',()=>{grid.visible=!grid.visible;draw();})));}
     else if(tab==='tpl'){
       body.append(el('div',{class:'row'},btn((tplRep?'○':'●')+' Đặt tại vị trí tôi chọn',()=>{tplRep=false;draw();}),btn((tplRep?'●':'○')+' Thay thế toàn bộ',()=>{tplRep=true;draw();})));
-      body.append(el('div',{class:'hint'},tplRep?'Bấm mẫu = xóa công trình hiện tại và thay bằng mẫu (có thể hoàn tác).':'Bấm mẫu → di chuột trên khung dựng, khung vàng cho biết chỗ đặt → bấm để đặt (đặt nhiều lần được). Esc để thoát.'));
+      body.append(el('div',{class:'hint'},tplRep?'Bấm mẫu = xóa công trình hiện tại và thay bằng mẫu (có thể hoàn tác).':'Bấm mẫu → di chuột trên khung dựng, khung vàng cho biết chỗ đặt → bấm để đặt 1 bản, Shift+kéo = hàng thẳng, Ctrl+kéo = lưới nhiều bản. Esc để thoát.'));
       body.append(el('div',{class:'row'},Object.keys(TPL).map(n=>btn(n,()=>{if(tplRep){pushUndo();clearAll();TPL[n]();refreshVis();tab='build';draw();toast('Đã tạo "'+n+'"');}else{if(!makeStamp(n))return;mode='stamp';pasteGhost(null);draw();toast('Di chuột chọn chỗ, bấm để đặt "'+n+'"');}}))));
       body.append(el('div',{class:'row'},btn('🗑 Xóa hết',async()=>{if(await yes('Xóa toàn bộ công trình?')){pushUndo();clearAll();props=[];selP=null;syncProps();refreshVis();}})));}
     else if(tab==='file'){
