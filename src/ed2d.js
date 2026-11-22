@@ -5,7 +5,7 @@ const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
 export function init2D(root,A){
-  const sheets=A.sheets.map(s=>Object.assign({},s));let curSheet=0;let HID=new Set(lsGet('thk_hide2d',[]));const visSh=()=>sheets.map((s,i)=>i).filter(i=>!HID.has(i));
+  const sheets=A.sheets.map(s=>Object.assign({},s));let curSheet=0,shZ='fit',shQ='';let HID=new Set(lsGet('thk_hide2d',[]));const visSh=()=>sheets.map((s,i)=>i).filter(i=>!HID.has(i));
   const loadSheet=s=>new Promise(r=>{const i=new Image();i.onload=()=>{s.img=i;s.cols=Math.floor((i.width+s.margin)/(s.tw+s.margin));s.rows=Math.floor((i.height+s.margin)/(s.tw+s.margin));r();};i.onerror=r;i.src=s.url;});
   let selId=null,objType='enemy',M=null,vis=[1,1,1,1,0],act=2,tool='draw',stamp={w:1,h:1,multi:false,tiles:[0]},sel=null,undo=[],redo=[],view={x:10,y:10,z:3},grid=true,hov=null,dirty=true,lib=lsGet('thk_stamps',[]);
   const mc=document.createElement('canvas'),mx=mc.getContext('2d');let clip=null,inclEnt=true,inclBlk=true;
@@ -182,13 +182,19 @@ export function init2D(root,A){
       body.append(el('div',{class:'hint'},'Mẹo: chọn ô trong tab Tileset (kéo để chọn nhiều ô liền nhau thành một stamp). Kéo 2 ngón để phóng/thu và di chuyển bản đồ. Dùng "Chọn vùng" → "Lấy làm stamp" để sao chép cả ngôi nhà.'));}
     else if(tab==='sheet'){
       {const vs=visSh();if(HID.has(curSheet))curSheet=vs.length?vs[0]:0;
-      body.append(el('div',{class:'row'},vs.map(i=>btn(sheets[i].name,()=>{curSheet=i;draw();},curSheet===i?'on':''))));
+      if(vs.length>10){const fq=el('input',{placeholder:'🔎 Lọc tên tileset…',class:'num',style:'width:100%;box-sizing:border-box;margin:2px 0'});fq.value=shQ;fq.addEventListener('input',()=>{shQ=fq.value;clearTimeout(fq._t);fq._t=setTimeout(()=>{draw();const n=body.querySelector('input[placeholder^="🔎 Lọc tên"]');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}},300);});
+        const f=shQ.trim().toLowerCase();const lst=vs.filter(i=>!f||sheets[i].name.toLowerCase().includes(f)||i===curSheet);const pos=lst.indexOf(curSheet);
+        const sl=el('select',{class:'num',style:'width:100%;max-width:100%',onchange:e=>{curSheet=+e.target.value;draw();}},lst.map(i=>el('option',{value:i},(i+1)+'. '+sheets[i].name)));sl.value=String(curSheet);
+        body.append(fq,sl,el('div',{class:'row'},btn('◀ Trước',()=>{const k=lst.indexOf(curSheet);if(k>0){curSheet=lst[k-1];draw();}}),btn('Sau ▶',()=>{const k=lst.indexOf(curSheet);if(k<lst.length-1){curSheet=lst[k+1];draw();}}),el('span',{class:'lbl'},(pos+1)+' / '+lst.length+' (tổng '+vs.length+')')));}
+      else body.append(el('div',{class:'row'},vs.map(i=>btn(sheets[i].name,()=>{curSheet=i;draw();},curSheet===i?'on':''))));
       if(!vs.length){body.append(el('div',{class:'hint'},'Chưa có tileset nào. Bấm "➕ Thêm tileset từ ảnh…" hoặc vào "🗑 Quản lý / xóa tileset" → "Hiện lại tileset gốc".'),el('div',{class:'row'},btn('➕ Thêm tileset từ ảnh…',addSheet),btn('📦 Nạp gói .zip…',addZip),btn('🗑 Quản lý / xóa tileset',manageSheets)));return;}}
       if(sheets.length>4){const mb=sheets.slice(4).reduce((a,x)=>a+x.url.length,0)*.75/1048576;body.append(el('div',{class:'hint',style:'border:1px solid #34485a;border-radius:8px;padding:6px'},'🖼 Ảnh đã tải lên: '+(sheets.length-4)+' (≈'+mb.toFixed(1)+' MB) — nằm ở các nút từ "'+sheets[4].name+'" trở đi ở trên. '+(saveInfo||'')));}
-      const wrap=el('div',{class:'sheetwrap'});const s=sheets[curSheet];const z=3;const c=el('canvas');c.width=s.img.width*z;c.height=s.img.height*z;wrap.append(c);body.append(wrap);
-      const g=c.getContext('2d');g.imageSmoothingEnabled=false;g.fillStyle='#2a3340';g.fillRect(0,0,c.width,c.height);g.drawImage(s.img,0,0,c.width,c.height);
+      const s=sheets[curSheet];const fitZ=Math.max(.02,Math.min(3,((pn.clientWidth||360)-34)/s.img.width));const z=shZ==='fit'?fitZ:shZ;
+      body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Ảnh '+s.img.width+'×'+s.img.height+' px · phóng '+Math.round(z*100)+'%'),btn('▣ Vừa khung',()=>{shZ='fit';draw();},shZ==='fit'?'on':''),btn('－',()=>{shZ=Math.max(.02,z/1.4);draw();}),btn('＋',()=>{shZ=Math.min(8,z*1.4);draw();}),btn('1:1',()=>{shZ=1;draw();})));
+      const wrap=el('div',{class:'sheetwrap',style:'max-height:min(60vh,520px)'});const c=el('canvas');c.width=Math.max(1,Math.round(s.img.width*z));c.height=Math.max(1,Math.round(s.img.height*z));if(z<1)c.style.imageRendering='auto';wrap.append(c);body.append(wrap);
+      const g=c.getContext('2d');g.imageSmoothingEnabled=z<1;g.fillStyle='#2a3340';g.fillRect(0,0,c.width,c.height);g.drawImage(s.img,0,0,c.width,c.height);
       let ss=null;const step=(s.tw+s.margin)*z;
-      const redraw=()=>{g.clearRect(0,0,c.width,c.height);g.fillStyle='#2a3340';g.fillRect(0,0,c.width,c.height);g.drawImage(s.img,0,0,c.width,c.height);
+      const redraw=()=>{g.imageSmoothingEnabled=z<1;g.clearRect(0,0,c.width,c.height);g.fillStyle='#2a3340';g.fillRect(0,0,c.width,c.height);g.drawImage(s.img,0,0,c.width,c.height);
         const cur=stampSheetRect(curSheet);if(cur){g.strokeStyle='#ffd24a';g.lineWidth=2;g.strokeRect(cur.c0*step,cur.r0*step,(cur.c1-cur.c0+1)*step-z*s.margin,(cur.r1-cur.r0+1)*step-z*s.margin);}
         if(ss){g.strokeStyle='#4fd1ff';g.strokeRect(Math.min(ss.c0,ss.c1)*step,Math.min(ss.r0,ss.r1)*step,(Math.abs(ss.c1-ss.c0)+1)*step-z*s.margin,(Math.abs(ss.r1-ss.r0)+1)*step-z*s.margin);}};
       const cr=e=>{const r=c.getBoundingClientRect();const x=(e.clientX-r.left)*c.width/r.width,y=(e.clientY-r.top)*c.height/r.height;return {c:Math.max(0,Math.min(s.cols-1,Math.floor(x/step))),r:Math.max(0,Math.min(s.rows-1,Math.floor(y/step)))};};
