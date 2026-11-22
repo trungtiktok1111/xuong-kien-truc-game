@@ -21,6 +21,7 @@ export async function saveFile(name,blob){
 export function lsGet(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch(e){return d;}}
 const idbOpen=()=>new Promise((res,rej)=>{try{const r=indexedDB.open('thk_store',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}catch(e){rej(e);}});
 export async function idbSet(k,v){try{const db=await idbOpen();return await new Promise(res=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res(true);t.onerror=()=>res(false);t.onabort=()=>res(false);});}catch(e){return false;}}
+export async function idbDel(k){try{const db=await idbOpen();return await new Promise(res=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=()=>res(true);t.onerror=()=>res(false);t.onabort=()=>res(false);});}catch(e){return false;}}
 export async function idbGet(k){try{const db=await idbOpen();return await new Promise(res=>{const t=db.transaction('kv','readonly');const q=t.objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>res(undefined);});}catch(e){return undefined;}}
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}catch(e){}
 /* Hộp thoại trong trang (prompt/confirm của trình duyệt bị chặn trong khung artifact nên thất bại im lặng) */

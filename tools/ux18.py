@@ -1,0 +1,21 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+    pg=b.new_page(viewport={'width':1300,'height':850});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(1000)
+    pg.evaluate("[...document.querySelectorAll('.tabbtn')].find(b=>b.dataset.v==='3d').click()");pg.wait_for_timeout(1500)
+    C=lambda sel:pg.evaluate("s=>{const b=document.querySelector(s);if(b)b.click();return !!b}",sel)
+    BT=lambda t:pg.evaluate("t=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.includes(t));if(b)b.click();return !!b}",t)
+    C('#pn3 [data-t=mdl]')
+    with pg.expect_file_chooser() as fc: BT('Nhập gói')
+    fc.value.set_files('/tmp/pack/p.zip');pg.wait_for_timeout(2500)
+    print(BT('Quản lý / xóa'));pg.wait_for_timeout(300)
+    pg.evaluate("[...document.querySelectorAll('body > div[style*=\"position: fixed\"] button')].filter(b=>b.textContent.includes('Cot_go')||b.textContent.includes('San_da'))[0].click()");pg.wait_for_timeout(200)
+    pg.screenshot(path='ux18a.png')
+    BT('Xóa đã chọn');pg.wait_for_timeout(300);BT('Đồng ý');pg.wait_for_timeout(600)
+    print(pg.evaluate("document.querySelector('#pn3').innerText.split('\\n').filter(l=>l.includes('mô hình \/')||l.includes('Chưa có mô hình')||l.includes('mô hình trong'))"))
+    BT('Quản lý / xóa');pg.wait_for_timeout(300);BT('Xóa TẤT CẢ');pg.wait_for_timeout(300);BT('Đồng ý');pg.wait_for_timeout(600)
+    print(pg.evaluate("document.querySelector('#pn3').innerText.split('\\n').filter(l=>l.includes('mô hình \/')||l.includes('Chưa có mô hình')||l.includes('mô hình trong'))"),errs)
+    # reload persistence
+    pg.reload();pg.wait_for_timeout(1500);pg.evaluate("[...document.querySelectorAll('.tabbtn')].find(b=>b.dataset.v==='3d').click()");pg.wait_for_timeout(1000);C('#pn3 [data-t=mdl]');pg.wait_for_timeout(300)
+    print(pg.evaluate("document.querySelector('#pn3').innerText.split('\\n').filter(l=>l.includes('mô hình \/')||l.includes('Chưa có mô hình')||l.includes('mô hình trong'))"));b.close()

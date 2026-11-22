@@ -4,7 +4,7 @@ import {mergeGeometries} from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {logicTab,entExtra} from './logic.js';
 import {parseGLB,scanZip,b64} from './models3d.js';
 import {OT3,COLS,defCfg3,newEnt3,entModel} from './ents3d.js';
-import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,ask,askText,yes,zipBrowser,slotsUI,exportGame} from './util.js';
+import {idbDel,$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,ask,askText,yes,zipBrowser,slotsUI,exportGame} from './util.js';
 let GX=48,GZ=48,GY=24;
 import {makeTpl} from './tpl3d.js';
 const SHAPES=[['cube','Khối'],['slab','Tấm nửa'],['wedge','Mái dốc'],['pillar','Cột'],['panel','Vách mỏng'],['stairs','Cầu thang'],['arch','Cổng vòm'],['window','Khung cửa sổ'],['rail','Lan can'],['curve','Mái cong']];
@@ -413,8 +413,31 @@ export function init3D(root){
         for(const m of pk.models){LIB.push({id:pk.pack+'/'+m.name,pack:pk.pack,name:m.name,cat:m.cat,thumb:m.thumb});nm++;}np++;}}
     await idbSet('m3d_index',LIB);toast(np?('Đã nhập '+np+' gói, '+nm+' mô hình'+(bad?' — ⚠ '+bad+' mục chưa lưu được (đầy bộ nhớ)':'')):'Không thấy file .glb trong gói (cần thư mục Models/GLB format)');draw();}
   function pickZips(){const i=document.createElement('input');i.type='file';i.accept='.zip,.rar';i.multiple=true;i.onchange=()=>{const a=[...i.files];if(a.length)importPacks(a);};i.click();}
+  // ===== quản lý / xóa mô hình đã nhập =====
+  async function deleteModels(ids){const ds=new Set(ids);if(!ds.size)return;const byPack={};for(const m of LIB)if(ds.has(m.id))(byPack[m.pack]=byPack[m.pack]||[]).push(m.name);
+    const rm=props.filter(q=>ds.has(q.m));for(const q of rm){const g=pMesh.get(q.id);if(g)scene.remove(g);pMesh.delete(q.id);}props=props.filter(q=>!ds.has(q.m));selP=null;updSelBox();
+    for(const [pk,names] of Object.entries(byPack)){const left=LIB.filter(m=>m.pack===pk&&!ds.has(m.id));
+      if(!left.length){await idbDel('m3dp:'+pk);PTEX.delete(pk);}else{const rec=await idbGet('m3dp:'+pk);if(rec&&rec.glbs){for(const n of names)delete rec.glbs[n];await idbSet('m3dp:'+pk,rec);}}PREC.delete(pk);}
+    for(const id of ds){BYTES.delete(id);OBJC.delete(id);DIMS.delete(id);}
+    LIB=LIB.filter(m=>!ds.has(m.id));MFAV=MFAV.filter(id=>!ds.has(id));lsSet('thk_m3d_fav',MFAV);if(ds.has(curM))curM=null;undo=[];redo=[];
+    await idbSet('m3d_index',LIB);changed();draw();toast('Đã xóa '+ds.size+' mô hình'+(rm.length?' (và '+rm.length+' món đang đặt trong cảnh)':''));}
+  function mdlMgr(){const sel=new Set();const ov=el('div',{style:'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:200;display:flex;align-items:center;justify-content:center'});
+    const box=el('div',{style:'background:#17212b;border:1px solid #34485a;border-radius:12px;padding:12px;width:min(560px,94vw);max-height:88vh;display:flex;flex-direction:column;gap:8px;color:#cfd8e3'});
+    const info=el('div',{class:'lbl'}),grid=el('div',{style:'display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:4px;overflow:auto;flex:1;min-height:120px'});
+    const q=el('input',{class:'num',placeholder:'🔎 Lọc theo tên…',style:'width:100%'});const ps=el('select',{class:'num'},el('option',{value:''},'Tất cả gói'),[...new Set(LIB.map(m=>m.pack))].sort().map(p=>el('option',{value:p},p)));
+    const shown=()=>{const f=q.value.trim().toLowerCase();return LIB.filter(m=>(!ps.value||m.pack===ps.value)&&(!f||(m.name+' '+m.pack).toLowerCase().includes(f)));};
+    const draw2=()=>{grid.textContent='';const L=shown();const use={};for(const p of props)use[p.m]=(use[p.m]||0)+1;
+      for(const m of L.slice(0,300))grid.append(el('button',{style:'background:#202c38;border:2px solid '+(sel.has(m.id)?'#ff6b6b':'transparent')+';border-radius:8px;padding:3px;color:#cfd8e3;font-size:10px;cursor:pointer;overflow:hidden',onclick:()=>{sel.has(m.id)?sel.delete(m.id):sel.add(m.id);draw2();}},
+        m.thumb?el('img',{src:m.thumb,style:'width:100%;height:50px;object-fit:contain;display:block'}):el('div',{style:'height:50px;font-size:20px;display:flex;align-items:center;justify-content:center'},'🗿'),el('div',{style:'white-space:nowrap;overflow:hidden;text-overflow:ellipsis'},(use[m.id]?'• ':'')+m.name)));
+      info.textContent='Tổng '+LIB.length+' mô hình · hiện '+L.length+(L.length>300?' (300 đầu)':'')+' · đã chọn '+sel.size+' (• = đang đặt trong cảnh)';};
+    q.oninput=draw2;ps.onchange=draw2;
+    box.append(el('div',{class:'lbl',style:'font-size:14px;color:#ffd24a'},'🗑 Quản lý / xóa mô hình đã nhập'),el('div',{class:'row'},ps),q,info,grid,
+      el('div',{class:'row'},btn('Chọn tất cả (đang hiện)',()=>{shown().forEach(m=>sel.add(m.id));draw2();}),btn('Bỏ chọn',()=>{sel.clear();draw2();})),
+      el('div',{class:'row'},btn('🗑 Xóa đã chọn',async()=>{if(!sel.size){toast('Chưa chọn mô hình nào');return;}const n=props.filter(p=>sel.has(p.m)).length;if(!(await yes('Xóa '+sel.size+' mô hình đã chọn?'+(n?'\n'+n+' món đang đặt trong cảnh cũng sẽ bị xóa.':''))))return;await deleteModels(sel);sel.clear();if(!LIB.length)ov.remove();else draw2();},'on'),
+        btn('⚠ Xóa TẤT CẢ',async()=>{if(!LIB.length)return;if(!(await yes('Xóa TOÀN BỘ '+LIB.length+' mô hình đã nhập (và các món đã đặt trong cảnh)?')))return;await deleteModels(LIB.map(m=>m.id));ov.remove();}),btn('Đóng',()=>ov.remove())));
+    ov.append(box);document.body.append(ov);draw2();}
   function mdlTab(){const S=mq;
-    body.append(el('div',{class:'row'},btn('📦 Nhập gói mô hình .zip…',pickZips),el('span',{class:'lbl'},LIB.length+' mô hình / '+new Set(LIB.map(m=>m.pack)).size+' gói')));
+    body.append(el('div',{class:'row'},btn('📦 Nhập gói mô hình .zip…',pickZips),LIB.length?btn('🗑 Quản lý / xóa',mdlMgr):null,el('span',{class:'lbl'},LIB.length+' mô hình / '+new Set(LIB.map(m=>m.pack)).size+' gói')));
     if(!LIB.length){body.append(el('div',{class:'hint'},'Chưa có mô hình. Bấm "Nhập gói mô hình" và chọn file .zip của Kenney (ví dụ kenney_fantasy-town-kit.zip — bên trong phải có thư mục "Models/GLB format"). Chọn được nhiều file một lúc. File .rar cần giải nén ra .zip trước.'));
       body.append(el('div',{class:'hint'},'Sau khi nhập: bấm một món trong thư viện, rồi chạm lên cảnh để đặt. Chạm "✋ Chọn" để chọn lại món đã đặt và xoay/phóng/dời.'));}
     else{
