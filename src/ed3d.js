@@ -301,7 +301,8 @@ export function init3D(root){
   });
   // vòng lặp
   function resize(){const w=cv.clientWidth,h=cv.clientHeight,dp=Math.min(devicePixelRatio||1,2);if(cv.width!==Math.round(w*dp)||cv.height!==Math.round(h*dp)){renderer.setPixelRatio(dp);renderer.setSize(w,h,false);}}
-  let run=false;function loop(){if(!run)return;resize();updCam();if(typeof updComp==='function'&&compOpen)updComp(false);renderer.render(scene,camera);requestAnimationFrame(loop);}
+  let run=false;function loop(){if(!run)return;try{if(![cam.az,cam.el,cam.dist,cam.tx,cam.ty,cam.tz].every(Number.isFinite)){Object.assign(cam,{az:.6,el:.7,dist:30,tx:GX/2,ty:3,tz:GZ/2});toast('Camera bị lỗi, đã đặt lại');}resize();updCam();if(typeof updComp==='function'&&compOpen)updComp(false);renderer.render(scene,camera);}catch(err){if(!loop.err){loop.err=1;toast('Lỗi vẽ: '+(err&&err.message));}}requestAnimationFrame(loop);}
+  cv.addEventListener('webglcontextlost',e=>{e.preventDefault();toast('Card đồ hoạ vừa ngắt — đợi vài giây, hoặc bấm F5 nếu vẫn đen');});
   // ===== mẫu =====
   function fillBox(x0,y0,z0,x1,y1,z1,s,m,r=0){for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++)for(let z=z0;z<=z1;z++)setV(x,y,z,s,m,r,true);}
   function hollow(x0,y0,z0,x1,y1,z1,m){for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++)if(x===x0||x===x1||z===z0||z===z1)setV(x,y,z,'cube',m,0,true);}
