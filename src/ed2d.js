@@ -415,7 +415,13 @@ export function init2D(root,A){
         if(tiles.length){const T=64,cols=Math.min(16,tiles.length),rows=Math.ceil(tiles.length/cols),c=document.createElement('canvas');c.width=cols*T;c.height=rows*T;const g=c.getContext('2d');g.imageSmoothingQuality='high';
           for(let i=0;i<tiles.length;i++){try{const bm=await createImageBitmap(new Blob([files[tiles[i]]],{type:'image/png'}));g.drawImage(bm,(i%cols)*T,Math.floor(i/cols)*T,T,T);}catch(e){}}
           const s={name:(pk+'-Tiles').slice(0,24),url:c.toDataURL('image/png'),tw:T,margin:0};await loadSheet(s);sheets.push(s);nt++;}
-        for(const n of atl){const s={name:(pk+'-'+n.split('/').pop().replace(/\.png$/i,'')).slice(0,24),url:await toUrl(new Blob([files[n]],{type:'image/png'})),tw:64,margin:0};await loadSheet(s);sheets.push(s);na++;}}
+        for(const n of atl){const jn=n.replace(/\.png$/i,'.json');let fr=null;try{fr=Object.values(JSON.parse(new TextDecoder().decode(files[jn])).frames||{});}catch(e){}
+          const nm=(pk+'-'+n.split('/').pop().replace(/\.png$/i,'')).slice(0,24);let bmA;try{bmA=await createImageBitmap(new Blob([files[n]],{type:'image/png'}));}catch(e){continue;}
+          if(!fr||!fr.length){skip++;continue;}
+          /* mỗi vật trong atlas → 1 ô 128×128 (thu nhỏ vừa khung, đặt chân ở đáy) để không bị cắt vỡ */
+          const T=128,cols=Math.min(8,fr.length),rows=Math.ceil(fr.length/cols),c=document.createElement('canvas');c.width=cols*T;c.height=rows*T;const g=c.getContext('2d');g.imageSmoothingQuality='high';
+          fr.forEach((q,i)=>{const f=q.frame;if(!f)return;const k=Math.min((T-4)/f.w,(T-4)/f.h);const w=f.w*k,h=f.h*k;g.drawImage(bmA,f.x,f.y,f.w,f.h,(i%cols)*T+(T-w)/2,Math.floor(i/cols)*T+T-2-h,w,h);});
+          const sh={name:nm,url:c.toDataURL('image/png'),tw:T,margin:0};await loadSheet(sh);sheets.push(sh);na++;}}
       uniqNames(sheets);if(nt+na)curSheet=sheets.length-1;after();draw();
       toast('Đã nạp '+nt+' tileset ô nền + '+na+' atlas'+(skip?' (bỏ '+skip+' gói trùng)':'')+'. Sprites/lớp phủ bỏ qua để nhẹ.');};
     inp.click();}
