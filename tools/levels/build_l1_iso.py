@@ -41,6 +41,7 @@ def foot(path,k):
     bx=sum(last)/len(last) if last else w/2
     T*=k/.75;off=(bx-w/2)*k/.75
     return max(1,round(T/2+off+.3)),max(1,round(T/2-off+.3))
+FPO={'Nha_san':(2,2),'Ben_go':(1,1)}
 names=list(OBJ);FP={}
 COLS=6;ROWS=(len(names)+COLS-1)//COLS
 ob=Image.new('RGBA',(COLS*TW,ROWS*TW),(0,0,0,0));IDX={};SC={}
@@ -48,7 +49,7 @@ for i,n in enumerate(names):
     im=Image.open(OBJ[n]).convert('RGBA');im=im.crop(bbox(im));w,h=im.size
     kf=min(1,(TW-4)/w,(TW-4)/h);r=im.resize((max(1,round(w*kf)),max(1,round(h*kf))),Image.LANCZOS)
     cx,cy=(i%COLS)*TW,(i//COLS)*TW;ob.alpha_composite(r,(cx+(TW-r.width)//2,cy+TW-2-r.height));IDX[n]=i
-    k=KOBJ.get(n,.0093);SC[n]=round(TW*k/kf,3);FP[n]=(1,1) if n in KOBJ or n in ('Gieng','Sen') else foot(OBJ[n],k)
+    k=KOBJ.get(n,.0093);SC[n]=round(TW*k/kf,3);FP[n]=(1,1) if n in KOBJ or n in ('Gieng','Sen') else FPO.get(n) or foot(OBJ[n],k)
 # ---- bản đồ ----
 W=H=44
 enc=lambda sid,idx:((sid*4096+idx)*8)+1
@@ -122,7 +123,7 @@ npc(3,'Lão y',12,26,'Vo-Dang-Nu','Thân thể khỏe mạnh đấy. Rương bê
 npc(4,'Chưởng quầy',16,26,'Cai-Bang-Nam','Khách quan ghé quán uống chén trà! Phố phường ngoài trấn nhiều kẻ xấu, nhớ giữ cẩn thận.')
 npc(5,'Lính gác cổng',21,39,'Cai-Bang-Nam','Ngoài cổng là đường ra trấn. Thiếu hiệp hãy luyện võ cho vững rồi hẵng đi.')
 ents.append({'id':'c1','t':'chest','x':24,'y':27,'name':'Rương','tile':None,'gives':'hp','amt':2})
-ents.insert(0,{'id':'s0','t':'start','x':22,'y':31,'name':'Xuất phát','tile':None})
+ents.insert(0,{'id':'s0','t':'start','x':int(__import__('os').environ.get('SX',22)),'y':int(__import__('os').environ.get('SY',31)),'name':'Xuất phát','tile':None})
 stub=durl(Image.new('RGBA',(16,16),(0,0,0,0)))
 sheets=[{'name':'(đã gỡ %d)'%(i+1),'tw':16,'margin':0,'cols':1,'rows':1,'url':stub} for i in range(4)]
 sheets+=old['sheets'][4:39]
