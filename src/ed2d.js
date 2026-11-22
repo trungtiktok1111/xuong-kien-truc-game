@@ -5,7 +5,7 @@ import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,guessTi
 const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
-import {build,GEN_KINDS} from './gen2d.js';
+import {build,GEN_KINDS,GEN_VIEWS} from './gen2d.js';
 export function init2D(root,A){
   const sheets=A.sheets.map(s=>Object.assign({},s));let curSheet=0,shZ='fit',shQ='';let HID=new Set([0,1,2,3,...lsGet('thk_hide2d',[])]);const visSh=()=>sheets.map((s,i)=>i).filter(i=>!HID.has(i));
   const loadSheet=s=>new Promise(r=>{const i=new Image();i.onload=()=>{s.img=i;s.cols=Math.floor((i.width+s.margin)/(s.tw+s.margin));s.rows=Math.floor((i.height+s.margin)/(s.tw+s.margin));r();};i.onerror=r;i.src=s.url;});
@@ -495,11 +495,11 @@ export function init2D(root,A){
   async function genRun(){const k=window.__gk||'village',z={s:[32,24],m:[48,36],l:[64,48]}[window.__gz||'m'];
     if(!await yes('Tạo bối cảnh mới thay cho màn "'+(M.name||'')+'"?\n(Ctrl+Z hoàn tác được bản đồ; tileset mới tạo sẽ còn lại.)'))return;
     toast('Đang tạo bối cảnh…');await new Promise(r=>setTimeout(r,30));
-    let R;try{R=build({sheets,eff,emptyMap,visSh,enc,newSid:sheets.length},{kind:k,w:z[0],h:z[1],goal:!!window.__gg});}catch(e){console.error(e);toast('Lỗi khi tạo: '+(e&&e.message||e));return;}
+    let R;try{R=build({sheets,eff,emptyMap,visSh,enc,newSid:sheets.length},{kind:k,w:z[0],h:z[1],goal:!!window.__gg,view:window.__gv||'rpg'});}catch(e){console.error(e);toast('Lỗi khi tạo: '+(e&&e.message||e));return;}
     if(R.error){toast(R.error);return;}
     pushUndo();
     if(R.newSheet){const s={name:'Gen-'+Date.now().toString(36).slice(-4),url:R.newSheet.canvas.toDataURL('image/png'),tw:64,margin:0};await loadSheet(s);sheets.push(s);uniqNames(sheets);}
-    M={name:M.name,w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:M.cfg};selId=null;after();fit();draw();
+    M={name:M.name,w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({},M.cfg,{view:R.view||'rpg'})};selId=null;after();fit();draw();
     const i=R.info;toast('Đã tạo: '+i.placed.house+' nhà, '+i.placed.tree+' cây, '+i.placed.prop+' đồ'+((!i.house&&!i.tree)?' — chưa thấy tài nguyên gắn nhãn Cây/Nhà (xem tab 🔎 Tài nguyên)':''));}
   /* ===== NHIỀU MÀN ===== */
   let MAPS=[],curMap=0;
@@ -518,13 +518,15 @@ export function init2D(root,A){
       btn('🗑 Xoá màn này',async()=>{if(MAPS.length<2){toast('Phải còn ít nhất 1 màn');return;}if(!await yes('Xoá "'+M.name+'"? Cửa trỏ tới màn này sẽ bị bỏ.\nKhông hoàn tác được.'))return;const d=curMap;MAPS.splice(d,1);for(const m of MAPS)m.ents=(m.ents||[]).filter(e=>!(e.t==='door'&&e.to===d)).map(e=>(e.t==='door'&&e.to>d)?Object.assign(e,{to:e.to-1}):e);curMap=Math.min(d,MAPS.length-1);M=clone(MAPS[curMap]);undo=[];redo=[];selId=null;after();fit();draw();})));
     body.append(el('div',{class:'lbl',style:'margin-top:8px'},'ĐẶT LÊN BẢN ĐỒ (chạm ô để đặt, chạm lại để chọn/kéo)'),
       el('div',{class:'row'},['start','door','goal'].map(k=>btn(OT[k][0]+' '+OT[k][1],()=>{objType=k;tool='obj';draw();},(tool==='obj'&&objType===k)?'on':''))));
-    const GS={k:window.__gk||'village',z:window.__gz||'m',g:!!window.__gg};
+    const GS={v:window.__gv||'rpg',k:window.__gk||'village',z:window.__gz||'m',g:!!window.__gg};
     const selK=el('select',{class:'num',onchange:e=>{window.__gk=e.target.value;}},Object.entries(GEN_KINDS).map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.k)o.selected=true;return o;}));
     const selZ=el('select',{class:'num',onchange:e=>{window.__gz=e.target.value;}},[['s','Nhỏ 32×24'],['m','Vừa 48×36'],['l','Lớn 64×48']].map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.z)o.selected=true;return o;}));
+    const selV=el('select',{class:'num',onchange:e=>{window.__gv=e.target.value;}},Object.entries(GEN_VIEWS).map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.v)o.selected=true;return o;}));
     const cbG=el('input',{type:'checkbox',onchange:e=>{window.__gg=e.target.checked;}});cbG.checked=GS.g;
     body.append(el('div',{style:'border:1px solid #5aa17a;border-radius:10px;padding:8px;margin-top:10px;background:#16261d'},
       el('div',{class:'lbl',style:'color:#9fe0b0'},'🎲 TỰ TẠO BỐI CẢNH TỪ TÀI NGUYÊN'),
       el('div',{class:'hint'},'App dùng các tài nguyên đã gắn nhãn (Cây, Nhà, Nước, Đồ vật, Trang trí…) để trải nền, vẽ đường, đặt hồ, nhà, cây. Thay bản đồ của màn đang mở (hoàn tác được bằng Ctrl+Z).'),
+      el('div',{class:'row'},el('span',{class:'lbl'},'📷 Góc nhìn'),selV),
       el('div',{class:'row'},el('span',{class:'lbl'},'Kiểu'),selK,el('span',{class:'lbl'},'Cỡ'),selZ),
       el('div',{class:'row'},el('label',{style:'font-size:13px'},cbG,' Đặt 🏁 đích ở cuối đường')),
       el('div',{class:'row'},btn('🎲 Tạo bối cảnh',genRun,'background:#2f7d54;color:#fff'))));
