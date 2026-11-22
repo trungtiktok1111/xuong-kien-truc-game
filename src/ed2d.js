@@ -1,5 +1,6 @@
 import {logicTab,entExtra} from './logic.js';
 import {animTab,animPick,uniqNames} from './anim.js';
+import {unzipSync} from 'fflate';
 import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,guessTile,ask,askText,yes,zipBrowser,slotsUI,exportGame} from './util.js';
 const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
@@ -187,7 +188,7 @@ export function init2D(root,A){
         const sl=el('select',{class:'num',style:'width:100%;max-width:100%',onchange:e=>{curSheet=+e.target.value;draw();}},lst.map(i=>el('option',{value:i},(i+1)+'. '+sheets[i].name)));sl.value=String(curSheet);
         body.append(fq,sl,el('div',{class:'row'},btn('◀ Trước',()=>{const k=lst.indexOf(curSheet);if(k>0){curSheet=lst[k-1];draw();}}),btn('Sau ▶',()=>{const k=lst.indexOf(curSheet);if(k<lst.length-1){curSheet=lst[k+1];draw();}}),el('span',{class:'lbl'},(pos+1)+' / '+lst.length+' (tổng '+vs.length+')')));}
       else body.append(el('div',{class:'row'},vs.map(i=>btn(sheets[i].name,()=>{curSheet=i;draw();},curSheet===i?'on':''))));
-      if(!vs.length){body.append(el('div',{class:'hint'},'Chưa có tileset nào. Bấm "➕ Thêm tileset từ ảnh…" hoặc vào "🗑 Quản lý / xóa tileset" → "Hiện lại tileset gốc".'),el('div',{class:'row'},btn('➕ Thêm tileset từ ảnh…',addSheet),btn('📦 Nạp gói .zip…',addZip),btn('🗑 Quản lý / xóa tileset',manageSheets)));return;}}
+      if(!vs.length){body.append(el('div',{class:'hint'},'Chưa có tileset nào. Bấm "➕ Thêm tileset từ ảnh…" hoặc vào "🗑 Quản lý / xóa tileset" → "Hiện lại tileset gốc".'),el('div',{class:'row'},btn('➕ Thêm tileset từ ảnh…',addSheet),btn('📦 Nạp gói .zip…',addZip),btn('📥 Nạp tất cả gói (tự phân loại)',bulkPacks),btn('🗑 Quản lý / xóa tileset',manageSheets)));return;}}
       if(sheets.length>4){const mb=sheets.slice(4).reduce((a,x)=>a+x.url.length,0)*.75/1048576;body.append(el('div',{class:'hint',style:'border:1px solid #34485a;border-radius:8px;padding:6px'},'🖼 Ảnh đã tải lên: '+(sheets.length-4)+' (≈'+mb.toFixed(1)+' MB) — nằm ở các nút từ "'+sheets[4].name+'" trở đi ở trên. '+(saveInfo||'')));}
       const s=sheets[curSheet];const fitZ=Math.max(.02,Math.min(3,((pn.clientWidth||360)-34)/s.img.width));const z=shZ==='fit'?fitZ:shZ;
       body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Ảnh '+s.img.width+'×'+s.img.height+' px · phóng '+Math.round(z*100)+'%'),btn('▣ Vừa khung',()=>{shZ='fit';draw();},shZ==='fit'?'on':''),btn('－',()=>{shZ=Math.max(.02,z/1.4);draw();}),btn('＋',()=>{shZ=Math.min(8,z*1.4);draw();}),btn('1:1',()=>{shZ=1;draw();})));
@@ -204,7 +205,7 @@ export function init2D(root,A){
         const w=c1-c0+1,h=r1-r0+1,tiles=[];for(let j=r0;j<=r1;j++)for(let i=c0;i<=c1;i++)tiles.push(enc(curSheet,j*s.cols+i));
         stamp={w,h,multi:false,tiles,sheet:{sid:curSheet,c0,r0,c1,r1}};if(tool!=='rect'&&tool!=='fill')tool='draw';redraw();toast('Đã chọn '+w+'×'+h+' ô — sang tab Công cụ để vẽ');});
       redraw();
-      body.append(el('div',{class:'row'},btn('➕ Thêm tileset từ ảnh…',addSheet),btn('📦 Nạp gói .zip…',addZip),btn('🗑 Quản lý / xóa tileset',manageSheets)),el('div',{class:'hint'},'Chọn ô: chạm 1 ô, hoặc kéo để chọn khối nhiều ô (ví dụ cả mái nhà). Sau đó quay lại tab Công cụ và chạm lên bản đồ.'));}
+      body.append(el('div',{class:'row'},btn('➕ Thêm tileset từ ảnh…',addSheet),btn('📦 Nạp gói .zip…',addZip),btn('📥 Nạp tất cả gói (tự phân loại)',bulkPacks),btn('🗑 Quản lý / xóa tileset',manageSheets)),el('div',{class:'hint'},'Chọn ô: chạm 1 ô, hoặc kéo để chọn khối nhiều ô (ví dụ cả mái nhà). Sau đó quay lại tab Công cụ và chạm lên bản đồ.'));}
     else if(tab==='res'){resTab();}
     else if(tab==='lib'){
       body.append(el('div',{class:'row'},btn('💾 Lưu stamp hiện tại vào thư viện',async()=>{const n=await ask('Tên công trình/stamp:','Công trình '+(lib.length+1));if(!n)return;lib.push({name:n,w:stamp.w,h:stamp.h,multi:!!stamp.multi,layers:stamp.multi?stamp.layers:null,tiles:stamp.tiles});lsSet('thk_stamps',lib);draw();toast('Đã lưu "'+n+'"');})));
@@ -245,7 +246,7 @@ export function init2D(root,A){
       body.append(el('div',{class:'hint'},'Bật/tắt hiển thị từng lớp. Lớp "Vùng chặn" là chỗ nhân vật không đi qua được (xuất kèm trong tệp dữ liệu để dùng trong game).'));
       LAYN.concat(['Vùng chặn']).forEach((n,i)=>body.append(el('div',{class:'row'},btn(vis[i]?'👁 Hiện':'🚫 Ẩn',()=>{vis[i]=vis[i]?0:1;dirty=true;draw();},vis[i]?'':'off'),btn(n,()=>{act=i;draw();},act===i?'on':''))));}
     else if(tab==='file'){
-      body.append(el('div',{style:'border:1px solid #4a7a5a;border-radius:10px;padding:8px;margin-bottom:10px;background:#16261d'},el('div',{class:'lbl',style:'color:#9fe0b0;margin-bottom:6px'},'📂 TẢI TỆP LÊN'),el('div',{class:'row'},btn('🖼 Ảnh tileset (.png)…',addSheet),btn('📦 Gói tài nguyên .zip…',addZip),btn('⬆ Dự án .json…',()=>pickFile('.json,application/json',t=>importJSON(t)))),el('div',{class:'hint'},'Ảnh/zip sẽ thành tileset mới trong tab 🧩 Tileset. Gói zip: chọn ảnh bên trong rồi nhập kích thước ô.')));
+      body.append(el('div',{style:'border:1px solid #4a7a5a;border-radius:10px;padding:8px;margin-bottom:10px;background:#16261d'},el('div',{class:'lbl',style:'color:#9fe0b0;margin-bottom:6px'},'📂 TẢI TỆP LÊN'),el('div',{class:'row'},btn('🖼 Ảnh tileset (.png)…',addSheet),btn('📦 Gói tài nguyên .zip…',addZip),btn('📥 Nạp tất cả gói (tự phân loại)',bulkPacks),btn('⬆ Dự án .json…',()=>pickFile('.json,application/json',t=>importJSON(t)))),el('div',{class:'hint'},'Ảnh/zip sẽ thành tileset mới trong tab 🧩 Tileset. Gói zip: chọn ảnh bên trong rồi nhập kích thước ô.')));
       body.append(slotsUI('2d',()=>clone(M),o=>{pushUndo();M=clone(o);selId=null;after();fit();},'Làng của tôi'));
       const wi=el('input',{type:'number',value:M.w,min:4,max:200,class:'num'}),hi=el('input',{type:'number',value:M.h,min:4,max:200,class:'num'});
       body.append(el('div',{class:'row'},btn('🏘 Mở lại làng Thanh Hồ',async()=>{if(await yes('Thay bản đồ hiện tại bằng làng Thanh Hồ gốc?')){pushUndo();M=fromVillage();after();fit();}}),btn('🆕 Bản đồ trống',async()=>{if(await yes('Tạo bản đồ trống '+wi.value+'×'+hi.value+'? (có thể hoàn tác)')){pushUndo();M=newMap(+wi.value,+hi.value);after();fit();}})));
@@ -376,6 +377,22 @@ export function init2D(root,A){
     for(const it of items){const s={name:it.name.replace(/\.\w+$/,'').slice(0,24),url:it.url,tw,margin:m};await loadSheet(s);sheets.push(s);uniqNames(sheets);if(first<0)first=sheets.length-1;n++;}
     curSheet=first;after();draw();toast('Đã thêm '+n+' tileset');}
   function addSheet(){pickFiles('image/*',items=>items.length===1?addSheetUrl(items[0].url,items[0].name):addMany(items),false);}
+  /* Nạp nhiều gói zip một lần, tự phân loại: Tiles/ → 1 tileset ghép lưới; Atlas/ → tileset; còn lại (Sprites, lớp phủ…) bỏ qua để nhẹ máy */
+  async function bulkPacks(){const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='.zip,application/zip,application/x-zip-compressed';
+    inp.onchange=async()=>{const fs=[...inp.files];if(!fs.length)return;let nt=0,na=0,skip=0;const seen=new Set();
+      for(const f of fs){toast('Đang đọc '+f.name+'…');let u8;try{u8=new Uint8Array(await f.arrayBuffer());}catch(e){continue;}
+        const key=f.name.replace(/^[0-9a-f]{8}-/,'')+'|'+f.size;if(seen.has(key)){skip++;continue;}seen.add(key);
+        const pk=f.name.replace(/^[0-9a-f]{8}-/,'').replace(/\.zip$/i,'').slice(0,18);let files;
+        try{files=unzipSync(u8,{filter:e=>/\.(png|json)$/i.test(e.name)&&!/(^|\/)(__MACOSX|\._)/.test(e.name)&&/(^|\/)(Tiles|Atlas)\//i.test(e.name)});}catch(e){continue;}
+        const tiles=Object.keys(files).filter(n=>/(^|\/)Tiles\/[^\/]+\.png$/i.test(n)).sort(),atl=Object.keys(files).filter(n=>/(^|\/)Atlas\/[^\/]+\.png$/i.test(n)).sort();
+        const toUrl=b=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(b);});
+        if(tiles.length){const T=64,cols=Math.min(16,tiles.length),rows=Math.ceil(tiles.length/cols),c=document.createElement('canvas');c.width=cols*T;c.height=rows*T;const g=c.getContext('2d');g.imageSmoothingQuality='high';
+          for(let i=0;i<tiles.length;i++){try{const bm=await createImageBitmap(new Blob([files[tiles[i]]],{type:'image/png'}));g.drawImage(bm,(i%cols)*T,Math.floor(i/cols)*T,T,T);}catch(e){}}
+          const s={name:(pk+'-Tiles').slice(0,24),url:c.toDataURL('image/png'),tw:T,margin:0};await loadSheet(s);sheets.push(s);nt++;}
+        for(const n of atl){const s={name:(pk+'-'+n.split('/').pop().replace(/\.png$/i,'')).slice(0,24),url:await toUrl(new Blob([files[n]],{type:'image/png'})),tw:64,margin:0};await loadSheet(s);sheets.push(s);na++;}}
+      uniqNames(sheets);if(nt+na)curSheet=sheets.length-1;after();draw();
+      toast('Đã nạp '+nt+' tileset ô nền + '+na+' atlas'+(skip?' (bỏ '+skip+' gói trùng)':'')+'. Sprites/lớp phủ bỏ qua để nhẹ.');};
+    inp.click();}
   function addZip(){zipBrowser(addSheetUrl,addMany);}
   function exportPNG(k){const c=document.createElement('canvas');c.width=M.w*CELL*k;c.height=M.h*CELL*k;const g=c.getContext('2d');g.imageSmoothingEnabled=false;const sv=vis.slice();rebuild();g.drawImage(mc,0,0,c.width,c.height);c.toBlob(b=>saveFile('ban_do_2d.png',b));}
   function proj(){return {tags:TG,format:'thk-map-1',cell:CELL,w:M.w,h:M.h,layerNames:LAYN,layers:M.layers,collision:M.blk,ents:M.ents,cfg:M.cfg,sheets:sheets.map(s=>({name:s.name,tw:s.tw,margin:s.margin,cols:s.cols,rows:s.rows,url:s.url})),note:'Giá trị ô v>0: n=v-1; flip=n&7 (1=ngang,2=dọc,4=chéo); t=n>>3; sheet=t>>12; tile=t&4095; tile (col,row)=(tile%cols, floor(tile/cols)); nguồn ảnh: sx=col*(tw+margin), sy=row*(tw+margin)'};}
