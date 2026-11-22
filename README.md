@@ -1,4 +1,4 @@
-# Xưởng Kiến Trúc Võ Lâm
+# Xưởng Kiến Trúc Game
 
 Ứng dụng một file (artifact) để chỉnh bản đồ 2D, công trình 3D voxel, đặt mô hình GLB và biến thành game chơi được.
 
