@@ -24,10 +24,11 @@ export function play2D(o){
   let CQ=16;for(const sh of sheets)if(sh&&sh.img&&sh.tw>CQ)CQ=Math.min(48,sh.tw);
   while(W*H*CQ*CQ>2.2e7&&CQ>16)CQ-=8;
   function mk(top){const c=document.createElement('canvas');c.width=W*CQ;c.height=H*CQ;const g=c.getContext('2d');g.imageSmoothingEnabled=CQ>16;g.imageSmoothingQuality='high';const h2=CQ/2;
-    const ls=top===2?[0,1]:(top?[3]:[0,1,2]);for(const l of ls){const a=M.layers[l];for(let i=0;i<a.length;i++){const v=a[i];if(!v)continue;const n=v-1,f=n&7,t=n>>3,sid=t>>12,idx=t&4095,sh=sheets[sid];if(!sh||!sh.img)continue;
+    const ls=top===2?[0,1]:(top?[3]:[0,1,2]);for(const l of ls){const a=M.layers[l];for(let i=0;i<a.length;i++){const v=a[i];if(!v)continue;const n=v-1,f=n&7,t=n>>3,sid=t>>12,idx=t&4095,sh=sheets[sid];if(!sh||!sh.img)continue;if(top===2&&sh.iso)continue;
       const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin),dx=(i%W)*CQ,dy=Math.floor(i/W)*CQ;
       if(!f)g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,CQ,CQ);else{g.save();g.translate(dx+h2,dy+h2);if(f&4){g.rotate(Math.PI/2);g.scale(1,-1);}if(f&1)g.scale(-1,1);if(f&2)g.scale(1,-1);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-h2,-h2,CQ,CQ);g.restore();}}}return c;}
   const base=ISO?null:mk(false),top=ISO?null:mk(true),gnd=ISO?mk(2):null;
+  const SL=[];if(ISO){for(const l of [0,1])for(let i=0;i<W*H;i++){const v=M.layers[l][i];if(!v)continue;const t=(v-1)>>3,sid=t>>12,sh=sheets[sid];if(sh&&sh.img&&sh.iso)SL.push({x:i%W,y:(i/W)|0,sid,idx:t&4095,l});}SL.sort((a,b)=>(a.x+a.y)-(b.x+b.y)||a.l-b.l);}
   const GR=[];if(ISO){const oc=new Uint8Array(W*H),lab=new Uint8Array(W*H);for(let i=0;i<W*H;i++)oc[i]=(M.layers[2][i]||M.layers[3][i])?1:0;
     for(let i=0;i<W*H;i++){if(!oc[i]||lab[i])continue;const st=[i],cells=[];lab[i]=1;let x0=W,y0=H,x1=-1,y1=-1;
       while(st.length){const c=st.pop();cells.push(c);const x=c%W,y=(c/W)|0;x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+a,ny=y+b;if(nx<0||ny<0||nx>=W||ny>=H)continue;const q=ny*W+nx;if(oc[q]&&!lab[q]){lab[q]=1;st.push(q);}}}
@@ -102,7 +103,8 @@ export function play2D(o){
     if(W*s<=w)ox=(w-W*s)/2;else ox=Math.min(0,Math.max(w-W*s,ox));if(H*s<=h)oy=(h-H*s)/2;else oy=Math.min(0,Math.max(h-H*s,oy));
     let pX=()=>0,pY=()=>0;
     if(ISO){const hw=s*.75,hh=s*.375,ox0=w/2-(P.x-P.y)*hw,oy0=h/2-(P.x+P.y)*hh;pX=(x,y)=>ox0+(x-y)*hw;pY=(x,y)=>oy0+(x+y)*hh;cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);
-      cx.save();cx.transform(hw/CQ,hh/CQ,-hw/CQ,hh/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();}
+      cx.save();cx.transform(hw/CQ,hh/CQ,-hw/CQ,hh/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();
+      for(const q of SL){const X=pX(q.x,q.y)-hw,Y=pY(q.x,q.y);if(X>w||X<-2*hw||Y>h||Y<-2*hw)continue;const sh=sheets[q.sid],sx=(q.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(q.idx/sh.cols)*(sh.tw+sh.margin);cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,X,Y,2*hw+.6,2*hw+.6);}}
     else{if(SIDE){const gr=cx.createLinearGradient(0,oy,0,oy+H*s);gr.addColorStop(0,'#5fa8dd');gr.addColorStop(1,'#d6edf8');cx.fillStyle=gr;cx.fillRect(ox,oy,W*s,H*s);}cx.drawImage(base,ox,oy,W*s,H*s);}
     cx.font=(s*.6)+'px serif';cx.textAlign='center';for(const it of items)cx.fillText('❤️',ISO?pX(it.x,it.y):ox+it.x*s,(ISO?pY(it.x,it.y):oy+it.y*s)+s*.2);
     const ents=[{y:P.y,x:P.x,p:1},...E.map(e=>({y:e.y,x:e.x,e})),...NP.map(n=>({y:n.y,x:n.x,n})),...CH.map(c=>({y:c.y,x:c.x,c})),...(GL?[{y:GL.y,x:GL.x,g:GL}]:[]),...(ISO?GR.map(g=>({y:g.yb,x:g.xc,grp:g})):[])].sort(ISO?((a,b)=>(a.x+a.y)-(b.x+b.y)):((a,b)=>a.y-b.y));

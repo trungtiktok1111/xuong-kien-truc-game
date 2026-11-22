@@ -8,7 +8,11 @@ const KINDS={
   wild:{name:'Đồng hoang',houses:[0,2],trees:[8,14],props:[16,26],pond:0,paths:1}};
 export const GEN_KINDS=Object.fromEntries(Object.entries(KINDS).map(([k,v])=>[k,v.name]));
 
-const MC=new WeakMap();
+
+const MC=new WeakMap(),MI=new WeakMap();
+function meanIso(sh){let m=MI.get(sh.img);if(m)return m;const n=sh.cols*sh.rows;m=new Array(n);const c=document.createElement('canvas');c.width=sh.img.width;c.height=sh.img.height;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(sh.img,0,0);const D=g.getImageData(0,0,c.width,c.height).data,W=c.width,st=sh.tw+sh.margin;
+  for(let i=0;i<n;i++){const r0=Math.floor(i/sh.cols),c0=i%sh.cols;let R=0,G=0,Bb=0,k=0;for(let y=0;y<sh.tw;y+=2)for(let x=0;x<sh.tw;x+=2){const o=((r0*st+y)*W+c0*st+x)*4;if(D[o+3]>200){R+=D[o];G+=D[o+1];Bb+=D[o+2];k++;}}if(k>sh.tw*sh.tw/16)m[i]=[R/k,G/k,Bb/k];}
+  MI.set(sh.img,m);return m;}
 function meanCols(sh,em){let m=MC.get(sh.img);if(m)return m;const n=sh.cols*sh.rows;m=new Array(n);const c=document.createElement('canvas');c.width=sh.img.width;c.height=sh.img.height;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(sh.img,0,0);const D=g.getImageData(0,0,c.width,c.height).data,W=c.width,st=sh.tw+sh.margin,S=Math.max(1,Math.floor(sh.tw/8));
   for(let i=0;i<n;i++){if(em&&em[i]!==2)continue;const r0=Math.floor(i/sh.cols),c0=i%sh.cols;let R=0,G=0,Bb=0,k=0;for(let y=0;y<sh.tw;y+=S)for(let x=0;x<sh.tw;x+=S){const o=((r0*st+y)*W+c0*st+x)*4;R+=D[o];G+=D[o+1];Bb+=D[o+2];k++;}m[i]=[R/k,G/k,Bb/k];}
   MC.set(sh.img,m);return m;}
@@ -21,8 +25,9 @@ export function groundKind(c){const [r,g,b]=c,mx=Math.max(r,g,b),mn=Math.min(r,g
   return 'đất';}
 export function scanPools(ctx){
   const {sheets,eff,emptyMap,visSh}=ctx;
-  const P={ground:[],water:[],'Cây':[],'Nhà':[],'Đồ vật':[],'Trang trí':[]};
+  const P={ground:[],water:[],isoG:[],isoW:[],'Cây':[],'Nhà':[],'Đồ vật':[],'Trang trí':[]};
   for(const sid of visSh()){const sh=sheets[sid];if(!sh||!sh.img||sid<4||/^Gen-/.test(sh.name))continue;
+    if(sh.iso){const mcI=meanIso(sh);for(let idx=0;idx<sh.cols*sh.rows;idx++){const col=mcI[idx];if(!col)continue;const kind=groundKind(col);(kind==='nước'?P.isoW:P.isoG).push({sid,idx,kind});}continue;}
     const em=sh.cols*sh.rows<=20000?emptyMap(sh):null,N=Math.min(sh.cols*sh.rows,4000),big=sh.tw>=48;let mc=null;
     for(let idx=0;idx<N;idx++){if(em&&em[idx]===1)continue;const e=eff(sid,idx),opaque=em&&em[idx]===2;
       if(opaque&&e.layer===0&&(!e.type||e.type==='Đường'||e.type==='Nước')){
@@ -41,7 +46,8 @@ const ri=(r,a,b)=>a+Math.floor(r()*(b-a+1));
 /* trả về {w,h,layers,blk,ents,newSheet:{canvas,tw}|null,info} — gọi bởi ed2d sau khi tạo sheet */
 export function build(ctx,opt){
   const {sheets,enc}=ctx;const K=KINDS[opt.kind]||KINDS.village,r=Math.random,W=opt.w,H=opt.h;
-  const P=scanPools(ctx);const VW=opt.view||'rpg',SIDE=VW==='side',TOP=VW==='top';
+  const P=scanPools(ctx);const VW=opt.view||'rpg',SIDE=VW==='side',TOP=VW==='top',ISOV=VW==='iso'&&P.isoG.length>0;
+  if(ISOV){P.ground=P.isoG;P.water=P.isoW;}
   const layers=[0,1,2,3].map(()=>new Array(W*H).fill(0)),blk=new Array(W*H).fill(0),occ=new Uint8Array(W*H),ents=[];
   const info={ground:P.ground.length,water:P.water.length,tree:P['Cây'].length,house:P['Nhà'].length,prop:P['Đồ vật'].length+P['Trang trí'].length,placed:{house:0,tree:0,prop:0}};
   /* nền */
