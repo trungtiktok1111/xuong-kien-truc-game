@@ -97,10 +97,10 @@ place('ren',9,12,fp=3,inset=1)            # lò rèn bên trái
 place('leu',39,25,fp=2,inset=1)           # lều thương nhân bên phải
 place('gieng',24,21,fp=2,inset=0)
 place('vai',17,24,fp=1,inset=0);place('gom',20,24,fp=1,inset=0);place('sot',29,24,fp=1,inset=0);place('hieu',32,23,fp=1,inset=0,block=False)
-for (x,y) in [(3,6),(6,3),(15,4),(33,5),(2,16),(45,18),(4,22),(44,30),(30,33),(16,33),(20,34),(1,31)]:
-    place('cha',x,y,fp=1,inset=1)
-for (x,y) in [(12,17),(36,18),(14,29),(42,22),(28,8)]:place('bui',x,y,fp=1,inset=0)
-place('linh',44,34,fp=1,inset=1);place('linh',2,35,fp=1,inset=1)
+#for (x,y) in [(3,6),(6,3),(15,4),(33,5),(2,16),(45,18),(4,22),(44,30),(30,33),(16,33),(20,34),(1,31)]:
+#    place('cha',x,y,fp=1,inset=1)
+#for (x,y) in [(12,17),(36,18),(14,29),(42,22),(28,8)]:place('bui',x,y,fp=1,inset=0)
+#place('linh',44,34,fp=1,inset=1);place('linh',2,35,fp=1,inset=1)
 # viền map bằng lối đi: chặn mép
 for x in range(W):BLK[x]=1;BLK[(H-1)*W+x]=1
 for y in range(H):BLK[y*W]=1;BLK[y*W+W-1]=1
@@ -111,7 +111,7 @@ an={a['name']:a['id'] for a in j['cfg']['anims']}
 ent('start',24,30)
 ent('npc',22,15,name='Chưởng quầy Cái Bang',anim=an['Cai-Bang-Nam'],text='Khách quan! Vùng đá đỏ phía tây nam có bọn Ngũ Độc quấy phá. Diệt hết chúng rồi ra lá cờ tím ở góc đông nam.')
 ent('npc',30,22,name='Tiểu hòa thượng',anim=an['Thieu-Lam-Nam'],text='A di đà Phật. Nhấn phím đánh để dùng combo ba đòn của Võ Đang. Rương ở bên giếng chứa thuốc hồi sức.')
-for (x,y) in [(4,29),(8,31),(6,33),(9,28)]:ent('enemy',x,y,name='Ngũ Độc',anim=an['Ngu-Doc-Nam'],hp=3,dmg=1,spd=1.6,chase=6,ai='wander')
+#for (x,y) in [(4,29),(8,31),(6,33),(9,28)]:ent('enemy',x,y,name='Ngũ Độc',anim=an['Ngu-Doc-Nam'],hp=3,dmg=1,spd=1.6,chase=6,ai='wander')
 ent('chest',26,22,tile={'sid':SID_VAT,'idx':objtile('ruong',0,0)},gives='hp',amt=2)
 ent('goal',44,32)
 cfg=j['cfg']
