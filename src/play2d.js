@@ -1,5 +1,6 @@
 import {createLogic} from './logic.js';
 import {el} from './util.js';
+import {zonesHit,zRaster,zPath} from './zones.js';
 import {makeAnims} from './anim.js';
 const HERO=88,FOES=[108,109,120,121,122,111,110],TD=2;
 export function play2D(o){
@@ -20,7 +21,8 @@ export function play2D(o){
   if(o.onExit)ov.append(el('div',{style:'position:absolute;right:10px;top:calc(env(safe-area-inset-top) + 10px);padding:8px 14px;border-radius:16px;background:#263342cc;color:#fff;font:600 14px system-ui',onclick:()=>stop()},'✕ Thoát'));
   document.body.append(ov);if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
   const AN=makeAnims(CF,sheets);
-  const blocked=(x,y)=>x<0||y<0||x>=W||y>=H||!!M.blk[y*W+x];
+  const ZS=(M.cfg&&M.cfg.zones)||[],ZR=zRaster(ZS,W,H);
+  const blocked=(x,y)=>x<0||y<0||x>=W||y>=H||!!M.blk[y*W+x]||!!ZR[y*W+x];
   let CQ=16;for(const sh of sheets)if(sh&&sh.img&&sh.tw>CQ)CQ=Math.min(48,sh.tw);
   while(W*H*CQ*CQ>2.2e7&&CQ>16)CQ-=8;
   function mk(top){const c=document.createElement('canvas');c.width=W*CQ;c.height=H*CQ;const g=c.getContext('2d');g.imageSmoothingEnabled=CQ>16;g.imageSmoothingQuality='high';const h2=CQ/2;
@@ -70,7 +72,7 @@ export function play2D(o){
     winMode=CF.win==='auto'?(hasGoal?(hasEn&&!legacy?'both':'goal'):'kill'):CF.win;
     if(winMode!=='kill'&&!hasGoal)winMode='kill';
     L.fire('start');}
-  function free(x,y,r){return !(blocked(Math.floor(x-r),Math.floor(y-r))||blocked(Math.floor(x+r),Math.floor(y-r))||blocked(Math.floor(x-r),Math.floor(y+r))||blocked(Math.floor(x+r),Math.floor(y+r)));}
+  function free(x,y,r){return !(ZS.length&&zonesHit(ZS,x,y,r))&&!(blocked(Math.floor(x-r),Math.floor(y-r))||blocked(Math.floor(x+r),Math.floor(y-r))||blocked(Math.floor(x-r),Math.floor(y+r))||blocked(Math.floor(x+r),Math.floor(y+r)));}
   function move(e,dx,dy,r){if(!free(e.x,e.y,r)){e.x+=dx;e.y+=dy;return;}if(free(e.x+dx,e.y,r))e.x+=dx;if(free(e.x,e.y+dy,r))e.y+=dy;}
   function end(win){over=1;msg.textContent='';msg.append(el('div',{},win?'🏆 Chiến thắng!':'💀 Thất bại'),el('div',{style:'padding:12px 22px;border-radius:20px;background:#e0b050;color:#2a1a08;font-size:18px',onclick:start},'Chơi lại'));msg.style.display='flex';}
   function attack(){if(over||atkCD>0||L.dlgOpen)return;for(const n of NP){if(Math.hypot(n.x-P.x,n.y-P.y)<1.3){atkCD=.3;if(!L.talk(n))said={n,t:4};L.fire('talk',n.id);return;}}slash=.18;{const as=CF.heroAnim&&AN.get(CF.heroAnim);let K=0;if(as)for(let i=1;i<=6;i++){const kk=i>1?'atk'+i:'atk';if(as.st[kk]&&as.st[kk].src&&as.st[kk].src.length)K=i;else break;}
@@ -114,6 +116,8 @@ export function play2D(o){
       else{const e=n.e;cx.globalAlpha=e.fl>0?.5:1;if(!(e.anim&&AN.drawChar(cx,e,e.anim,ox+e.x*s,oy+e.y*s,s,t,{iso:ISO,hit:e.fl>0,atk:Math.hypot(P.x-e.x,P.y-e.y)<.8})))fbk(e,ox+(e.x-.5)*s,oy+(e.y-.7)*s,s,e.x<P.x);cx.globalAlpha=1;cx.fillStyle='#000a';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7,3);cx.fillStyle='#e74c3c';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7*Math.max(0,e.hp)/e.mhp,3);}}
     ox=ox1;oy=oy1;for(const d of DR){if(ISO){ox=pX(d.x,d.y)-d.x*s;oy=pY(d.x,d.y)-d.y*s;}cx.font=(s*.8)+'px serif';cx.textAlign='center';cx.fillText('🚪',ox+d.x*s,oy+(d.y+.3)*s);}
     if(!ISO)cx.drawImage(top,ox,oy,W*s,H*s);
+    if(window.__dbg)window.__P=P;
+    if(window.__dbg&&ZS.length){cx.save();cx.fillStyle='#00aaff55';cx.strokeStyle='#00ccff';const T=ISO?((x,y)=>[pX(x,y),pY(x,y)]):((x,y)=>[ox1+x*s,oy1+y*s]);for(const q of ZS){if(q.k==='line'){cx.lineWidth=(q.th||.6)*s;cx.lineJoin='round';zPath(cx,q,T);cx.stroke();}else{zPath(cx,q,T);cx.fill();cx.stroke();}}cx.restore();}
     if(ISO&&window.__dbg){cx.fillStyle='#ff000055';for(let i=0;i<W*H;i++)if(M.blk[i]){const x=i%W,y=(i/W)|0,hw=s*.75,hh=s*.375,X=pX(x,y),Y=pY(x,y);cx.beginPath();cx.moveTo(X,Y);cx.lineTo(X+hw,Y+hh);cx.lineTo(X,Y+2*hh);cx.lineTo(X-hw,Y+hh);cx.closePath();cx.fill();}}
     if(ISO){ox=pX(P.x,P.y)-P.x*s;oy=pY(P.x,P.y)-P.y*s;}
     if(slash>0){cx.strokeStyle='#fff';cx.lineWidth=4;cx.globalAlpha=slash/.18;const a=ISO?Math.atan2((fx+fy)*.5,fx-fy):Math.atan2(fy,fx);cx.beginPath();cx.arc(ox+P.x*s,oy+(P.y-.2)*s,s*1.05,a-1,a+1);cx.stroke();cx.globalAlpha=1;}

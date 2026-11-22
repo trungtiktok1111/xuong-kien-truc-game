@@ -3,6 +3,7 @@ import {createLogic} from './logic.js';
 import {mergeGeometries} from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {GEO,MATS,mkTex,BASE_N} from './ed3d.js';
 import {el} from './util.js';
+import {zonesHit} from './zones.js';
 import {entModel,defCfg3} from './ents3d.js';
 import {parseGLB,unb64} from './models3d.js';
 const SOLID={cube:1,slab:1,wedge:1,stairs:1,curve:1,pillar:1,panel:1,window:1,rail:1};
@@ -45,9 +46,11 @@ export function play3D(o){
   const vox=(x,y,z)=>V.get(x+','+y+','+z);
   function topAt(v,fx,fz){const s=v.s;if(s==='arch')return -1;if(s==='slab')return .5;if(s==='wedge'||s==='stairs'||s==='curve'){const th=v.r*Math.PI/2,lx=fx-.5,lz=fz-.5,c=Math.cos(th),sn=Math.sin(th);const lz2=lx*sn+lz*c;const t=Math.min(1,Math.max(0,.5-lz2));return s==='wedge'?t:s==='curve'?t*t:Math.min(1,Math.floor(t*4)/4+.25);}return SOLID[s]?1:-1;}
   function ground(x,z,y,step){const cx=Math.floor(x),cz=Math.floor(z);for(let cy=Math.min(((o.grid&&o.grid[1])||24)-1,Math.floor(y+step));cy>=0;cy--){const v=vox(cx,cy,cz);if(!v)continue;const h=topAt(v,x-cx,z-cz);if(h>=0)return cy+h;}return 0;}
-  function okAt(x,z,y){const R=.25;for(const b of PB)if(x>b.x0-R&&x<b.x1+R&&z>b.z0-R&&z<b.z1+R&&y<b.y1-.2&&y+1.6>b.y0)return false;for(const [a,b] of [[-R,-R],[R,-R],[-R,R],[R,R],[0,0]]){const px=x+a,pz=z+b,g=ground(px,pz,y,.55);if(g>y+.56)return false;const y0=Math.max(g,y),cx=Math.floor(px),cz=Math.floor(pz);
+  const ZS=((o.cfg&&o.cfg.zones)||[]);
+  function okAt(x,z,y){const R=.25;for(const q of ZS){const y0=q.y0||0,y1=q.y1==null?1e9:q.y1;if(y<y1-.2&&y+1.6>y0&&zonesHit([q],x,z,R))return false;}for(const b of PB)if(x>b.x0-R&&x<b.x1+R&&z>b.z0-R&&z<b.z1+R&&y<b.y1-.2&&y+1.6>b.y0)return false;for(const [a,b] of [[-R,-R],[R,-R],[-R,R],[R,R],[0,0]]){const px=x+a,pz=z+b,g=ground(px,pz,y,.55);if(g>y+.56)return false;const y0=Math.max(g,y),cx=Math.floor(px),cz=Math.floor(pz);
       for(let cy=Math.floor(y0+.05);cy<=Math.floor(y0+1.7)&&cy<((o.grid&&o.grid[1])||24);cy++){const v=vox(cx,cy,cz);if(!v)continue;const h=topAt(v,px-cx,pz-cz);if(h>=0&&cy+h>y0+.05)return false;}}return true;}
   const P={x:12.5,y:0,z:23.5,vy:0,gr:true,face:0,hp:CF.hp,inv:0};P.y=ground(P.x,P.z,5,.55);const st0=EN.find(e=>e.t==='start');if(st0){P.x=st0.x+.5;P.z=st0.z+.5;P.y=Math.max(st0.y,ground(P.x,P.z,st0.y+.6,.55));}
+  if(window.__dbg)window.__P3=P;
   let yaw=0,pitch=.35,dist=6.5,keys={},stick=null,look=null,last=0,walk=0;
   function resize(){const w=ov.clientWidth,h=ov.clientHeight;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();}
 

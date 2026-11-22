@@ -6,6 +6,7 @@ const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
 import {build,GEN_KINDS,GEN_VIEWS} from './gen2d.js';
+import {ZK,isBox,isPts,mkBox,mkPts,zHit,zPts,zBounds,zCenter,zMove,zScale,zRotate,zClone,zHandles,zDragHandle,zPath,toLocal} from './zones.js';
 export function init2D(root,A){
   const sheets=A.sheets.map(s=>Object.assign({},s));let curSheet=0,shZ='fit',shQ='';let HID=new Set([0,1,2,3,...lsGet('thk_hide2d',[])]);const visSh=()=>sheets.map((s,i)=>i).filter(i=>!HID.has(i));
   const loadSheet=s=>new Promise(r=>{const i=new Image();i.onload=()=>{s.img=i;s.cols=Math.floor((i.width+s.margin)/(s.tw+s.margin));s.rows=Math.floor((i.height+s.margin)/(s.tw+s.margin));r();};i.onerror=r;i.src=s.url;});
@@ -66,6 +67,7 @@ export function init2D(root,A){
     rebuild();const z=view.z;cx.drawImage(mc,view.x,view.y,M.w*CELL*z,M.h*CELL*z);
     cx.strokeStyle='#ffffff55';cx.lineWidth=1;cx.strokeRect(view.x-.5,view.y-.5,M.w*CELL*z+1,M.h*CELL*z+1);
     if(vis[4]||colMode){const walk=colMode===2;for(let i=0;i<M.blk.length;i++){const b=M.blk[i];if(!b&&!walk)continue;cx.fillStyle=b?'rgba(255,40,40,.45)':'rgba(40,220,90,.14)';cx.fillRect(view.x+(i%M.w)*CELL*z,view.y+Math.floor(i/M.w)*CELL*z,CELL*z,CELL*z);}}
+    drawZ();
     if(grid&&z>=2.5){cx.strokeStyle='rgba(255,255,255,.13)';cx.beginPath();for(let x=0;x<=M.w;x++){const X=Math.round(view.x+x*CELL*z)+.5;cx.moveTo(X,view.y);cx.lineTo(X,view.y+M.h*CELL*z);}for(let y=0;y<=M.h;y++){const Y=Math.round(view.y+y*CELL*z)+.5;cx.moveTo(view.x,Y);cx.lineTo(view.x+M.w*CELL*z,Y);}cx.stroke();}
     if(hov&&(tool==='draw'||tool==='rect'||tool==='fill')&&act<4){cx.globalAlpha=.65;for(let j=0;j<stamp.h;j++)for(let i=0;i<stamp.w;i++){const v=stamp.multi?(stamp.layers.find(l=>l&&l[j*stamp.w+i])||[])[j*stamp.w+i]||0:stamp.tiles[j*stamp.w+i];drawTile(cx,tool==='draw'?v:stamp.tiles[0]||v,view.x+(hov.x+i)*CELL*z,view.y+(hov.y+j)*CELL*z,CELL*z);if(tool!=='draw')break;}cx.globalAlpha=1;}
     drawEnts(z);
@@ -138,6 +140,7 @@ export function init2D(root,A){
     if(P.size===2){drag=null;const [a,b]=[...P.values()];gest={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};return;}
     if(e.button===1||e.button===2||tool==='pan'||e.buttons===4){drag={pan:true,x:p.x,y:p.y,vx:view.x,vy:view.y};return;}
     const c=cellAt(p.x,p.y);hov=c;
+    if(tool==='zone'){zDown(p,e);dirty=true;return;}
     if(tool==='obj'){objDown(c);dirty=true;return;}
     if(tool==='draw'||tool==='erase'||tool==='fill'||tool==='pick'){pushUndo();
       if(tool==='draw'){paste(c.x,c.y);drag={sx:c.x,sy:c.y,last:c};}else if(tool==='erase'){erase(c.x,c.y);drag={last:c};}else if(tool==='fill'){fill(c.x,c.y);drag=null;}else{pick(c.x,c.y);undo.pop();drag=null;}after();}
@@ -148,24 +151,96 @@ export function init2D(root,A){
     if(P.size===2&&gest){const [a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),ccx=(a.x+b.x)/2,ccy=(a.y+b.y)/2;const nz=Math.max(.6,Math.min(16,view.z*d/gest.d));const k=nz/view.z;
       view.x=ccx-(gest.cx-view.x)*k;view.y=ccy-(gest.cy-view.y)*k;view.z=nz;gest={d,cx:ccx,cy:ccy};dirty=true;return;}
     const c=cellAt(p.x,p.y);if(!hov||hov.x!==c.x||hov.y!==c.y){hov=c;dirty=true;}
+    if(tool==='zone'&&!(drag&&drag.pan)){zMoveE(p,e);return;}
     if(!drag)return;
     if(drag.pan){view.x=drag.vx+p.x-drag.x;view.y=drag.vy+p.y-drag.y;dirty=true;return;}
     if(drag.rect){drag.rect.x1=c.x;drag.rect.y1=c.y;dirty=true;return;}
     if(drag.ent){const q=selEnt();if(q&&inb(c.x,c.y)&&(q.x!==c.x||q.y!==c.y)){q.x=c.x;q.y=c.y;dirty=true;}return;}
     if(e.shiftKey&&tool==='draw'&&drag.sx!=null&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;const dx=c.x-drag.sx,dy=c.y-drag.sy,hz=Math.abs(dx)>=Math.abs(dy),sw=Math.max(1,stamp.w),sh=Math.max(1,stamp.h);const n=hz?Math.floor(Math.abs(dx)/sw):Math.floor(Math.abs(dy)/sh);for(let q=0;q<=n;q++)paste(drag.sx+(hz?Math.sign(dx||1)*q*sw:0),drag.sy+(hz?0:Math.sign(dy||1)*q*sh));after();return;}
     if(drag.last&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;if(tool==='draw'){if(stamp.w===1&&stamp.h===1||((c.x-drag.sx)%stamp.w===0&&(c.y-drag.sy)%stamp.h===0))paste(c.x,c.y);}else if(tool==='erase')erase(c.x,c.y);after();}});
-  const end=e=>{P.delete(e.pointerId);if(P.size<2)gest=null;if(!drag)return;
+  const end=e=>{P.delete(e.pointerId);if(P.size<2)gest=null;if(zd){zUp();dirty=true;return;}if(!drag)return;
     if(drag.paste){const o=pOrg();if(o&&e.type!=='pointercancel'){pushUndo();const n=pasteClip(o.x,o.y);after();toast('Đã dán'+(n?' + '+n+' đối tượng':''));}drag=null;dirty=true;return;}
     if(drag.ent){after();ui.obj();}
     if(drag.rect){if(tool==='rect'){pushUndo();rectFill(drag.rect);after();}else{sel=drag.rect;ui.sel();}}drag=null;dirty=true;};
   cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'){hov=null;dirty=true;}});
   cv.addEventListener('contextmenu',e=>e.preventDefault());
   cv.addEventListener('wheel',e=>{e.preventDefault();const p=pos(e);const nz=Math.max(.6,Math.min(16,view.z*(e.deltaY<0?1.15:1/1.15)));const k=nz/view.z;view.x=p.x-(p.x-view.x)*k;view.y=p.y-(p.y-view.y)*k;view.z=nz;dirty=true;},{passive:false});
+  // ===== VÙNG CHẶN (hình học) =====
+  let zsel=null,zk='rect',zmode='edit',zsnap=.5,zpend=null,zd=null,zu=false,zw=null;
+  const ZL=()=>M&&(M.cfg.zones||(M.cfg.zones=[]));
+  const zget=id=>M&&M.cfg.zones&&M.cfg.zones.find(q=>q.id===id);
+  const W2=p=>({x:(p.x-view.x)/(CELL*view.z),y:(p.y-view.y)/(CELL*view.z)});
+  const sn=v=>zsnap?Math.round(v/zsnap)*zsnap:v;
+  const snp=w=>({x:sn(w.x),y:sn(w.y)});
+  const zpu=()=>{if(!zu){pushUndo();zu=true;}};
+  function zFinish(){if(!zpend)return;zpend.pts=zpend.pts.filter((q,i,A)=>!i||Math.hypot(q[0]-A[i-1][0],q[1]-A[i-1][1])>.05);const n=zpend.k==='poly'?3:2;if(zpend.pts.length<n){toast('Cần ít nhất '+n+' điểm');return;}pushUndo();const q=mkPts(zpend.k,zpend.pts);ZL().push(q);zsel=q.id;zpend=null;zmode='edit';after();ui.tools();toast('Đã tạo vùng chặn');}
+  function zDown(p,e){zu=false;const w=W2(p),q=snp(w),S=CELL*view.z,tol=11/S;
+    if(zpend){const now=performance.now(),last=zpend.pts[zpend.pts.length-1];
+      if(zpend.pts.length>=1&&now-zpend.t<380&&Math.hypot(q.x-last[0],q.y-last[1])<tol*1.5){zFinish();return;}
+      if(zpend.k==='poly'&&zpend.pts.length>=3&&Math.hypot(q.x-zpend.pts[0][0],q.y-zpend.pts[0][1])<tol*1.4){zFinish();return;}
+      zpend.pts.push([q.x,q.y]);zpend.t=now;dirty=true;return;}
+    if(zmode==='draw'){
+      if(isBox({k:zk})){zd={m:'new',p0:q,moved:false};return;}
+      zpend={k:zk,pts:[[q.x,q.y]],t:performance.now()};dirty=true;ui.tools();return;}
+    const sz=zsel&&zget(zsel);
+    if(sz){const hs=zHandles(sz,1.2);let best=null,bd=tol;for(const h of hs){const d=Math.hypot(h.x-w.x,h.y-w.y);if(d<bd){bd=d;best=h;}}
+      if(best){
+        if(best.t==='v'&&(e.shiftKey||e.altKey||e.button===2)){const mn=sz.k==='poly'?3:2;if(sz.pts.length>mn){pushUndo();sz.pts.splice(best.i,1);after();ui.tools();}return;}
+        if(best.t==='m'){zpu();sz.pts.splice(best.i+1,0,[best.x,best.y]);zd={m:'vtx',i:best.i+1,z0:null};dirty=true;return;}
+        zd={m:best.t==='h'?'hdl':best.t==='rot'?'rot':'vtx',i:best.i,z0:JSON.parse(JSON.stringify(sz))};return;}}
+    for(let i=ZL().length-1;i>=0;i--){const t=ZL()[i];if(zHit(t,w.x,w.y,t.k==='line'?tol*.6:0)){zsel=t.id;zd={m:'move',z0:JSON.parse(JSON.stringify(t)),st:w};ui.tools();dirty=true;return;}}
+    zsel=null;ui.tools();dirty=true;}
+  function zMoveE(p,e){zw=W2(p);const w=zw,q=snp(w);dirty=true;if(!zd)return;const sz=zsel&&zget(zsel);
+    if(zd.m==='new'){const a=zd.p0;if(!zd.moved&&Math.hypot(q.x-a.x,q.y-a.y)<.2)return;zd.moved=true;zpu();let z=zd.z;if(!z){z=zd.z=mkBox(zk,a.x,a.y,1,1);ZL().push(z);zsel=z.id;}
+      z.x=Math.min(a.x,q.x);z.y=Math.min(a.y,q.y);z.w=Math.max(.25,Math.abs(q.x-a.x));z.h=Math.max(.25,Math.abs(q.y-a.y));if(e.shiftKey){const m=Math.max(z.w,z.h);z.w=z.h=m;if(q.x<a.x)z.x=a.x-m;if(q.y<a.y)z.y=a.y-m;}return;}
+    if(!sz)return;
+    if(zd.m==='move'){zpu();const dx=sn(w.x-zd.st.x),dy=sn(w.y-zd.st.y);const z0=JSON.parse(JSON.stringify(zd.z0));zMove(z0,dx,dy);Object.assign(sz,z0);return;}
+    if(zd.m==='hdl'){zpu();const z0=zd.z0;zDragHandle(sz,z0,zd.i,q.x,q.y,e.shiftKey);return;}
+    if(zd.m==='rot'){zpu();const [cx,cy]=zCenter(sz);let a=Math.atan2(w.y-cy,w.x-cx)*180/Math.PI+90;if(e.shiftKey||zsnap)a=Math.round(a/15)*15;sz.rot=((a%360)+360)%360;return;}
+    if(zd.m==='vtx'){zpu();sz.pts[zd.i]=[q.x,q.y];return;}}
+  function zUp(){if(zd&&zd.m==='new'&&!zd.moved){pushUndo();const a=zd.p0,z=mkBox(zk,a.x-1,a.y-1,2,2);ZL().push(z);zsel=z.id;zmode='edit';ui.tools();}
+    else if(zd&&zd.m==='new'&&zd.z){zmode='edit';ui.tools();}
+    zd=null;after();}
+  function drawZ(){const zs=M.cfg.zones||[];if(!zs.length&&!zpend)return;const S=CELL*view.z,T=(x,y)=>[view.x+x*S,view.y+y*S],act=tool==='zone',fa=act?1:.55;cx.save();
+    for(const q of zs){const on=act&&q.id===zsel;
+      if(q.k==='line'){cx.lineJoin='round';cx.lineCap='round';cx.lineWidth=(q.th||.6)*S;cx.strokeStyle=on?`rgba(255,190,60,${.5*fa})`:`rgba(255,40,40,${.42*fa})`;zPath(cx,q,T);cx.stroke();cx.lineWidth=1.5;cx.strokeStyle=on?'#ffd24a':`rgba(255,106,106,${fa})`;cx.stroke();}
+      else{zPath(cx,q,T);cx.fillStyle=on?`rgba(255,190,60,${.35*fa})`:`rgba(255,40,40,${.38*fa})`;cx.fill();cx.lineWidth=on?2:1.5;cx.strokeStyle=on?'#ffd24a':`rgba(255,106,106,${fa})`;cx.stroke();}}
+    if(zpend){const P=zpend.pts.map(a=>T(a[0],a[1]));cx.lineWidth=2;cx.strokeStyle='#ffd24a';cx.beginPath();P.forEach((a,i)=>i?cx.lineTo(a[0],a[1]):cx.moveTo(a[0],a[1]));if(zw){const h=T(sn(zw.x),sn(zw.y));cx.lineTo(h[0],h[1]);}cx.stroke();cx.fillStyle='#ffd24a';for(const a of P){cx.beginPath();cx.arc(a[0],a[1],4,0,6.3);cx.fill();}}
+    const sz=act&&zsel&&zget(zsel);
+    if(sz){const hs=zHandles(sz,1.2);cx.lineWidth=1.5;if(isBox(sz)){const t=hs.find(h=>h.t==='rot'),c=T(...zCenter(sz)),top=T(...(()=>{const l=zHandles(sz,0).find(h=>h.t==='rot');return [l.x,l.y];})()),tr=T(t.x,t.y);cx.strokeStyle='#ffd24a';cx.beginPath();cx.moveTo(top[0],top[1]);cx.lineTo(tr[0],tr[1]);cx.stroke();}
+      for(const h of hs){const a=T(h.x,h.y);cx.fillStyle=h.t==='rot'?'#4ad6ff':h.t==='m'?'#fff8':'#fff';cx.strokeStyle='#222';cx.beginPath();if(h.t==='h'||h.t==='v'){cx.rect(a[0]-5,a[1]-5,10,10);}else cx.arc(a[0],a[1],h.t==='m'?3.5:6,0,6.3);cx.fill();cx.stroke();}}
+    cx.restore();}
+  function zoneUI(){const box=el('div',{style:'border:1px solid #c0503a;border-radius:10px;padding:8px;margin:6px 0'});
+    box.append(el('div',{class:'row'},el('b',{},'🚧 Vùng chặn hình học (không cần ảnh)')));
+    box.append(el('div',{class:'row'},Object.keys(ZK).map(k=>btn(ZK[k][0]+' '+ZK[k][1],()=>{zk=k;zmode='draw';zpend=null;draw();},(zmode==='draw'&&zk===k)?'on':'')),btn('✋ Chọn / sửa',()=>{zmode='edit';zpend=null;draw();dirty=true;},zmode==='edit'?'on':'')));
+    const sl=el('select',{class:'num',style:'min-width:130px',onchange:e=>{zsnap=+e.target.value;}},[[1,'Bám lưới: 1 ô'],[.5,'Bám: ½ ô'],[.25,'Bám: ¼ ô'],[0,'Tự do']].map(([v,n])=>el('option',{value:v},n)));sl.value=String(zsnap);
+    box.append(el('div',{class:'row'},sl,el('span',{class:'lbl'},ZL().length+' vùng')));
+    if(zpend)box.append(el('div',{class:'row'},el('span',{class:'lbl'},'Đang vẽ '+zpend.pts.length+' điểm: '),btn('✔ Xong',zFinish,'on'),btn('↶ Bỏ điểm cuối',()=>{zpend.pts.pop();if(!zpend.pts.length)zpend=null;draw();dirty=true;}),btn('✕ Hủy',()=>{zpend=null;draw();dirty=true;})));
+    const sz=zsel&&zget(zsel);
+    if(sz){const row=el('div',{class:'row'});
+      row.append(el('span',{class:'lbl'},ZK[sz.k][0]+' '+ZK[sz.k][1]+': '),
+        btn('＋ Phóng to',()=>{pushUndo();zScale(sz,1.15);after();draw();}),btn('－ Thu nhỏ',()=>{pushUndo();zScale(sz,1/1.15);after();draw();}),
+        btn('⟲ 15°',()=>{pushUndo();zRotate(sz,-15);after();draw();}),btn('⟳ 15°',()=>{pushUndo();zRotate(sz,15);after();draw();}),
+        btn('⧉ Nhân bản',()=>{pushUndo();const c=zClone(sz);zMove(c,1,1);ZL().push(c);zsel=c.id;after();draw();}),
+        btn('🗑 Xóa',()=>{pushUndo();M.cfg.zones=ZL().filter(q=>q!==sz);zsel=null;after();draw();}));box.append(row);
+      const num=(lab,get,set,min,step)=>{const i=el('input',{type:'number',class:'num',step:step||.25,style:'width:70px'});i.value=Math.round(get()*100)/100;i.addEventListener('change',()=>{const v=parseFloat(i.value);if(isNaN(v))return;pushUndo();set(Math.max(min,v));after();dirty=true;});return el('label',{class:'lbl'},lab+' ',i,' ');};
+      const r2=el('div',{class:'row'});
+      if(isBox(sz)){r2.append(num('Rộng',()=>sz.w,v=>{const c=[sz.x+sz.w/2,sz.y+sz.h/2];sz.w=v;sz.x=c[0]-v/2;},.25),num('Cao',()=>sz.h,v=>{const c=[sz.x+sz.w/2,sz.y+sz.h/2];sz.h=v;sz.y=c[1]-v/2;},.25),num('Xoay°',()=>sz.rot||0,v=>{sz.rot=v%360;},0,5),num('X',()=>sz.x,v=>{sz.x=v;},-999),num('Y',()=>sz.y,v=>{sz.y=v;},-999));}
+      else{if(sz.k==='line')r2.append(num('Dày',()=>sz.th||.6,v=>{sz.th=v;},.1,.1),el('label',{class:'lbl'},(()=>{const c=el('input',{type:'checkbox',onchange:e=>{pushUndo();sz.closed=e.target.checked;after();dirty=true;}});c.checked=!!sz.closed;return c;})(),' Khép kín'));r2.append(el('span',{class:'lbl'},sz.pts.length+' đỉnh'));}
+      box.append(r2);}
+    box.append(el('div',{class:'hint'},'VẼ: chọn hình rồi kéo trên bản đồ (hình CN/elip/tam giác; giữ Shift = vuông/tròn đều). Đa giác & Đường gấp khúc: bấm từng điểm, bấm đúp hoặc ✔ Xong để kết thúc (đa giác: bấm lại điểm đầu cũng được). SỬA: chạm vùng để chọn, kéo thân = di chuyển, kéo ô vuông = kéo dãn, chấm xanh = xoay, chấm nhỏ giữa cạnh = thêm đỉnh, Shift+bấm đỉnh = xóa đỉnh. Phím: Delete xóa · Enter xong · Esc hủy · ←↑↓→ dịch.'));
+    return box;}
   function zoomBy(f){const w=cv.clientWidth/2,h=cv.clientHeight/2;const nz=Math.max(.6,Math.min(16,view.z*f)),k=nz/view.z;view.x=w-(w-view.x)*k;view.y=h-(h-view.y)*k;view.z=nz;dirty=true;}
   function fit(){if(!M)return;const w=cv.clientWidth,h=cv.clientHeight;view.z=Math.max(.6,Math.min(8,Math.min(w/(M.w*CELL),h/(M.h*CELL))));view.x=(w-M.w*CELL*view.z)/2;view.y=(h-M.h*CELL*view.z)/2;dirty=true;}
   if(window.__kb2d)document.removeEventListener('keydown',window.__kb2d);
   window.__kb2d=e=>{const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(!M||!cv.offsetParent)return;
     const k=(e.key||'').toLowerCase(),m=e.ctrlKey||e.metaKey;
+    if(tool==='zone'&&!m){const sz=zsel&&zget(zsel);
+      if(k==='enter'&&zpend){zFinish();e.preventDefault();return;}
+      if(k==='escape'){if(zpend){zpend=null;draw();dirty=true;}else if(zsel){zsel=null;draw();dirty=true;}return;}
+      if(k==='backspace'&&zpend){zpend.pts.pop();if(!zpend.pts.length)zpend=null;draw();dirty=true;e.preventDefault();return;}
+      if((k==='delete'||k==='backspace')&&sz){pushUndo();M.cfg.zones=ZL().filter(q=>q!==sz);zsel=null;after();draw();e.preventDefault();return;}
+      if(sz&&k.startsWith('arrow')){pushUndo();const n=(e.shiftKey?5:1)*(zsnap||.25);zMove(sz,k==='arrowleft'?-n:k==='arrowright'?n:0,k==='arrowup'?-n:k==='arrowdown'?n:0);after();dirty=true;e.preventDefault();return;}}
     if(m&&k==='z'){(e.shiftKey?doRedo:doUndo)();toast(e.shiftKey?'Làm lại':'Hoàn tác');e.preventDefault();}
     else if(m&&k==='y'){doRedo();e.preventDefault();}
     else if(sel&&m&&k==='d'){selDup();e.preventDefault();}
@@ -191,8 +266,9 @@ export function init2D(root,A){
   function btn(label,fn,cls=''){return el('button',{class:'b '+cls,onclick:fn},label);}
   function draw(){[...tabs.children].forEach(b=>b.classList.toggle('on',b.dataset.t===tab));body.innerHTML='';
     if(tab==='tools'){
-      const TL=[['draw','✏ Vẽ'],['erase','🧽 Xóa'],['fill','🪣 Đổ'],['rect','▭ Hình CN'],['pick','💧 Hút'],['select','⬚ Chọn vùng'],['paste','📥 Dán'],['pan','✋ Kéo']];
-      body.append(el('div',{class:'row'},TL.map(([k,n])=>btn(n,()=>{tool=k;if(k==='obj')tab='obj';draw();},tool===k?'on':''))));
+      const TL=[['draw','✏ Vẽ'],['erase','🧽 Xóa'],['fill','🪣 Đổ'],['rect','▭ Hình CN'],['pick','💧 Hút'],['select','⬚ Chọn vùng'],['paste','📥 Dán'],['zone','🚧 Vùng chặn'],['pan','✋ Kéo']];
+      body.append(el('div',{class:'row'},TL.map(([k,n])=>btn(n,()=>{tool=k;if(k!=='zone')zpend=null;if(k==='obj')tab='obj';draw();dirty=true;},tool===k?'on':''))));
+      if(tool==='zone')body.append(zoneUI());
       body.append(el('div',{class:'row'},btn('↶ Hoàn tác',doUndo),btn('↷ Làm lại',doRedo),btn('＋',()=>zoomBy(1.4)),btn('－',()=>zoomBy(1/1.4)),btn('⤢ Vừa khung',fit),btn(grid?'▦ Lưới: bật':'▦ Lưới: tắt',()=>{grid=!grid;dirty=true;draw();}),btn(['🚧 Va chạm: ẩn','🚧 Hiện vùng CHẶN (đỏ)','🚧 Chặn (đỏ) + Đi được (xanh)'][colMode],()=>{colMode=(colMode+1)%3;dirty=true;draw();ui.tools&&ui.tools();})));
       body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Lớp đang vẽ: '),LAYN.concat(['Vùng chặn']).map((n,i)=>btn(n,()=>{act=i;draw();},act===i?'on':''))));
       if(tool==='select'||tool==='paste'||sel||clip){
