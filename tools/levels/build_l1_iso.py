@@ -32,24 +32,44 @@ OBJ={ # tên: (đường dẫn, lớp k (đơn vị s/px), )
  'Cay_dao':f'{UP}/Cay-hoa/Cay-dao.png','Cay_lieu':f'{UP}/Cay-hoa/Cay-lieu.png','Bui_hoa':f'{UP}/Cay-hoa/Cum-bui-hoa-co.png','Sen':f'{UP}/Cay-hoa/Cum-sen.png'}
 KOBJ={'Cay_dao':.0042,'Cay_lieu':.0042,'Bui_hoa':.0034,'Sen':.0030}
 def foot(path,k):
+    """đo đáy bền với cầu thang: góc phải theo đường viền thẳng bên phải, góc trái theo bước nhảy"""
     im=Image.open(path).convert('RGBA');im=im.crop(bbox(im));a=im.getchannel('A');w,h=im.size
-    T=0
-    for f in (.95,.9,.85,.8,.75,.7,.65,.6):
-        y=min(h-1,int(h*f));row=[x for x in range(w) if a.getpixel((x,y))>40]
-        if row:T=max(T,row[-1]-row[0])
-    last=[x for y in range(h-3,h) for x in range(w) if a.getpixel((x,y))>40]
-    bx=sum(last)/len(last) if last else w/2
-    T*=k/.75;off=(bx-w/2)*k/.75
-    return max(1,round(T/2+off+.3)),max(1,round(T/2-off+.3))
-FPO={'Nha_san':(2,2),'Ben_go':(1,1)}
-names=list(OBJ);FP={}
+    yc=[]
+    for x in range(w):
+        ys=[y for y in range(h) if a.getpixel((x,y))>40]
+        yc.append(ys[-1] if ys else None)
+    cols=[x for x in range(w) if yc[x] is not None];my=max(yc[x] for x in cols)
+    st=[x for x in cols if yc[x]>=my-2];sx=st[len(st)//2]
+    rx=sx
+    while rx+1<w and yc[rx+1] is not None and abs(yc[rx+1]-yc[rx])<=12 and yc[rx+1]<=yc[rx]+2:rx+=1
+    if rx-sx<45:  # tip nằm ở đầu phải
+        pass
+    xa,xb=max(sx,rx-42),max(sx,rx-6)
+    sr=(yc[xa]-yc[xb])/max(1,(xb-xa)) if xb>xa else .5
+    sr=min(1.0,max(.3,sr))
+    tipx=xb
+    for x in range(xb,0,-1):
+        if yc[x] is None:break
+        if abs(yc[x]-(yc[xb]+sr*(xb-x)))<=3:tipx=x
+        else:break
+    tipy=yc[tipx]
+    lx=tipx
+    while lx-1>=0 and yc[lx-1] is not None and abs(yc[lx-1]-yc[lx])<=14 and yc[lx-1]<=tipy+14:lx-=1
+    return (tipx-lx)*k/.75,(rx-tipx)*k/.75,tipx,tipy,w,h
+FPO={'Nha_san':(2,2),'Choi_ven_nuoc':(2,2)}
+names=list(OBJ);FP={};FPR={};OXY={}
 COLS=6;ROWS=(len(names)+COLS-1)//COLS
 ob=Image.new('RGBA',(COLS*TW,ROWS*TW),(0,0,0,0));IDX={};SC={}
 for i,n in enumerate(names):
     im=Image.open(OBJ[n]).convert('RGBA');im=im.crop(bbox(im));w,h=im.size
     kf=min(1,(TW-4)/w,(TW-4)/h);r=im.resize((max(1,round(w*kf)),max(1,round(h*kf))),Image.LANCZOS)
     cx,cy=(i%COLS)*TW,(i//COLS)*TW;ob.alpha_composite(r,(cx+(TW-r.width)//2,cy+TW-2-r.height));IDX[n]=i
-    k=KOBJ.get(n,.0093);SC[n]=round(TW*k/kf,3);FP[n]=(1,1) if n in KOBJ or n in ('Gieng','Sen') else FPO.get(n) or foot(OBJ[n],k)
+    k=KOBJ.get(n,.0093);SC[n]=round(TW*k/kf,3);fx_,fy_,tx_,ty_,w_,h_=foot(OBJ[n],k)
+    FP[n]=(1,1) if n in KOBJ or n in ('Gieng','Sen') else (max(1,__import__('math').ceil(fx_-.2)),max(1,__import__('math').ceil(fy_-.2)))
+    if n in FPO:FP[n]=FPO[n]
+    FPR[n]=(round(fx_,2),round(fy_,2))
+    ix=(TW-r.width)//2;iy=TW-2-r.height
+    OXY[n]=(round(.5-(ix+tx_*kf)/TW,4),round(1-(iy+ty_*kf)/TW,4)) if n not in KOBJ and n not in ('Gieng','Sen') and n not in FPO else (0,0)
 # ---- bản đồ ----
 W=H=44
 enc=lambda sid,idx:((sid*4096+idx)*8)+1
@@ -80,7 +100,7 @@ ents=[];occ=set()
 def deco(n,x,y,f,walk=False,flat=False,name=None):
     fx,fy=FP[n]
     cells=[(x-a,y-b) for a in range(fx) for b in range(fy)]
-    ents.append({'id':'d%d'%len(ents),'t':'deco','x':x,'y':y,'f':max(fx,fy),'fx':fx,'fy':fy,'sc':SC[n],'flat':flat,'name':name or n,'tile':{'sid':SID_OB,'idx':IDX[n]}})
+    ents.append({'id':'d%d'%len(ents),'t':'deco','x':x,'y':y,'f':max(fx,fy),'fx':fx,'fy':fy,'sc':SC[n],'ox':OXY[n][0],'oy':OXY[n][1],'flat':flat,'name':name or n,'tile':{'sid':SID_OB,'idx':IDX[n]}})
     for c in cells:
         occ.add(c)
         if not walk and 0<=c[0]<W and 0<=c[1]<H:blk[c[1]*W+c[0]]=1
