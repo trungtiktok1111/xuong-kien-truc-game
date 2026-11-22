@@ -1,0 +1,23 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+    pg=b.new_page(viewport={'width':1500,'height':900});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(1000)
+    pg.evaluate("[...document.querySelectorAll('.tabbtn')].find(b=>b.dataset.v==='3d').click()");pg.wait_for_timeout(1500)
+    C=lambda sel:pg.evaluate("s=>{const b=document.querySelector(s);if(b)b.click();return !!b}",sel)
+    B=lambda t:pg.evaluate("t=>{const b=[...document.querySelectorAll('#pn3 button')].find(b=>b.textContent.includes(t));if(b)b.click();return !!b}",t)
+    C('#pn3 [data-t=tpl]');pg.wait_for_timeout(200);B('Thay thế toàn bộ');pg.wait_for_timeout(200);print(B('Nhà gỗ hai tầng'));pg.wait_for_timeout(600)
+    C('#pn3 [data-t=build]');B('Chọn');pg.keyboard.press('Home');pg.wait_for_timeout(500)
+    pg.screenshot(path='ux11a.png')
+    cnt=lambda:pg.evaluate("document.querySelector('#cnt3').textContent")
+    print(cnt())
+    # marquee over left half
+    pg.keyboard.down('Control');pg.mouse.move(300,200);pg.mouse.down();pg.mouse.move(700,500,steps=5);pg.mouse.up();pg.keyboard.up('Control');pg.wait_for_timeout(400)
+    pg.screenshot(path='ux11b.png')
+    print(pg.evaluate("document.querySelector('#pn3').innerText.slice(0,80)"))
+    pg.keyboard.press('r');pg.wait_for_timeout(300);pg.keyboard.press('ArrowRight');pg.wait_for_timeout(300)
+    pg.screenshot(path='ux11c.png')
+    pg.keyboard.press('Control+z');pg.keyboard.press('Control+z');pg.wait_for_timeout(300)
+    pg.keyboard.press('Enter');pg.wait_for_timeout(300);print(pg.evaluate("document.querySelector('#pn3').innerText.slice(0,40)"))
+    pg.keyboard.press('Control+c');pg.wait_for_timeout(300);pg.mouse.move(900,600);pg.wait_for_timeout(300);pg.mouse.click(900,600);pg.wait_for_timeout(500)
+    print(cnt(),errs);pg.screenshot(path='ux11d.png');b.close()
