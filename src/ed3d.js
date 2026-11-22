@@ -83,6 +83,7 @@ export function init3D(root){
   const grid=new THREE.LineSegments(gridGeo(),new THREE.LineBasicMaterial({vertexColors:true}));scene.add(grid);
   const floor=new THREE.Mesh(new THREE.PlaneGeometry(GX,GZ).rotateX(-Math.PI/2).translate(GX/2,0,GZ/2),new THREE.MeshBasicMaterial({color:0x223040,transparent:true,opacity:.0,visible:false}));scene.add(floor);
   const lvlPlane=new THREE.Mesh(new THREE.PlaneGeometry(GX,GZ).rotateX(-Math.PI/2).translate(GX/2,0,GZ/2),new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.13,depthWrite:false}));scene.add(lvlPlane);
+  function fitAll(){cam.tx=GX/2;cam.ty=2;cam.tz=GZ/2;cam.az=.785;cam.dist=Math.max(GX,GZ)*1.75;cam.el=1.0;}
   function gridExt(){let x=0,y=0,z=0;for(const k of V.keys()){const [a,b,c]=k.split(',').map(Number);if(a>x)x=a;if(b>y)y=b;if(c>z)z=c;}for(const p of props||[]){x=Math.max(x,Math.ceil(p.x));z=Math.max(z,Math.ceil(p.z));y=Math.max(y,Math.ceil(p.y||0));}for(const e of ents||[]){x=Math.max(x,e.x);z=Math.max(z,e.z);y=Math.max(y,e.y||0);}return [x+1,y+1,z+1];}
   function setGrid(gx,gy,gz,force){const ext=force?[0,0,0]:gridExt();gx=Math.max(ext[0],16,Math.min(160,Math.round(gx)||48));gz=Math.max(ext[2],16,Math.min(160,Math.round(gz)||48));gy=Math.max(ext[1],8,Math.min(64,Math.round(gy)||24));
     if(gx===GX&&gy===GY&&gz===GZ)return false;GX=gx;GY=gy;GZ=gz;grid.geometry.dispose();grid.geometry=gridGeo();
@@ -91,7 +92,7 @@ export function init3D(root){
   const ghost=new THREE.Mesh(GEO.cube,new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.45,depthWrite:false}));ghost.visible=false;scene.add(ghost);
   // camera
   const cam={az:.8,el:.62,dist:26,tx:GX/2,ty:3,tz:GZ/2,ortho:false};
-  const pc=new THREE.PerspectiveCamera(45,1,.1,300),oc=new THREE.OrthographicCamera(-10,10,10,-10,-300,300);let camera=pc;
+  const pc=new THREE.PerspectiveCamera(45,1,.1,1500),oc=new THREE.OrthographicCamera(-10,10,10,-10,-1500,1500);let camera=pc;
   function updCam(){const w=cv.clientWidth,h=cv.clientHeight;pc.aspect=w/h;pc.updateProjectionMatrix();
     const d=cam.dist,ex=cam.tx+d*Math.cos(cam.el)*Math.sin(cam.az),ey=cam.ty+d*Math.sin(cam.el),ez=cam.tz+d*Math.cos(cam.el)*Math.cos(cam.az);
     camera=cam.ortho?oc:pc;camera.position.set(ex,ey,ez);camera.lookAt(cam.tx,cam.ty,cam.tz);
@@ -266,7 +267,7 @@ export function init3D(root){
   cv.addEventListener('pointermove',e=>{const p=pos(e);if(P.has(e.pointerId))P.set(e.pointerId,p);
     lastMP=p;if(!stroke)hoverArrows(p);
     if(stroke&&P.size===1){strokeStep(p,false);return;}
-    if(P.size===2&&g2){const [a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),ccx=(a.x+b.x)/2,ccy=(a.y+b.y)/2;cam.dist=Math.max(4,Math.min(80,g2.dist*g2.d/d));
+    if(P.size===2&&g2){const [a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),ccx=(a.x+b.x)/2,ccy=(a.y+b.y)/2;cam.dist=Math.max(4,Math.min(600,g2.dist*g2.d/d));
       const k=cam.dist*.0016;const rx=Math.cos(cam.az),rz=-Math.sin(cam.az);const dx=(ccx-g2.cx),dy=(ccy-g2.cy);cam.tx-=rx*dx*k;cam.tz-=rz*dx*k;cam.ty+=dy*k;g2.cx=ccx;g2.cy=ccy;return;}
     if(g1&&P.size===1){const dx=p.cx-g1.x,dy=p.cy-g1.y;if(Math.hypot(dx,dy)>7)g1.moved=true;
       if(g1.moved){if(g1.pan){const k=cam.dist*.0016,ddx=p.cx-g1.lx,ddy=p.cy-g1.ly;panBy(ddx*k,ddy*k);}
@@ -278,7 +279,7 @@ export function init3D(root){
   const panBy=(dx,dy)=>{const rx=Math.cos(cam.az),rz=-Math.sin(cam.az),fx=-Math.sin(cam.az),fz=-Math.cos(cam.az);cam.tx+=-rx*dx+fx*dy;cam.tz+=-rz*dx+fz*dy;};
   function panKey(K,k){const st=Math.max(.3,cam.dist*.06);if(K==='w'||k==='ArrowUp')panBy(0,-st/.0016*.0016);if(K==='s'||k==='ArrowDown')panBy(0,st);if(K==='a'||k==='ArrowLeft')panBy(st,0);if(K==='d'||k==='ArrowRight')panBy(-st,0);if(k==='PageUp')cam.ty+=st;if(k==='PageDown')cam.ty-=st;}
   function focusSel(){const g=pMesh.get(selP);if(g){const b=new THREE.Box3().setFromObject(g),c=b.getCenter(new THREE.Vector3()),sz=b.getSize(new THREE.Vector3());cam.tx=c.x;cam.ty=c.y;cam.tz=c.z;cam.dist=Math.max(2,Math.max(sz.x,sz.y,sz.z)*3);toast('Đã zoom vào món đang chọn');}else{cam.tx=GX/2;cam.ty=3;cam.tz=GZ/2;cam.dist=26;toast('Về giữa cảnh');}}
-  cv.addEventListener('wheel',e=>{e.preventDefault();const f=e.deltaY>0?1.12:.89,nd=Math.max(1.2,Math.min(140,cam.dist*f));
+  cv.addEventListener('wheel',e=>{e.preventDefault();const f=e.deltaY>0?1.12:.89,nd=Math.max(1.2,Math.min(600,cam.dist*f));
     const r=cv.getBoundingClientRect();mv.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);ray.setFromCamera(mv,camera);
     const hit=ray.intersectObjects([...meshes.values(),...pMesh.values()],true)[0];const P0=new THREE.Vector3();let ok=false;if(hit){P0.copy(hit.point);ok=true;}else{ok=!!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-cam.ty),P0);}
     if(ok&&!cam.ortho){const k=1-nd/cam.dist;cam.tx+=(P0.x-cam.tx)*k;cam.ty+=(P0.y-cam.ty)*k;cam.tz+=(P0.z-cam.tz)*k;}cam.dist=nd;},{passive:false});
@@ -296,6 +297,7 @@ export function init3D(root){
       return;}
     if(/^Digit[1-9]$/.test(e.code)){const i=+e.code[5]-1;if(e.shiftKey)hbSave(i);else hbPick(i);e.preventDefault();return;}
     if(K==='t')return;
+    if(k==='Home'||K==='h'){fitAll();toast('Xem toàn khung');e.preventDefault();return;}
     if(k==='Tab'){const i=SHAPES.findIndex(x=>x[0]===shape),n=(i+(e.shiftKey?-1:1)+SHAPES.length)%SHAPES.length;shape=SHAPES[n][0];mode='build';tab='build';draw();toast('Hình: '+SHAPES[n][1]);e.preventDefault();return;}
     if(!p&&(k==='+'||k==='=')){setBH(brushH+1);return;}if(!p&&(k==='-'||k==='_')){setBH(brushH-1);return;}
     if(K==='q'||K==='e'){level=Math.max(0,Math.min(GY-1,level+(K==='e'?1:-1)));refreshVis();if(syncLevel)syncLevel();toast('Tầng '+level);return;}
@@ -346,7 +348,7 @@ export function init3D(root){
     Object.assign(cam,save);ghost.visible=sv[0];grid.visible=sv[1];lvlPlane.visible=sv[2];renderer.setClearColor(0x16202b,1);resize();if(selBox)selBox.visible=!!sbv;
     out.toBlob(bl=>saveFile(name,bl));}
   function projJSON(){return {format:'thk-voxel-1',ents,cfg,props,grid:[GX,GY,GZ],shapes:SHAPES.map(s=>s[0]),materials:MATS.map(m=>m.n),voxels:[...V.entries()].map(([k,v])=>[...k.split(',').map(Number),SHAPES.findIndex(s=>s[0]===v.s),v.m,v.r]),note:'voxels: [x,y,z,shapeIndex,materialIndex,rot(0..3 quay quanh trục Y)]'};}
-  function importJSON(t){try{const o=JSON.parse(t);if(o.format!=='thk-voxel-1')throw 0;pushUndo();{let mx=0,my=0,mz=0;for(const q of o.voxels){mx=Math.max(mx,q[0]);my=Math.max(my,q[1]);mz=Math.max(mz,q[2]);}const g=o.grid||[48,24,48];if(setGrid(Math.max(g[0],mx+1),Math.max(g[1],my+1),Math.max(g[2],mz+1),true)){cam.tx=GX/2;cam.tz=GZ/2;}}clearAll();for(const [x,y,z,s,m,r] of o.voxels)setV(x,y,z,SHAPES[s][0],m,r,true);ents=JSON.parse(JSON.stringify(o.ents||[]));cfg=Object.assign(defCfg3(),o.cfg||{});props=JSON.parse(JSON.stringify(o.props||[]));selP=null;refreshVis();syncEnts();syncProps();toast('Đã nhập công trình');}catch(e){toast('Tệp không đúng định dạng');}}
+  function importJSON(t){try{const o=JSON.parse(t);if(o.format!=='thk-voxel-1')throw 0;pushUndo();{let mx=0,my=0,mz=0;for(const q of o.voxels){mx=Math.max(mx,q[0]);my=Math.max(my,q[1]);mz=Math.max(mz,q[2]);}const g=o.grid||[48,24,48];if(setGrid(Math.max(g[0],mx+1),Math.max(g[1],my+1),Math.max(g[2],mz+1),true)){fitAll();}}clearAll();for(const [x,y,z,s,m,r] of o.voxels)setV(x,y,z,SHAPES[s][0],m,r,true);ents=JSON.parse(JSON.stringify(o.ents||[]));cfg=Object.assign(defCfg3(),o.cfg||{});props=JSON.parse(JSON.stringify(o.props||[]));selP=null;refreshVis();syncEnts();syncProps();toast('Đã nhập công trình');}catch(e){toast('Tệp không đúng định dạng');}}
   // ===== Mô hình 3D (GLB) =====
   let props=[],selP=null,pmode='place',curM=null,pRot=0,pStep=.5,LIB=[],MFAV=lsGet('thk_m3d_fav',[]),selBox=null,pTok=0;const DIMS=new Map();let pFit={m:'',v:1},pSz={m:'h',v:1};const pMesh=new Map(),BYTES=new Map(),PTEX=new Map(),OBJC=new Map(),mq={q:'',pack:'',cat:'',fav:false,lim:120};
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -468,10 +470,10 @@ export function init3D(root){
       const sl=el('input',{type:'range',min:0,max:GY-1,value:level,class:'sl'});sl.oninput=()=>{level=+sl.value;lbl.textContent='Độ cao đặt: tầng '+level;refreshVis();};syncLevel=()=>{sl.value=level;lbl.textContent='Độ cao đặt: tầng '+level;};
       const lbl=el('span',{class:'lbl'},'Độ cao đặt: tầng '+level);body.append(el('div',{class:'row'},lbl,sl,btn(hideUp?'Ẩn tầng trên: bật':'Ẩn tầng trên: tắt',()=>{hideUp=!hideUp;refreshVis();draw();})));
       {const mk=(v,lo,hi)=>el('input',{type:'number',value:v,min:lo,max:hi,class:'num',style:'width:60px'});const ix=mk(GX,16,160),iz=mk(GZ,16,160),iy=mk(GY,8,64);
-        const go=(x,y,z)=>{const old=[GX,GY,GZ].join();const ch=setGrid(x,y,z,false);if(!ch&&[GX,GY,GZ].join()===old&&(x!==GX||z!==GZ||y!==GY))toast('Không thu nhỏ hơn phần đã dựng ('+gridExt().join('×')+')');else if(ch){cam.tx=GX/2;cam.tz=GZ/2;cam.dist=Math.max(cam.dist,Math.max(GX,GZ)*.7);refreshVis();toast('Khung dựng: '+GX+'×'+GZ+', cao '+GY);}draw();};
+        const go=(x,y,z)=>{const old=[GX,GY,GZ].join();const ch=setGrid(x,y,z,false);if(!ch&&[GX,GY,GZ].join()===old&&(x!==GX||z!==GZ||y!==GY))toast('Không thu nhỏ hơn phần đã dựng ('+gridExt().join('×')+')');else if(ch){fitAll();refreshVis();toast('Khung dựng: '+GX+'×'+GZ+', cao '+GY);}draw();};
         body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Khung dựng:'),el('span',{class:'lbl'},'Rộng'),ix,el('span',{class:'lbl'},'Sâu'),iz,el('span',{class:'lbl'},'Cao'),iy,btn('Áp dụng',()=>go(+ix.value,+iy.value,+iz.value))));
         body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Cỡ nhanh:'),[[48,24],[64,32],[96,32],[128,40],[160,48]].map(([n,h])=>btn(n+'×'+n,()=>go(n,h,n))),el('span',{class:'lbl'},'Khung càng lớn càng nặng máy.')));}
-      body.append(el('div',{class:'hint'},'Thao tác nhanh: chọn ô 1–9 (hoặc bấm vật liệu) rồi KÉO chuột trái để đặt liên tục; chuột phải xoá; Shift+kéo = đường ngang/dọc; giữ C+kéo = đường chéo; Ctrl+kéo = cả vùng (xoá vùng: công cụ Xóa X + Ctrl+kéo, hoặc M chọn vùng rồi Delete); +/− = chiều cao; R xoay; Tab đổi hình; Q/E hạ nâng tầng. Camera: kéo phải hoặc Alt+kéo = xoay; Space+kéo hoặc chuột giữa = di chuyển; lăn chuột = zoom về phía con trỏ; W/A/S/D = di chuyển. Phím tắt công cụ: V chọn, B đặt, X xoá, G tô, I hút, M chọn vùng.'));}
+      body.append(el('div',{class:'hint'},'Thao tác nhanh: chọn ô 1–9 (hoặc bấm vật liệu) rồi KÉO chuột trái để đặt liên tục; chuột phải xoá; Shift+kéo = đường ngang/dọc; giữ C+kéo = đường chéo; Ctrl+kéo = cả vùng (xoá vùng: công cụ Xóa X + Ctrl+kéo, hoặc M chọn vùng rồi Delete); +/− = chiều cao; R xoay; Tab đổi hình; Q/E hạ nâng tầng. Camera: kéo phải hoặc Alt+kéo = xoay; Space+kéo hoặc chuột giữa = di chuyển; lăn chuột = zoom về phía con trỏ; W/A/S/D = di chuyển. Home hoặc H = xem toàn khung. Phím tắt công cụ: V chọn, B đặt, X xoá, G tô, I hút, M chọn vùng.'));}
     else if(tab==='obj'){
       body.append(el('div',{class:'row'},Object.keys(OT3).map(k=>btn(OT3[k][0]+' '+OT3[k][1],()=>{objType=k;mode='obj';draw();},objType===k?'on':''))));
       body.append(el('div',{class:'hint'},'Chọn loại rồi chạm lên mặt khối (hoặc nền) để đặt. Chạm đối tượng để chọn. Có '+ents.length+' đối tượng.'));
@@ -497,7 +499,7 @@ export function init3D(root){
     else if(tab==='mdl'){mdlTab();}
     else if(tab==='logic'){logicTab(body,cfg,ents,changed,draw);}
     else if(tab==='view'){
-      body.append(el('div',{class:'row'},btn(cam.ortho?'Chiếu song song: bật':'Chiếu song song: tắt',()=>{cam.ortho=!cam.ortho;draw();}),btn('⌂ Góc isometric',()=>{cam.az=Math.PI/4;cam.el=.5236;cam.ortho=true;draw();}),btn('Phía trước',()=>{cam.az=0;cam.el=.1;}),btn('Từ trên',()=>{cam.el=1.5;}),btn('Nhìn lại cả công trình',()=>{const b=boundsInfo();if(V.size){const c=b.getCenter(new THREE.Vector3());cam.tx=c.x;cam.ty=c.y;cam.tz=c.z;cam.dist=Math.max(10,b.getSize(new THREE.Vector3()).length()*1.4);}})));
+      body.append(el('div',{class:'row'},btn(cam.ortho?'Chiếu song song: bật':'Chiếu song song: tắt',()=>{cam.ortho=!cam.ortho;draw();}),btn('⌂ Góc isometric',()=>{cam.az=Math.PI/4;cam.el=.5236;cam.ortho=true;draw();}),btn('Phía trước',()=>{cam.az=0;cam.el=.1;}),btn('Từ trên',()=>{cam.el=1.5;}),btn('🗺 Xem toàn khung (Home)',()=>{fitAll();}),btn('Nhìn lại cả công trình',()=>{const b=boundsInfo();if(V.size){const c=b.getCenter(new THREE.Vector3());cam.tx=c.x;cam.ty=c.y;cam.tz=c.z;cam.dist=Math.max(10,b.getSize(new THREE.Vector3()).length()*1.4);}})));
       body.append(el('div',{class:'row'},btn(grid.visible?'Lưới: bật':'Lưới: tắt',()=>{grid.visible=!grid.visible;draw();})));}
     else if(tab==='tpl'){
       body.append(el('div',{class:'hint'},'Chọn một mẫu để bắt đầu rồi sửa tiếp. Mẫu sẽ thay thế công trình hiện tại (có thể hoàn tác).'));
@@ -512,7 +514,7 @@ export function init3D(root){
       body.append(el('div',{class:'row'},btn('🎮 Xuất GAME 3D (file HTML)',()=>exportGame(api.gameData(),'Game 3D của tôi'))));
       body.append(el('div',{class:'hint'},'GLB mở được trong Godot, Unity, Blender, three.js. Ảnh isometric/4 hướng là PNG nền trong suốt để dán vào game 2D. App tự lưu trên trình duyệt này.'));}
   }
-  (async()=>{LIB=(await idbGet('m3d_index'))||[];for(const c of ((await idbGet('thk_cmats3d'))||lsGet('thk_cmats',[])))await addCustomMat(c.n,c.url,true);const sv=lsGet('thk_proj3d',null);if(sv&&(Array.isArray(sv)?sv.length:(sv.v&&sv.v.length)))load(sv);else{TPL['Đình tứ trụ (võ hiệp)']();refreshVis();}syncEnts();syncProps();draw();})();
+  (async()=>{LIB=(await idbGet('m3d_index'))||[];for(const c of ((await idbGet('thk_cmats3d'))||lsGet('thk_cmats',[])))await addCustomMat(c.n,c.url,true);const sv=lsGet('thk_proj3d',null);if(sv&&(Array.isArray(sv)?sv.length:(sv.v&&sv.v.length)))load(sv);else{TPL['Đình tứ trụ (võ hiệp)']();refreshVis();}if(Math.max(GX,GZ)>48)fitAll();syncEnts();syncProps();draw();})();
   draw();
   const api={cam,show(){run=true;loop();},hide(){run=false;},gameData:()=>{const used=[...new Set(props.map(p=>p.m))],pm={},pt={};for(const id of used){const b=BYTES.get(id);if(b){pm[id]={glb:b64(b.u8),pack:b.pack};pt[b.pack]=b.tex;}}return {kind:'3d',grid:[GX,GY,GZ],voxels:snapV(),ents:JSON.parse(JSON.stringify(ents)),cfg:Object.assign({},cfg),cmats:MATS.slice(BASE_N).map(m=>({n:m.n,url:m.url})),props:JSON.parse(JSON.stringify(props)),pmodels:pm,ptex:pt};},_t:{setV,clearAll,refreshVis,exp:expGLB}};
   return api;
