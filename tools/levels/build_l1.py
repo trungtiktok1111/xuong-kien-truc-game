@@ -1,13 +1,19 @@
 import json,base64,io,math,random
+import numpy as np
 from PIL import Image
 T='/tmp/tdx/';R=random.Random(7)
+def rs(im,size):
+    a=np.asarray(im.convert('RGBA')).astype(np.float32);al=a[...,3:4]/255.0;pm=np.concatenate([a[...,:3]*al,a[...,3:4]],axis=2)
+    ch=[Image.fromarray(pm[...,i]).resize(size,Image.BOX if size[0]<=im.width else Image.BICUBIC) for i in range(4)];o=np.stack([np.asarray(c) for c in ch],axis=2).astype(np.float32)
+    al2=np.clip(o[...,3:4],1,255)/255.0;rgb=np.clip(o[...,:3]/al2,0,255);m=o[...,3]<20;rgb[m]=0;o[...,3][m]=0
+    return Image.fromarray(np.concatenate([rgb,o[...,3:4]],axis=2).astype(np.uint8),'RGBA')
 def b64(im):
     b=io.BytesIO();im.save(b,'PNG',optimize=True);return 'data:image/png;base64,'+base64.b64encode(b.getvalue()).decode()
 j=json.load(open('/tmp/base_anim.json'))
 def dl(u):return Image.open(io.BytesIO(base64.b64decode(u.split(',',1)[1]))).convert('RGBA')
 for sh in j['sheets'][4:]:
     if not sh.get('url'):continue
-    im=dl(sh['url']);im=im.resize((im.width//2,im.height//2),Image.LANCZOS);sh['url']=b64(im);sh['tw']=sh['tw']//2
+    im=dl(sh['url']);im=rs(im,(im.width//2,im.height//2));sh['url']=b64(im);sh['tw']=sh['tw']//2
 nsh=len(j['sheets'])
 SID_NEN=nsh;SID_VAT=nsh+1
 def b64(im):
@@ -23,7 +29,7 @@ for i,t in enumerate(tiles):nen.paste(t,((i%NC)*64,(i//NC)*64))
 # ---- sheet vật: mỗi vật cắt thành khối ô 64px
 VC=16;vat_rows=[];blocks={}
 def add_obj(key,path,wc):
-    im=Image.open(T+path).convert('RGBA');s=wc*64/im.width;im=im.resize((wc*64,max(1,round(im.height*s))),Image.LANCZOS)
+    im=Image.open(T+path).convert('RGBA');s=wc*64/im.width;im=rs(im,(wc*64,max(1,round(im.height*s))))
     hc=math.ceil(im.height/64);canvas=Image.new('RGBA',(wc*64,hc*64));canvas.paste(im,(0,hc*64-im.height))
     blocks[key]=(wc,hc,canvas)
 objs={'tram':('Sprites/Kien-truc/Tram-dich.png',8),'ren':('Sprites/Kien-truc/Lo-ren.png',7),'leu':('Sprites/Kien-truc/Leu-thuong-nhan.png',6),
