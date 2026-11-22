@@ -97,7 +97,7 @@ export function zipBrowser(onPick,onMany){
     const btnCss='padding:10px 12px';
     const use=onPick?el('button',{class:'btn',style:btnCss,onclick:()=>{if(url){ov.remove();onPick(url,sel.split('/').pop());}}},'✔ Dùng ảnh đang xem'):'';
     const many=onMany?el('button',{class:'btn',style:btnCss+';background:#2e8b57;color:#fff',onclick:async()=>{if(!picked.size){toast('Chưa tích chọn ảnh nào');return;}
-      const es=list.filter(e=>picked.has(e.n));ov.remove();toast('Đang giải nén '+es.length+' ảnh…');const out=[];for(const e of es){try{out.push({url:await get(e),name:e.n.split('/').pop()});}catch(er){}}onMany(out);}},'✔ Dùng các ảnh đã chọn'):'';
+      const es=list.filter(e=>picked.has(e.n));ov.remove();toast('Đang giải nén '+es.length+' ảnh…');const out=[];for(const e of es){try{out.push({url:await get(e),name:e.n.split('/').pop(),path:e.n});}catch(er){}}onMany(out);}},'✔ Dùng các ảnh đã chọn'):'';
     const cancel=el('button',{class:'btn',style:btnCss,onclick:()=>ov.remove()},'Đóng');
     function render(){box.textContent='';let n=0;for(const e of filtered()){if(++n>400){box.append(el('div',{class:'hint'},'… còn nữa, gõ thêm để lọc ("Chọn tất cả" vẫn chọn đủ mọi ảnh đang lọc)'));break;}
       const cb=el('input',{type:'checkbox',style:'width:22px;height:22px;flex:none'});cb.checked=picked.has(e.n);cb.onclick=ev=>{ev.stopPropagation();cb.checked?picked.add(e.n):picked.delete(e.n);upd();};
