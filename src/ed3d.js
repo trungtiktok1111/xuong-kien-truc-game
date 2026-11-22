@@ -143,6 +143,7 @@ export function init3D(root){
     const pl=new THREE.Plane(new THREE.Vector3(0,1,0),-level);const p=new THREE.Vector3();if(ray.ray.intersectPlane(pl,p)){const x=Math.floor(p.x),z=Math.floor(p.z);if(inb(x,level,z))return {vox:null,cell:[x,level,z]};}
     return null;}
   function act(px,py){if(mode==='obj'){objAct(px,py);return;}
+    if(mode==='area'){arClick(px,py);return;}
     if(mode==='sel'){const id=propHit(px,py);selP=id;updSelBox();draw();return;}
     if(mode==='prop'){if(pmode==='sel'){selP=propHit(px,py);updSelBox();draw();}else{const t=pickAt(px,py);if(t&&inb(...t.cell))placeProp(t.cell);}return;}const t=pickAt(px,py);if(!t)return;
     if(mode==='build'){const [x,y,z]=t.cell;if(!inb(x,y,z))return;pushUndo();setV(x,y,z,shape,matI,rot);if(hideUp&&y>level){level=y;syncLevel();}refreshVis();}
@@ -161,6 +162,7 @@ export function init3D(root){
     if(g1&&P.size===1){const dx=p.cx-g1.x,dy=p.cy-g1.y;if(Math.hypot(dx,dy)>7)g1.moved=true;
       if(g1.moved){if(g1.right||g1.shift){const k=cam.dist*.0016,ddx=p.cx-g1.lx,ddy=p.cy-g1.ly;panBy(ddx*k,ddy*k);}
         else{cam.az=g1.ax-dx*.008;cam.el=Math.max(.05,Math.min(1.5,g1.ae+dy*.006));}g1.lx=p.cx;g1.ly=p.cy;}}
+    if(e.pointerType==='mouse'&&clip3&&mode!=='prop'&&!(g1&&g1.moved)){const t=pickAt(p.cx,p.cy);if(t){lastCell=t.cell.slice();pasteGhost(lastCell);}else pasteGhost(null);}
     if(e.pointerType==='mouse'&&(mode==='build'||(mode==='prop'&&pmode==='place'))&&!(g1&&g1.moved)){const t=pickAt(p.cx,p.cy);if(t&&inb(...t.cell)){ghost.geometry=mode==='prop'?GEO.cube:GEO[shape];ghost.position.set(t.cell[0]+.5,t.cell[1]+.5,t.cell[2]+.5);ghost.rotation.y=mode==='prop'?0:rot*Math.PI/2;ghost.visible=true;}else ghost.visible=false;}});
   const up=e=>{const p=P.get(e.pointerId);P.delete(e.pointerId);if(P.size===0&&g1){if(!g1.moved&&performance.now()-g1.t<500&&!g1.right)act(g1.x,g1.y);g1=null;}if(P.size<2)g2=null;ghost.visible=false;};
   cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);cv.addEventListener('contextmenu',e=>e.preventDefault());
@@ -172,25 +174,25 @@ export function init3D(root){
     const hit=ray.intersectObjects([...meshes.values(),...pMesh.values()],true)[0];const P0=new THREE.Vector3();let ok=false;if(hit){P0.copy(hit.point);ok=true;}else{ok=!!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-cam.ty),P0);}
     if(ok&&!cam.ortho){const k=1-nd/cam.dist;cam.tx+=(P0.x-cam.tx)*k;cam.ty+=(P0.y-cam.ty)*k;cam.tz+=(P0.z-cam.tz)*k;}cam.dist=nd;},{passive:false});
   let pClip=null,pClipN=0;
-  const setTool=k=>{mode=k;tab='build';draw();toast({sel:'Chọn',build:'Đặt khối',erase:'Xóa khối',paint:'Tô',pick:'Hút'}[k]);};
+  const setTool=k=>{mode=k;tab='build';draw();toast({sel:'Chọn',area:'Chọn vùng',build:'Đặt khối',erase:'Xóa khối',paint:'Tô',pick:'Hút'}[k]);};
   addEventListener('keydown',e=>{if($('#v3d').style.display==='none')return;const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(document.querySelector('div[style*="z-index:200"]'))return;
     const k=e.key,K=k.length===1?k.toLowerCase():k,ctrl=e.ctrlKey||e.metaKey,p=selProp();
     if(ctrl){
       if(K==='z'&&!e.shiftKey){doUndo();e.preventDefault();return;}
       if(K==='y'||(K==='z'&&e.shiftKey)){doRedo();e.preventDefault();return;}
-      if(K==='c'||K==='x'){if(p){pClip=JSON.parse(JSON.stringify(p));pClipN=0;if(K==='x')delP();toast(K==='x'?'Đã cắt mô hình':'Đã sao chép mô hình');e.preventDefault();}return;}
-      if(K==='v'){if(pClip){pClipN++;const q=Object.assign({},pClip,{id:uid(),x:Math.min(GX-.5,pClip.x+pClipN),z:Math.min(GZ-.5,pClip.z+pClipN)});pushUndo();props.push(q);selP=q.id;syncProps();changed();draw();toast('Đã dán mô hình');}else toast('Chưa có mô hình nào được sao chép (chọn món đã đặt rồi bấm Ctrl+C)');e.preventDefault();return;}
+      if(K==='c'||K==='x'){if(arDone()&&(lastClip!=='prop'||!p)){copyArea(K==='x');e.preventDefault();return;}if(p){pClipN=0;lastClip='prop';pClip=JSON.parse(JSON.stringify(p));pClipN=0;if(K==='x')delP();toast(K==='x'?'Đã cắt mô hình':'Đã sao chép mô hình');e.preventDefault();}return;}
+      if(K==='v'){if(clip3&&lastClip==='area'){pasteAt(lastCell||[Math.floor(cam.tx),level,Math.floor(cam.tz)]);e.preventDefault();return;}if(pClip){pClipN++;const q=Object.assign({},pClip,{id:uid(),x:Math.min(GX-.5,pClip.x+pClipN),z:Math.min(GZ-.5,pClip.z+pClipN)});pushUndo();props.push(q);selP=q.id;syncProps();changed();draw();toast('Đã dán mô hình');}else toast('Chưa có mô hình nào được sao chép (chọn món đã đặt rồi bấm Ctrl+C)');e.preventDefault();return;}
       if(K==='d'){if(p)dupP();e.preventDefault();return;}
       if(K==='a'){e.preventDefault();return;}
       return;}
-    if(k==='Delete'||k==='Backspace'){if(p){delP();e.preventDefault();}return;}
-    if(k==='Escape'){selP=null;updSelBox();if(mode!=='obj'&&mode!=='prop')mode='sel';draw();return;}
+    if(k==='Delete'||k==='Backspace'){if(p){delP();e.preventDefault();}else if(arDone()){delArea();e.preventDefault();}return;}
+    if(k==='Escape'){if(ar){ar=null;arStep=0;updAr();}if(pgH)pgH.visible=false;clip3=clip3;selP=null;updSelBox();if(mode!=='obj'&&mode!=='prop')mode='sel';draw();return;}
     if(p&&k.startsWith('Arrow')){const d={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[k];editP(q=>{q.x+=d[0]*pStep;q.z+=d[1]*pStep;});e.preventDefault();return;}
     if(p&&(k==='PageUp'||k==='PageDown')){editP(q=>q.y+=(k==='PageUp'?1:-1)*pStep);e.preventDefault();return;}
     if(p&&(k==='+'||k==='=')){editP(q=>q.s=(q.s||1)*1.1);return;}
     if(p&&(k==='-'||k==='_')){editP(q=>q.s=(q.s||1)/1.1);return;}
     if(K==='r'){if(p)editP(q=>q.ry=(q.ry||0)+Math.PI/2);else if(mode==='prop'){pRot=(pRot+1)%4;if(tab==='mdl')draw();}else rot=(rot+1)%4;return;}
-    if(K==='v'){setTool('sel');return;}if(K==='f'){focusSel();return;}if(!p&&(K==='w'||K==='a'||K==='s'||K==='d'||k.startsWith('Arrow')||k==='PageUp'||k==='PageDown')){panKey(K,k);e.preventDefault();return;}if(K==='b'){setTool('build');return;}if(K==='e'){setTool('erase');return;}if(K==='g'){setTool('paint');return;}if(K==='i'){setTool('pick');return;}
+    if(K==='v'){setTool('sel');return;}if(K==='m'){setTool('area');return;}if(K==='f'){focusSel();return;}if(!p&&(K==='w'||K==='a'||K==='s'||K==='d'||k.startsWith('Arrow')||k==='PageUp'||k==='PageDown')){panKey(K,k);e.preventDefault();return;}if(K==='b'){setTool('build');return;}if(K==='e'){setTool('erase');return;}if(K==='g'){setTool('paint');return;}if(K==='i'){setTool('pick');return;}
     if(k==='['||k===']'){level=Math.max(0,Math.min(GY-1,level+(k===']'?1:-1)));refreshVis();if(syncLevel)syncLevel();toast('Tầng '+level);return;}
   });
   // vòng lặp
@@ -303,6 +305,37 @@ export function init3D(root){
         el('div',{class:'row'},btn(p.solid?'🧱 Chặn đường: bật':'🚶 Chặn đường: tắt',()=>editP(q=>q.solid=q.solid?0:1),p.solid?'on':''),btn('⧉ Nhân bản',dupP),btn('🗑 Xóa',delP))));}
     body.append(el('div',{class:'row'},el('span',{class:'lbl'},props.length+' mô hình trong cảnh'),btn('🗑 Xóa hết mô hình đã đặt',async()=>{if(!props.length)return;if(await yes('Xóa toàn bộ '+props.length+' mô hình đã đặt?')){pushUndo();props=[];selP=null;syncProps();changed();draw();}})));
     if(S.focus){S.focus=false;const i=$('input',body);if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length);}}}
+  // ===== chọn vùng / sao chép / dán khối =====
+  let ar=null,arStep=0,clip3=null,lastClip='',lastCell=null,arH=null,pgH=null;
+  const arNorm=(a,b)=>({lo:[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.min(a[2],b[2])],hi:[Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.max(a[2],b[2])]});
+  function mkBox(col){const h=new THREE.Box3Helper(new THREE.Box3(new THREE.Vector3(),new THREE.Vector3(1,1,1)),col);h.visible=false;scene.add(h);return h;}
+  function setBox(h,lo,sz){h.box.min.set(lo[0],lo[1],lo[2]);h.box.max.set(lo[0]+sz[0],lo[1]+sz[1],lo[2]+sz[2]);h.visible=true;}
+  function updAr(){if(!arH)arH=mkBox(0x35e0ff);if(ar){setBox(arH,ar.lo,[ar.hi[0]-ar.lo[0]+1,ar.hi[1]-ar.lo[1]+1,ar.hi[2]-ar.lo[2]+1]);}else arH.visible=false;}
+  const arDone=()=>ar&&arStep===0;
+  function inAr(x,y,z){return x>=ar.lo[0]&&x<=ar.hi[0]&&y>=ar.lo[1]&&y<=ar.hi[1]&&z>=ar.lo[2]&&z<=ar.hi[2];}
+  function arProps(){return props.filter(q=>inAr(Math.floor(q.x),Math.floor(q.y+1e-6),Math.floor(q.z)));}
+  function arClick(px,py){const t=pickAt(px,py);if(!t)return;let c=t.vox?[t.vox.x,t.vox.y,t.vox.z]:t.cell;c=[Math.max(0,Math.min(GX-1,c[0])),Math.max(0,Math.min(GY-1,c[1])),Math.max(0,Math.min(GZ-1,c[2]))];
+    if(arStep===0){ar={lo:c.slice(),hi:c.slice(),a:c};arStep=1;toast('Đã chọn góc 1 — chạm góc đối diện');}else{const n=arNorm(ar.a,c);ar={lo:n.lo,hi:n.hi,a:ar.a};arStep=0;toast('Đã chọn vùng '+(n.hi[0]-n.lo[0]+1)+'×'+(n.hi[1]-n.lo[1]+1)+'×'+(n.hi[2]-n.lo[2]+1)+' — Ctrl+C để sao chép');}
+    updAr();draw();}
+  function copyArea(cut){if(!arDone()){toast('Chưa chọn vùng (dùng công cụ ▭ Vùng, chạm 2 góc)');return;}const vs=[];for(const [k,v] of V){const [x,y,z]=k.split(',').map(Number);if(inAr(x,y,z))vs.push([x-ar.lo[0],y-ar.lo[1],z-ar.lo[2],v.s,v.m,v.r]);}
+    const ps=arProps().map(q=>({...JSON.parse(JSON.stringify(q)),x:q.x-ar.lo[0],y:q.y-ar.lo[1],z:q.z-ar.lo[2]}));
+    clip3={v:vs,p:ps,size:[ar.hi[0]-ar.lo[0]+1,ar.hi[1]-ar.lo[1]+1,ar.hi[2]-ar.lo[2]+1]};lastClip='area';
+    if(cut){pushUndo();for(const [dx,dy,dz] of vs)delV(ar.lo[0]+dx,ar.lo[1]+dy,ar.lo[2]+dz,true);const ids=new Set(arProps().map(q=>q.id));props=props.filter(q=>!ids.has(q.id));syncProps();refreshVis();changed();}
+    toast((cut?'Đã cắt ':'Đã sao chép ')+vs.length+' khối'+(ps.length?' + '+ps.length+' mô hình':''));draw();}
+  function delArea(){if(!arDone())return;pushUndo();let n=0;for(const k of [...V.keys()]){const [x,y,z]=k.split(',').map(Number);if(inAr(x,y,z)){delV(x,y,z,true);n++;}}const ids=new Set(arProps().map(q=>q.id));props=props.filter(q=>!ids.has(q.id));selP=null;syncProps();refreshVis();changed();draw();toast('Đã xóa '+n+' khối');}
+  function pasteAt(c){if(!clip3){toast('Chưa có vùng nào được sao chép');return;}c=[Math.max(0,Math.min(GX-1,c[0])),Math.max(0,c[1]),Math.max(0,Math.min(GZ-1,c[2]))];pushUndo();let n=0;
+    for(const [dx,dy,dz,sh,m,r] of clip3.v){const x=c[0]+dx,y=c[1]+dy,z=c[2]+dz;if(inb(x,y,z)){setV(x,y,z,sh,Math.min(m,MATS.length-1),r,true);n++;}}
+    for(const q of clip3.p){props.push({...JSON.parse(JSON.stringify(q)),id:uid(),x:c[0]+q.x,y:c[1]+q.y,z:c[2]+q.z});}
+    syncProps();refreshVis();changed();draw();toast('Đã dán '+n+' khối'+(clip3.p.length?' + '+clip3.p.length+' mô hình':''));}
+  function pasteGhost(c){if(!clip3||!c){if(pgH)pgH.visible=false;return;}if(!pgH)pgH=mkBox(0xffd24a);setBox(pgH,c,clip3.size);}
+  function areaPanel(){const d=el('div',{style:'border:1px solid #35e0ff;border-radius:10px;padding:8px;margin:6px 0'});
+    d.append(el('div',{class:'lbl'},ar?(arStep?'Đang chọn… chạm góc đối diện':'Vùng đang chọn: '+(ar.hi[0]-ar.lo[0]+1)+'×'+(ar.hi[1]-ar.lo[1]+1)+'×'+(ar.hi[2]-ar.lo[2]+1)+' ô ('+arCount()+' khối)'):'Chạm 2 góc đối diện để chọn vùng (mặt sàn hoặc khối). Chọn xong chỉnh độ cao bằng nút bên dưới.'));
+    if(arDone()){const ch=(i,sgn,k)=>()=>{const v=ar[k][i]+sgn;if(v<0||v>=[GX,GY,GZ][i])return;ar[k][i]=v;if(ar.lo[i]>ar.hi[i]){ar[k][i]=v-sgn;return;}updAr();draw();};
+      d.append(el('div',{class:'row'},el('span',{class:'lbl'},'Tầng trên:'),btn('▲',ch(1,1,'hi')),btn('▼',ch(1,-1,'hi')),el('span',{class:'lbl'},'Tầng dưới:'),btn('▲',ch(1,1,'lo')),btn('▼',ch(1,-1,'lo'))));
+      d.append(el('div',{class:'row'},el('span',{class:'lbl'},'Mở/thu X:'),btn('＋',ch(0,1,'hi')),btn('－',ch(0,-1,'hi')),el('span',{class:'lbl'},'Z:'),btn('＋',ch(2,1,'hi')),btn('－',ch(2,-1,'hi'))));
+      d.append(el('div',{class:'row'},btn('📋 Sao chép (Ctrl+C)',()=>copyArea(false)),btn('✂ Cắt (Ctrl+X)',()=>copyArea(true)),btn('🗑 Xóa vùng (Delete)',delArea),btn('✖ Bỏ chọn',()=>{ar=null;arStep=0;updAr();draw();})));}
+    d.append(el('div',{class:'row'},btn('📥 Dán (Ctrl+V)'+(clip3?' — '+clip3.v.length+' khối':''),()=>{if(lastCell)pasteAt(lastCell);else toast('Rê chuột lên cảnh để chọn chỗ dán');}),el('span',{class:'hint'},'Dán vào chỗ con trỏ đang chỉ (góc dưới-trái của vùng).')));return d;}
+  function arCount(){let n=0;for(const k of V.keys()){const [x,y,z]=k.split(',').map(Number);if(inAr(x,y,z))n++;}return n;}
   // ===== giao diện =====
   const pn=$('#pn3'),body=el('div',{class:'pbody'}),tabs=el('div',{class:'ptabs'});pn.append(tabs,body);
   [['build','🧱 Xây'],['obj','🎯 Đối tượng'],['mdl','🗿 Mô hình'],['logic','⚙ Logic'],['view','🎥 Góc nhìn'],['tpl','🏯 Mẫu'],['file','💾 Tệp']].forEach(([k,n])=>tabs.append(el('button',{class:'ptab','data-t':k,onclick:()=>{tab=k;if(k==='obj')mode='obj';else if(k==='mdl')mode='prop';else if(mode==='obj'||mode==='prop')mode='sel';draw();}},n)));
@@ -312,7 +345,8 @@ export function init3D(root){
     if(s==='cube')g.fillRect(8,8,28,28);else if(s==='slab')g.fillRect(8,22,28,14);else if(s==='wedge'){g.beginPath();g.moveTo(8,36);g.lineTo(36,36);g.lineTo(36,8);g.closePath();g.fill();}else if(s==='pillar')g.fillRect(17,6,10,32);else if(s==='stairs'){for(let i=0;i<4;i++)g.fillRect(8+i*7,36-(i+1)*7,7,(i+1)*7);}else if(s==='arch'){g.fillRect(6,6,32,32);g.fillStyle='#2a3340';g.fillRect(15,22,14,16);g.beginPath();g.arc(22,22,7,Math.PI,0);g.fill();}else if(s==='window'){g.fillRect(6,6,32,32);g.fillStyle='#2a3340';g.fillRect(14,14,16,16);}else if(s==='rail'){g.fillRect(8,14,4,22);g.fillRect(32,14,4,22);g.fillRect(8,14,28,4);g.fillRect(8,26,28,2);}else if(s==='curve'){g.beginPath();g.moveTo(6,36);g.lineTo(38,36);for(let i=10;i>=0;i--){const q=i/10;g.lineTo(6+q*32,36-q*q*30);}g.fill();}else g.fillRect(8,8,28,6);return c;}
   function draw(){[...tabs.children].forEach(b=>b.classList.toggle('on',b.dataset.t===tab));body.innerHTML='';
     if(tab==='build'){
-      body.append(el('div',{class:'row'},[['sel','✋ Chọn'],['build','🧱 Đặt'],['erase','🧽 Xóa'],['paint','🎨 Tô'],['pick','💧 Hút']].map(([k,n])=>btn(n,()=>{mode=k;draw();},mode===k?'on':'')),btn('↶',doUndo),btn('↷',doRedo),el('span',{id:'cnt3',class:'lbl'},V.size+' khối')));
+      body.append(el('div',{class:'row'},[['sel','✋ Chọn'],['area','▭ Vùng'],['build','🧱 Đặt'],['erase','🧽 Xóa'],['paint','🎨 Tô'],['pick','💧 Hút']].map(([k,n])=>btn(n,()=>{mode=k;draw();},mode===k?'on':'')),btn('↶',doUndo),btn('↷',doRedo),el('span',{id:'cnt3',class:'lbl'},V.size+' khối')));
+      if(mode==='area')body.append(areaPanel());
       body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Hình khối:'),SHAPES.map(([k,n])=>el('button',{class:'shp'+(mode==='build'&&shape===k?' on':''),onclick:()=>{shape=k;mode='build';draw();}},shapeIcon(k,mode==='build'&&shape===k),el('div',{},n))),btn('⟳ Xoay ('+rot*90+'°)',()=>{rot=(rot+1)%4;draw();})));
       const mg=el('div',{class:'matgrid'});MATS.forEach((m,i)=>mg.append(el('button',{class:'mat'+(mode!=='sel'&&matI===i?' on':''),onclick:()=>{matI=i;if(mode==='sel')mode='build';draw();}},el('img',{src:m.url,class:'matimg'}),el('div',{},m.n))));body.append(mg);body.append(el('div',{class:'row'},btn('➕ Chất liệu từ ảnh…',upImgs),btn('📦 Từ gói .zip…',upZip),btn('🗑 Quản lý / xóa chất liệu',matMgr)));
       const sl=el('input',{type:'range',min:0,max:GY-1,value:level,class:'sl'});sl.oninput=()=>{level=+sl.value;lbl.textContent='Độ cao đặt: tầng '+level;refreshVis();};syncLevel=()=>{sl.value=level;lbl.textContent='Độ cao đặt: tầng '+level;};
