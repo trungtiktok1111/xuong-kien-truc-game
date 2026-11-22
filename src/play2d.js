@@ -114,6 +114,7 @@ export function play2D(o){
       else{const e=n.e;cx.globalAlpha=e.fl>0?.5:1;if(!(e.anim&&AN.drawChar(cx,e,e.anim,ox+e.x*s,oy+e.y*s,s,t,{iso:ISO,hit:e.fl>0,atk:Math.hypot(P.x-e.x,P.y-e.y)<.8})))fbk(e,ox+(e.x-.5)*s,oy+(e.y-.7)*s,s,e.x<P.x);cx.globalAlpha=1;cx.fillStyle='#000a';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7,3);cx.fillStyle='#e74c3c';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7*Math.max(0,e.hp)/e.mhp,3);}}
     ox=ox1;oy=oy1;for(const d of DR){if(ISO){ox=pX(d.x,d.y)-d.x*s;oy=pY(d.x,d.y)-d.y*s;}cx.font=(s*.8)+'px serif';cx.textAlign='center';cx.fillText('🚪',ox+d.x*s,oy+(d.y+.3)*s);}
     if(!ISO)cx.drawImage(top,ox,oy,W*s,H*s);
+    if(ISO&&window.__dbg){cx.fillStyle='#ff000055';for(let i=0;i<W*H;i++)if(M.blk[i]){const x=i%W,y=(i/W)|0,hw=s*.75,hh=s*.375,X=pX(x,y),Y=pY(x,y);cx.beginPath();cx.moveTo(X,Y);cx.lineTo(X+hw,Y+hh);cx.lineTo(X,Y+2*hh);cx.lineTo(X-hw,Y+hh);cx.closePath();cx.fill();}}
     if(ISO){ox=pX(P.x,P.y)-P.x*s;oy=pY(P.x,P.y)-P.y*s;}
     if(slash>0){cx.strokeStyle='#fff';cx.lineWidth=4;cx.globalAlpha=slash/.18;const a=ISO?Math.atan2((fx+fy)*.5,fx-fy):Math.atan2(fy,fx);cx.beginPath();cx.arc(ox+P.x*s,oy+(P.y-.2)*s,s*1.05,a-1,a+1);cx.stroke();cx.globalAlpha=1;}
     if(ISO&&said){const q=said.n;ox=pX(q.x,q.y)-q.x*s;oy=pY(q.x,q.y)-q.y*s;}

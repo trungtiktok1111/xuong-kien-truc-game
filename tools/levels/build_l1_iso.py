@@ -31,13 +31,24 @@ OBJ={ # tên: (đường dẫn, lớp k (đơn vị s/px), )
  'Choi_gac':f'{CT}/CT-05/Goc-cheo/Choi_gac.png','Cong_tran':f'{CT}/CT-05/Goc-cheo/Cong_tran.png','Tram_nghi':f'{CT}/CT-05/Goc-cheo/Tram_nghi.png','Tuong_bao':f'{CT}/CT-05/Goc-cheo/Tuong_bao.png','Vong_lau':f'{CT}/CT-05/Goc-cheo/Vong_lau.png',
  'Cay_dao':f'{UP}/Cay-hoa/Cay-dao.png','Cay_lieu':f'{UP}/Cay-hoa/Cay-lieu.png','Bui_hoa':f'{UP}/Cay-hoa/Cum-bui-hoa-co.png','Sen':f'{UP}/Cay-hoa/Cum-sen.png'}
 KOBJ={'Cay_dao':.0042,'Cay_lieu':.0042,'Bui_hoa':.0034,'Sen':.0030}
-names=list(OBJ);COLS=6;ROWS=(len(names)+COLS-1)//COLS
+def foot(path,k):
+    im=Image.open(path).convert('RGBA');im=im.crop(bbox(im));a=im.getchannel('A');w,h=im.size
+    T=0
+    for f in (.95,.9,.85,.8,.75,.7,.65,.6):
+        y=min(h-1,int(h*f));row=[x for x in range(w) if a.getpixel((x,y))>40]
+        if row:T=max(T,row[-1]-row[0])
+    last=[x for y in range(h-3,h) for x in range(w) if a.getpixel((x,y))>40]
+    bx=sum(last)/len(last) if last else w/2
+    T*=k/.75;off=(bx-w/2)*k/.75
+    return max(1,round(T/2+off+.3)),max(1,round(T/2-off+.3))
+names=list(OBJ);FP={}
+COLS=6;ROWS=(len(names)+COLS-1)//COLS
 ob=Image.new('RGBA',(COLS*TW,ROWS*TW),(0,0,0,0));IDX={};SC={}
 for i,n in enumerate(names):
     im=Image.open(OBJ[n]).convert('RGBA');im=im.crop(bbox(im));w,h=im.size
     kf=min(1,(TW-4)/w,(TW-4)/h);r=im.resize((max(1,round(w*kf)),max(1,round(h*kf))),Image.LANCZOS)
     cx,cy=(i%COLS)*TW,(i//COLS)*TW;ob.alpha_composite(r,(cx+(TW-r.width)//2,cy+TW-2-r.height));IDX[n]=i
-    k=KOBJ.get(n,.0093);SC[n]=round(TW*k/kf,3)
+    k=KOBJ.get(n,.0093);SC[n]=round(TW*k/kf,3);FP[n]=(1,1) if n in KOBJ or n in ('Gieng','Sen') else foot(OBJ[n],k)
 # ---- bản đồ ----
 W=H=44
 enc=lambda sid,idx:((sid*4096+idx)*8)+1
@@ -66,8 +77,9 @@ for (x,y) in water:
     if y in (24,25):blk[y*W+x]=0
 ents=[];occ=set()
 def deco(n,x,y,f,walk=False,flat=False,name=None):
-    cells=[(x-a,y-b) for a in range(f) for b in range(f)]
-    ents.append({'id':'d%d'%len(ents),'t':'deco','x':x,'y':y,'f':f,'sc':SC[n],'flat':flat,'name':name or n,'tile':{'sid':SID_OB,'idx':IDX[n]}})
+    fx,fy=FP[n]
+    cells=[(x-a,y-b) for a in range(fx) for b in range(fy)]
+    ents.append({'id':'d%d'%len(ents),'t':'deco','x':x,'y':y,'f':max(fx,fy),'fx':fx,'fy':fy,'sc':SC[n],'flat':flat,'name':name or n,'tile':{'sid':SID_OB,'idx':IDX[n]}})
     for c in cells:
         occ.add(c)
         if not walk and 0<=c[0]<W and 0<=c[1]<H:blk[c[1]*W+c[0]]=1
@@ -121,5 +133,6 @@ for a in cfg['anims']:a['sc']=round(a['sc']*1.3,3)
 cfg['hero']={'sid':2,'idx':0}
 out={'tags':{'sheets':{},'tiles':{},'fav':[],'recent':[]},'format':'thk-map-1','cell':16,'w':W,'h':H,'layerNames':old['layerNames'],'layers':L,'collision':blk,'ents':ents,'cfg':cfg,'sheets':sheets,
  'note':'Màn 1 — Thôn Thanh Vân (isometric). Vật cảnh là thực thể "deco".'}
+print({n:FP[n] for n in FP})
 json.dump(out,open('/home/claude/ed/man1.json','w'),ensure_ascii=False)
 print('ok',os.path.getsize('/home/claude/ed/man1.json')//1024,'KB',len(ents),'ents',len(names),'objs')
