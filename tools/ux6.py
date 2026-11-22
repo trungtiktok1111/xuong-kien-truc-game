@@ -1,0 +1,17 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+    pg=b.new_page(viewport={'width':1500,'height':900});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(1000)
+    pg.evaluate("[...document.querySelectorAll('.tabbtn')].find(b=>b.dataset.v==='3d').click()");pg.wait_for_timeout(1500)
+    pg.evaluate("[...document.querySelectorAll('#pn3 button')].find(b=>b.textContent==='96×96').click()");pg.wait_for_timeout(600)
+    pg.keyboard.press('Digit2');pg.keyboard.press('KeyE')
+    pg.evaluate("c=>Object.assign(window.__e3.cam,c)",{'az':0.6,'el':0.8,'dist':110,'tx':48,'ty':0,'tz':48});pg.wait_for_timeout(500)
+    pg.mouse.move(300,500);pg.mouse.down();pg.mouse.move(900,300,steps=20);pg.mouse.up()
+    pg.screenshot(path='/home/claude/town/ux6a.png')
+    n1=pg.evaluate("document.querySelector('#cnt3').textContent");print(n1)
+    pg.reload();pg.wait_for_timeout(1000)
+    pg.evaluate("[...document.querySelectorAll('.tabbtn')].find(b=>b.dataset.v==='3d').click()");pg.wait_for_timeout(1500)
+    pg.evaluate("c=>Object.assign(window.__e3.cam,c)",{'az':0.6,'el':0.8,'dist':110,'tx':48,'ty':0,'tz':48});pg.wait_for_timeout(500)
+    pg.screenshot(path='/home/claude/town/ux6b.png')
+    print(pg.evaluate("[...document.querySelectorAll('#pn3 input[type=number]')].map(i=>i.value)"));print(errs);b.close()

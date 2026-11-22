@@ -5,7 +5,7 @@ import {logicTab,entExtra} from './logic.js';
 import {parseGLB,scanZip,b64} from './models3d.js';
 import {OT3,COLS,defCfg3,newEnt3,entModel} from './ents3d.js';
 import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,ask,askText,yes,zipBrowser,slotsUI,exportGame} from './util.js';
-const GX=48,GZ=48,GY=24;
+let GX=48,GZ=48,GY=24;
 import {makeTpl} from './tpl3d.js';
 const SHAPES=[['cube','Khối'],['slab','Tấm nửa'],['wedge','Mái dốc'],['pillar','Cột'],['panel','Vách mỏng'],['stairs','Cầu thang'],['arch','Cổng vòm'],['window','Khung cửa sổ'],['rail','Lan can'],['curve','Mái cong']];
 // ===== vật liệu =====
@@ -76,9 +76,18 @@ export function init3D(root){
     const ok=el('button',{class:'btn',style:'padding:12px',onclick:async()=>{const t=+tw.value;let src=url;if(t>0){if(!sel){toast('Chạm chọn 1 ô');return;}const c=document.createElement('canvas');c.width=c.height=t;c.getContext('2d').drawImage(im,sel[0]*t,sel[1]*t,t,t,0,0,t,t);src=c.toDataURL();}
       ov.remove();const i=await addCustomMat(name.replace(/\.\w+$/,'').slice(0,14),src);if(i>=0){matI=i;mode='build';draw();toast('Đã thêm chất liệu');}else toast('Ảnh lỗi');}},'✔ Thêm làm chất liệu');
     ov.append(el('div',{style:'display:flex;gap:8px;align-items:center'},el('span',{class:'lbl'},'Kích thước ô (px):'),tw),wrap,info,el('div',{style:'display:flex;gap:8px'},ok,el('button',{class:'btn',style:'padding:12px',onclick:()=>ov.remove()},'Đóng')));document.body.append(ov);rd();};im.src=url;}
-  const grid=new THREE.GridHelper(GX,GX,0x6c8aa0,0x34485a);grid.position.set(GX/2,0,GZ/2);scene.add(grid);
+  function gridGeo(){const pos=[],col=[],a=new THREE.Color(0x34485a),c=new THREE.Color(0x6c8aa0);
+    for(let x=0;x<=GX;x++){const cc=(x===GX/2)?c:a;pos.push(x,0,0,x,0,GZ);col.push(cc.r,cc.g,cc.b,cc.r,cc.g,cc.b);}
+    for(let z=0;z<=GZ;z++){const cc=(z===GZ/2)?c:a;pos.push(0,0,z,GX,0,z);col.push(cc.r,cc.g,cc.b,cc.r,cc.g,cc.b);}
+    const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));return g;}
+  const grid=new THREE.LineSegments(gridGeo(),new THREE.LineBasicMaterial({vertexColors:true}));scene.add(grid);
   const floor=new THREE.Mesh(new THREE.PlaneGeometry(GX,GZ).rotateX(-Math.PI/2).translate(GX/2,0,GZ/2),new THREE.MeshBasicMaterial({color:0x223040,transparent:true,opacity:.0,visible:false}));scene.add(floor);
   const lvlPlane=new THREE.Mesh(new THREE.PlaneGeometry(GX,GZ).rotateX(-Math.PI/2).translate(GX/2,0,GZ/2),new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.13,depthWrite:false}));scene.add(lvlPlane);
+  function gridExt(){let x=0,y=0,z=0;for(const k of V.keys()){const [a,b,c]=k.split(',').map(Number);if(a>x)x=a;if(b>y)y=b;if(c>z)z=c;}for(const p of props||[]){x=Math.max(x,Math.ceil(p.x));z=Math.max(z,Math.ceil(p.z));y=Math.max(y,Math.ceil(p.y||0));}for(const e of ents||[]){x=Math.max(x,e.x);z=Math.max(z,e.z);y=Math.max(y,e.y||0);}return [x+1,y+1,z+1];}
+  function setGrid(gx,gy,gz,force){const ext=force?[0,0,0]:gridExt();gx=Math.max(ext[0],16,Math.min(160,Math.round(gx)||48));gz=Math.max(ext[2],16,Math.min(160,Math.round(gz)||48));gy=Math.max(ext[1],8,Math.min(64,Math.round(gy)||24));
+    if(gx===GX&&gy===GY&&gz===GZ)return false;GX=gx;GY=gy;GZ=gz;grid.geometry.dispose();grid.geometry=gridGeo();
+    for(const m of [floor,lvlPlane]){m.geometry.dispose();m.geometry=new THREE.PlaneGeometry(GX,GZ).rotateX(-Math.PI/2).translate(GX/2,0,GZ/2);}
+    if(level>GY-1)level=GY-1;return true;}
   const ghost=new THREE.Mesh(GEO.cube,new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.45,depthWrite:false}));ghost.visible=false;scene.add(ghost);
   // camera
   const cam={az:.8,el:.62,dist:26,tx:GX/2,ty:3,tz:GZ/2,ortho:false};
@@ -112,8 +121,8 @@ export function init3D(root){
     ov.append(box);document.body.append(ov);draw2();}
   const inb=(x,y,z)=>x>=0&&y>=0&&z>=0&&x<GX&&y<GY&&z<GZ;
   function snapV(){return [...V.entries()].map(([k,v])=>[k,v.s,v.m,v.r]);}
-  function snap(){return {v:snapV(),ents:JSON.parse(JSON.stringify(ents)),cfg:Object.assign({},cfg),props:JSON.parse(JSON.stringify(props||[]))};}
-  function load(a){clearAll();const arr=Array.isArray(a)?a:(a.v||[]);if(Array.isArray(a)){ents=[];props=[];}else{ents=JSON.parse(JSON.stringify(a.ents||[]));cfg=Object.assign(defCfg3(),a.cfg||{});props=JSON.parse(JSON.stringify(a.props||[]));}selP=null;for(const [k,s,m,r] of arr){const [x,y,z]=k.split(',').map(Number);setV(x,y,z,s,m,r,true);}refreshVis();syncEnts();syncProps();}
+  function snap(){return {v:snapV(),ents:JSON.parse(JSON.stringify(ents)),cfg:Object.assign({},cfg),props:JSON.parse(JSON.stringify(props||[])),grid:[GX,GY,GZ]};}
+  function load(a){if(!Array.isArray(a)&&a.grid)setGrid(a.grid[0],a.grid[1],a.grid[2],true);clearAll();const arr=Array.isArray(a)?a:(a.v||[]);if(Array.isArray(a)){ents=[];props=[];}else{ents=JSON.parse(JSON.stringify(a.ents||[]));cfg=Object.assign(defCfg3(),a.cfg||{});props=JSON.parse(JSON.stringify(a.props||[]));}selP=null;for(const [k,s,m,r] of arr){const [x,y,z]=k.split(',').map(Number);setV(x,y,z,s,m,r,true);}refreshVis();syncEnts();syncProps();}
   function pushUndo(){undo.push(snap());if(undo.length>60)undo.shift();redo=[];}
   let saveT;function changed(){clearTimeout(saveT);saveT=setTimeout(()=>lsSet('thk_proj3d',snap()),600);$('#cnt3')&&($('#cnt3').textContent=V.size+' khối');}
   function setV(x,y,z,s,m,r,quiet){if(!inb(x,y,z))return;const k=key(x,y,z);delV(x,y,z,true);V.set(k,{s,m,r});
@@ -181,7 +190,8 @@ export function init3D(root){
       prevBox.scale.set(mx[0]-mn[0]+1.02,mx[1]-mn[1]+1.02,mx[2]-mn[2]+1.02);prevBox.position.set((mn[0]+mx[0]+1)/2,(mn[1]+mx[1]+1)/2,(mn[2]+mx[2]+1)/2);prevBox.visible=true;stroke.end=c;return;}
     const kk=c.join(',')+'|'+brushH;if(stroke.last===kk)return;stroke.last=kk;
     if(!stroke.pushed){pushUndo();stroke.pushed=true;}
-    applyCells(regionCells(c,c));stroke.n++;refreshVis();}
+    {const pv=stroke.prev;let pts=[c];if(pv&&pv[1]===c[1]){pts=[];const n=Math.max(Math.abs(c[0]-pv[0]),Math.abs(c[2]-pv[2]));for(let i=1;i<=n;i++)pts.push([Math.round(pv[0]+(c[0]-pv[0])*i/n),c[1],Math.round(pv[2]+(c[2]-pv[2])*i/n)]);if(!pts.length)pts=[c];}
+      for(const q of pts)applyCells(regionCells(q,q));stroke.prev=c;}stroke.n++;refreshVis();}
   function strokeEnd(){const s=stroke;stroke=null;prevBox.visible=false;prevInst.visible=false;if(!s)return;if(tHeld&&lastMP)hoverArrows(lastMP);else hideArrows();
     if(s.auto&&!s.dirv&&s.start){stroke=s;pushUndo();applyCells(regionCells(s.start,s.start));stroke=null;refreshVis();draw();return;}
     if(s.dirv){if(s.cells){pushUndo();applyCells(s.cells);refreshVis();}draw();return;}
@@ -336,7 +346,7 @@ export function init3D(root){
     Object.assign(cam,save);ghost.visible=sv[0];grid.visible=sv[1];lvlPlane.visible=sv[2];renderer.setClearColor(0x16202b,1);resize();if(selBox)selBox.visible=!!sbv;
     out.toBlob(bl=>saveFile(name,bl));}
   function projJSON(){return {format:'thk-voxel-1',ents,cfg,props,grid:[GX,GY,GZ],shapes:SHAPES.map(s=>s[0]),materials:MATS.map(m=>m.n),voxels:[...V.entries()].map(([k,v])=>[...k.split(',').map(Number),SHAPES.findIndex(s=>s[0]===v.s),v.m,v.r]),note:'voxels: [x,y,z,shapeIndex,materialIndex,rot(0..3 quay quanh trục Y)]'};}
-  function importJSON(t){try{const o=JSON.parse(t);if(o.format!=='thk-voxel-1')throw 0;pushUndo();clearAll();for(const [x,y,z,s,m,r] of o.voxels)setV(x,y,z,SHAPES[s][0],m,r,true);ents=JSON.parse(JSON.stringify(o.ents||[]));cfg=Object.assign(defCfg3(),o.cfg||{});props=JSON.parse(JSON.stringify(o.props||[]));selP=null;refreshVis();syncEnts();syncProps();toast('Đã nhập công trình');}catch(e){toast('Tệp không đúng định dạng');}}
+  function importJSON(t){try{const o=JSON.parse(t);if(o.format!=='thk-voxel-1')throw 0;pushUndo();{let mx=0,my=0,mz=0;for(const q of o.voxels){mx=Math.max(mx,q[0]);my=Math.max(my,q[1]);mz=Math.max(mz,q[2]);}const g=o.grid||[48,24,48];if(setGrid(Math.max(g[0],mx+1),Math.max(g[1],my+1),Math.max(g[2],mz+1),true)){cam.tx=GX/2;cam.tz=GZ/2;}}clearAll();for(const [x,y,z,s,m,r] of o.voxels)setV(x,y,z,SHAPES[s][0],m,r,true);ents=JSON.parse(JSON.stringify(o.ents||[]));cfg=Object.assign(defCfg3(),o.cfg||{});props=JSON.parse(JSON.stringify(o.props||[]));selP=null;refreshVis();syncEnts();syncProps();toast('Đã nhập công trình');}catch(e){toast('Tệp không đúng định dạng');}}
   // ===== Mô hình 3D (GLB) =====
   let props=[],selP=null,pmode='place',curM=null,pRot=0,pStep=.5,LIB=[],MFAV=lsGet('thk_m3d_fav',[]),selBox=null,pTok=0;const DIMS=new Map();let pFit={m:'',v:1},pSz={m:'h',v:1};const pMesh=new Map(),BYTES=new Map(),PTEX=new Map(),OBJC=new Map(),mq={q:'',pack:'',cat:'',fav:false,lim:120};
   const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -457,6 +467,10 @@ export function init3D(root){
       const mg=el('div',{class:'matgrid'});MATS.forEach((m,i)=>mg.append(el('button',{class:'mat'+(mode!=='sel'&&matI===i?' on':''),onclick:()=>{matI=i;if(mode==='sel')mode='build';draw();}},el('img',{src:m.url,class:'matimg'}),el('div',{},m.n))));body.append(mg);body.append(el('div',{class:'row'},btn('➕ Chất liệu từ ảnh…',upImgs),btn('📦 Từ gói .zip…',upZip),btn('🗑 Quản lý / xóa chất liệu',matMgr)));
       const sl=el('input',{type:'range',min:0,max:GY-1,value:level,class:'sl'});sl.oninput=()=>{level=+sl.value;lbl.textContent='Độ cao đặt: tầng '+level;refreshVis();};syncLevel=()=>{sl.value=level;lbl.textContent='Độ cao đặt: tầng '+level;};
       const lbl=el('span',{class:'lbl'},'Độ cao đặt: tầng '+level);body.append(el('div',{class:'row'},lbl,sl,btn(hideUp?'Ẩn tầng trên: bật':'Ẩn tầng trên: tắt',()=>{hideUp=!hideUp;refreshVis();draw();})));
+      {const mk=(v,lo,hi)=>el('input',{type:'number',value:v,min:lo,max:hi,class:'num',style:'width:60px'});const ix=mk(GX,16,160),iz=mk(GZ,16,160),iy=mk(GY,8,64);
+        const go=(x,y,z)=>{const old=[GX,GY,GZ].join();const ch=setGrid(x,y,z,false);if(!ch&&[GX,GY,GZ].join()===old&&(x!==GX||z!==GZ||y!==GY))toast('Không thu nhỏ hơn phần đã dựng ('+gridExt().join('×')+')');else if(ch){cam.tx=GX/2;cam.tz=GZ/2;cam.dist=Math.max(cam.dist,Math.max(GX,GZ)*.7);refreshVis();toast('Khung dựng: '+GX+'×'+GZ+', cao '+GY);}draw();};
+        body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Khung dựng:'),el('span',{class:'lbl'},'Rộng'),ix,el('span',{class:'lbl'},'Sâu'),iz,el('span',{class:'lbl'},'Cao'),iy,btn('Áp dụng',()=>go(+ix.value,+iy.value,+iz.value))));
+        body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Cỡ nhanh:'),[[48,24],[64,32],[96,32],[128,40],[160,48]].map(([n,h])=>btn(n+'×'+n,()=>go(n,h,n))),el('span',{class:'lbl'},'Khung càng lớn càng nặng máy.')));}
       body.append(el('div',{class:'hint'},'Thao tác nhanh: chọn ô 1–9 (hoặc bấm vật liệu) rồi KÉO chuột trái để đặt liên tục; chuột phải xoá; Shift+kéo = đường ngang/dọc; giữ C+kéo = đường chéo; Ctrl+kéo = cả vùng (xoá vùng: công cụ Xóa X + Ctrl+kéo, hoặc M chọn vùng rồi Delete); +/− = chiều cao; R xoay; Tab đổi hình; Q/E hạ nâng tầng. Camera: kéo phải hoặc Alt+kéo = xoay; Space+kéo hoặc chuột giữa = di chuyển; lăn chuột = zoom về phía con trỏ; W/A/S/D = di chuyển. Phím tắt công cụ: V chọn, B đặt, X xoá, G tô, I hút, M chọn vùng.'));}
     else if(tab==='obj'){
       body.append(el('div',{class:'row'},Object.keys(OT3).map(k=>btn(OT3[k][0]+' '+OT3[k][1],()=>{objType=k;mode='obj';draw();},objType===k?'on':''))));
@@ -500,6 +514,6 @@ export function init3D(root){
   }
   (async()=>{LIB=(await idbGet('m3d_index'))||[];for(const c of ((await idbGet('thk_cmats3d'))||lsGet('thk_cmats',[])))await addCustomMat(c.n,c.url,true);const sv=lsGet('thk_proj3d',null);if(sv&&(Array.isArray(sv)?sv.length:(sv.v&&sv.v.length)))load(sv);else{TPL['Đình tứ trụ (võ hiệp)']();refreshVis();}syncEnts();syncProps();draw();})();
   draw();
-  const api={cam,show(){run=true;loop();},hide(){run=false;},gameData:()=>{const used=[...new Set(props.map(p=>p.m))],pm={},pt={};for(const id of used){const b=BYTES.get(id);if(b){pm[id]={glb:b64(b.u8),pack:b.pack};pt[b.pack]=b.tex;}}return {kind:'3d',voxels:snapV(),ents:JSON.parse(JSON.stringify(ents)),cfg:Object.assign({},cfg),cmats:MATS.slice(BASE_N).map(m=>({n:m.n,url:m.url})),props:JSON.parse(JSON.stringify(props)),pmodels:pm,ptex:pt};},_t:{setV,clearAll,refreshVis,exp:expGLB}};
+  const api={cam,show(){run=true;loop();},hide(){run=false;},gameData:()=>{const used=[...new Set(props.map(p=>p.m))],pm={},pt={};for(const id of used){const b=BYTES.get(id);if(b){pm[id]={glb:b64(b.u8),pack:b.pack};pt[b.pack]=b.tex;}}return {kind:'3d',grid:[GX,GY,GZ],voxels:snapV(),ents:JSON.parse(JSON.stringify(ents)),cfg:Object.assign({},cfg),cmats:MATS.slice(BASE_N).map(m=>({n:m.n,url:m.url})),props:JSON.parse(JSON.stringify(props)),pmodels:pm,ptex:pt};},_t:{setV,clearAll,refreshVis,exp:expGLB}};
   return api;
 }

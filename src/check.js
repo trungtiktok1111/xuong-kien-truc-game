@@ -41,7 +41,7 @@ function mk3(d){const V=new Map();for(const [k,s,m,r] of d.voxels||[])V.set(k,{s
   function topAt(v,fx,fz){const s=v.s;if(s==='arch')return -1;if(s==='slab')return .5;if(s==='wedge'||s==='stairs'||s==='curve'){const th=v.r*Math.PI/2,lx=fx-.5,lz=fz-.5,c=Math.cos(th),sn=Math.sin(th);const lz2=lx*sn+lz*c;const t=Math.min(1,Math.max(0,.5-lz2));return s==='wedge'?t:s==='curve'?t*t:Math.min(1,Math.floor(t*4)/4+.25);}return SOLID[s]?1:-1;}
   function ground(x,z,y,step){const cx=Math.floor(x),cz=Math.floor(z);for(let cy=Math.min(23,Math.floor(y+step));cy>=0;cy--){const v=vox(cx,cy,cz);if(!v)continue;const h=topAt(v,x-cx,z-cz);if(h>=0)return cy+h;}return 0;}
   function okAt(x,z,y,step){const Rr=.25;for(const [a,b] of [[-Rr,-Rr],[Rr,-Rr],[-Rr,Rr],[Rr,Rr],[0,0]]){const px=x+a,pz=z+b,g=ground(px,pz,y,step);if(g>y+step+.01)return false;const y0=Math.max(g,y),cx=Math.floor(px),cz=Math.floor(pz);
-    for(let cy=Math.floor(y0+.05);cy<=Math.floor(y0+1.7)&&cy<24;cy++){const v=vox(cx,cy,cz);if(!v)continue;const h=topAt(v,px-cx,pz-cz);if(h>=0&&cy+h>y0+.05)return false;}}return true;}
+    for(let cy=Math.floor(y0+.05);cy<=Math.floor(y0+1.7)&&cy<((d.grid&&d.grid[1])||24);cy++){const v=vox(cx,cy,cz);if(!v)continue;const h=topAt(v,px-cx,pz-cz);if(h>=0&&cy+h>y0+.05)return false;}}return true;}
   return {ground,okAt,V};}
 // BFS trên lưới 0.5; step=.55 là đi bộ, step=1.2 là có nhảy (nhảy cao = 7.5²/(2·22) ≈ 1.28)
 function reach3(P,sx,sz,sy,step){const seen=new Map(),key=(i,j,h)=>i+','+j+','+h;const gx=Math.round(sx*2),gz=Math.round(sz*2);const q=[[gx,gz,sy]];seen.set(key(gx,gz,Math.round(sy*2)),1);let n=0;
@@ -73,7 +73,7 @@ export function check3D(d){
         rep('F4','Đích',goals);rep('F5','Quái',en);rep('F6','NPC/rương',E.filter(e=>e.t==='npc'||e.t==='chest'));
       }else out.push(R('F4','not_assessed','Chưa kiểm đường tới đích','cần điểm xuất phát hợp lệ'));
     }else out.push(R('F4','not_assessed','Chưa kiểm đường tới đích','chưa có điểm xuất phát'));
-    const bad=E.filter(e=>e.x<0||e.z<0||e.x>=48||e.z>=48||e.y<0||e.y>=24);out.push(bad.length?R('F8','broken','Có đối tượng nằm ngoài khối 24×24×24'):R('F8','pass','Mọi đối tượng nằm trong vùng dựng'));
+    const bad=E.filter(e=>e.x<0||e.z<0||e.x>=((d.grid&&d.grid[0])||48)||e.z>=((d.grid&&d.grid[2])||48)||e.y<0||e.y>=((d.grid&&d.grid[1])||24));out.push(bad.length?R('F8','broken','Có đối tượng nằm ngoài khung dựng'):R('F8','pass','Mọi đối tượng nằm trong vùng dựng'));
   }
   logicRows(out,cf,E);
   paramRows(out,cf,['hp','spd','jump','dmg','rng']);
