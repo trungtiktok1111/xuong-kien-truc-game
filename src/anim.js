@@ -238,7 +238,7 @@ export function animTab(body,cfg,sheets,after,draw,AN){
   box.append(el('div',{class:'row'},el('span',{class:'lbl'},'Thứ tự hướng'),os,of),el('div',{class:'hint'},'Nếu nhân vật quay sai hướng khi chạy: đổi "thứ tự" hoặc "lệch" cho tới khi xem trước khớp.'));adv.append(box);
   // xem trước
   const pv=el('canvas',{style:'width:100%;height:150px;background:#1e2a36;border-radius:8px;image-rendering:pixelated'});pv.width=300;pv.height=150;
-  const P={st:'idle',d:0};const sp=el('div',{class:'row'}),dr=el('div',{class:'row'});
+  const P={st:(STATES.find(([k])=>set.st[k]&&set.st[k].src&&set.st[k].src.length)||['idle'])[0],d:0};const sp=el('div',{class:'row'}),dr=el('div',{class:'row'});
   const info=el('div',{class:'hint'},'');
   for(const [k,n] of STATES)sp.append(bt(n,()=>{P.st=k;P.t0=performance.now();},''));
   for(let i=0;i<8;i++)dr.append(bt(['↓','↙','←','↖','↑','↗','→','↘'][i],()=>{P.fd=i;},''));
@@ -249,7 +249,7 @@ export function animTab(body,cfg,sheets,after,draw,AN){
   (function loop(){if(!pv.isConnected)return;const g=pv.getContext('2d');g.imageSmoothingEnabled=false;g.clearRect(0,0,300,150);
     const st=set.st[P.st];const dirs=A.dirsOf(st);const v=dirv[P.fd];const d=A.dirIdx(set,dirs,v[0],v[1],v[0]<0?-1:1);
     const fl=dirs===1?(v[0]<0)!==!!set.fl:false;const spx=A.strip(set,P.st,d);const ps=spx?Math.min(200,1760/(spx.fh*(set.sc||1))):72;const ok=A.frame(g,set,P.st,d,(performance.now()-P.t0)/1000,150,138-ps*.32,ps,fl);
-    if(!ok){g.fillStyle='#8aa';g.font='13px system-ui';g.textAlign='center';g.fillText('Trạng thái này chưa có ảnh',150,75);}
+    if(!ok){g.fillStyle='#8aa';g.font='13px system-ui';g.textAlign='center';const miss=st&&st.src&&st.src.length&&!sheets.find(q=>q.name===st.src[0]);g.fillText(!st||!st.src||!st.src.length?'Bộ này chưa có trạng thái này — bấm trạng thái khác':miss?'Ảnh đã bị xóa khỏi tileset — nạp lại gói zip':'Trạng thái này chưa có ảnh',150,miss?70:75);if(miss){g.font='11px system-ui';g.fillText('(thiếu: '+st.src[0].slice(0,32)+')',150,92);}}
     const sp2=A.strip(set,P.st,d);info.textContent=sp2?'Hướng dùng: #'+d+' · '+sp2.n+' khung · mỗi khung '+sp2.fw+'×'+sp2.fh+' px':'';
     requestAnimationFrame(loop);})();
   body.append(adv);
