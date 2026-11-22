@@ -263,7 +263,7 @@ export function init3D(root){
   // con trỏ
   const P=new Map();let g1=null,g2=null;
   const pos=e=>{const r=cv.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top,cx:e.clientX,cy:e.clientY};};
-  cv.addEventListener('pointerdown',e=>{e.preventDefault();cv.setPointerCapture(e.pointerId);const p=pos(e);P.set(e.pointerId,p);
+  cv.addEventListener('pointerdown',e=>{e.preventDefault();{const ae=document.activeElement;if(ae&&ae!==document.body&&ae.blur)ae.blur();}cv.setPointerCapture(e.pointerId);const p=pos(e);P.set(e.pointerId,p);
     if(P.size===1&&e.pointerType==='mouse'&&e.button===0&&paintable()&&!space&&!e.altKey){stroke={auto:false,diag:cHeld,dirv:lockDir,line:!lockDir&&(cHeld||(e.shiftKey&&!(e.ctrlKey||e.metaKey))),box:!lockDir&&(e.ctrlKey||e.metaKey),start:null,last:null,y:0,pushed:false,n:0};strokeStep(p,true);return;}
     if(P.size===1&&mode==='stamp'&&clip3&&e.pointerType==='mouse'&&e.button===0&&(e.shiftKey||e.ctrlKey||e.metaKey)&&!space){const t=pickAt(p.cx,p.cy);if(t){stampD={start:t.cell.slice(),cur:t.cell.slice(),kind:(e.ctrlKey||e.metaKey)?'box':'line'};stampPreview();}return;}
     if(P.size===1&&mode==='sel'&&e.pointerType==='mouse'&&e.button===0&&(e.ctrlKey||e.metaKey)&&!space){marqStart(p.cx,p.cy,e.shiftKey);return;}
@@ -290,7 +290,7 @@ export function init3D(root){
     if(ok&&!cam.ortho){const k=1-nd/cam.dist;cam.tx+=(P0.x-cam.tx)*k;cam.ty+=(P0.y-cam.ty)*k;cam.tz+=(P0.z-cam.tz)*k;}cam.dist=nd;},{passive:false});
   let pClip=null,pClipN=0;
   const setTool=k=>{mode=k;tab='build';draw();toast({sel:'Chọn',area:'Chọn vùng',build:'Đặt khối',erase:'Xóa khối',paint:'Tô',pick:'Hút'}[k]);};
-  addEventListener('keydown',e=>{if($('#v3d').style.display==='none')return;const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(document.querySelector('div[style*="z-index:200"]'))return;
+  addEventListener('keydown',e=>{if($('#v3d').style.display==='none')return;const t=e.target;if(t&&((t.tagName==='INPUT'&&!/^(range|checkbox|radio|button)$/.test(t.type))||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(document.querySelector('div[style*="z-index:200"]'))return;
     const k=e.key,K=k.length===1?k.toLowerCase():k,ctrl=e.ctrlKey||e.metaKey,p=selProp();
     if(mode==='sel'&&!p&&selV.size&&!(e.altKey)){
       if(ctrl&&(K==='c'||K==='x')){selToClip(K==='x');e.preventDefault();return;}
