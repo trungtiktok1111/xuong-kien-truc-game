@@ -1,0 +1,20 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+    pg=b.new_page(viewport={'width':1500,'height':900});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(1000)
+    pg.evaluate("[...document.querySelectorAll('.tabbtn')].find(b=>b.dataset.v==='3d').click()");pg.wait_for_timeout(1200)
+    pg.evaluate("[...document.querySelectorAll('#pn3 .ptab')].find(b=>b.textContent.includes('Mẫu')).click();[...document.querySelectorAll('#pn3 button')].find(b=>b.textContent.includes('Xóa hết')).click()");pg.wait_for_timeout(400)
+    pg.evaluate("[...document.querySelectorAll('button')].filter(b=>b.textContent==='Đồng ý').forEach(b=>b.click())")
+    pg.evaluate("c=>Object.assign(window.__e3.cam,c)",{'az':0.5,'el':0.9,'dist':30,'tx':24,'ty':0,'tz':24});pg.wait_for_timeout(500)
+    cnt=lambda:pg.evaluate("document.querySelector('#cnt3').textContent")
+    pg.keyboard.press('Digit2');pg.keyboard.press('KeyT');pg.wait_for_timeout(400)
+    pg.screenshot(path='/home/claude/town/ux2a.png')
+    bt=pg.query_selector_all('#v3d div[style*="150px"] button')
+    print(len(bt))
+    bt[0].click();pg.wait_for_timeout(200)
+    pg.mouse.move(300,500);pg.mouse.down();pg.mouse.move(500,430,steps=20);pg.mouse.up();pg.wait_for_timeout(300);print('dir0',cnt())
+    bt[2].click();bt[2].click() if False else None
+    pg.keyboard.press('Digit3');bt[2].click();pg.mouse.move(300,700);pg.mouse.down();pg.mouse.move(310,560,steps=20);pg.mouse.up();pg.wait_for_timeout(300);print('dir2',cnt())
+    bt[8].click();pg.keyboard.press('Digit4');pg.mouse.move(700,600);pg.mouse.down();pg.mouse.move(700,500,steps=20);pg.mouse.up();pg.wait_for_timeout(300);print('up',cnt())
+    pg.screenshot(path='/home/claude/town/ux2b.png');print(errs);b.close()
