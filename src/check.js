@@ -73,7 +73,7 @@ export function check3D(d){
         rep('F4','Đích',goals);rep('F5','Quái',en);rep('F6','NPC/rương',E.filter(e=>e.t==='npc'||e.t==='chest'));
       }else out.push(R('F4','not_assessed','Chưa kiểm đường tới đích','cần điểm xuất phát hợp lệ'));
     }else out.push(R('F4','not_assessed','Chưa kiểm đường tới đích','chưa có điểm xuất phát'));
-    const bad=E.filter(e=>e.x<0||e.z<0||e.x>=24||e.z>=24||e.y<0||e.y>=24);out.push(bad.length?R('F8','broken','Có đối tượng nằm ngoài khối 24×24×24'):R('F8','pass','Mọi đối tượng nằm trong vùng dựng'));
+    const bad=E.filter(e=>e.x<0||e.z<0||e.x>=48||e.z>=48||e.y<0||e.y>=24);out.push(bad.length?R('F8','broken','Có đối tượng nằm ngoài khối 24×24×24'):R('F8','pass','Mọi đối tượng nằm trong vùng dựng'));
   }
   logicRows(out,cf,E);
   paramRows(out,cf,['hp','spd','jump','dmg','rng']);

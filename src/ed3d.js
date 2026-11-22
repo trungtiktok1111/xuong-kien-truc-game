@@ -5,7 +5,8 @@ import {logicTab,entExtra} from './logic.js';
 import {parseGLB,scanZip,b64} from './models3d.js';
 import {OT3,COLS,defCfg3,newEnt3,entModel} from './ents3d.js';
 import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,ask,askText,yes,zipBrowser,slotsUI,exportGame} from './util.js';
-const GX=24,GZ=24,GY=24;
+const GX=48,GZ=48,GY=24;
+import {makeTpl} from './tpl3d.js';
 const SHAPES=[['cube','Khối'],['slab','Tấm nửa'],['wedge','Mái dốc'],['pillar','Cột'],['panel','Vách mỏng'],['stairs','Cầu thang'],['arch','Cổng vòm'],['window','Khung cửa sổ'],['rail','Lan can'],['curve','Mái cong']];
 // ===== vật liệu =====
 function rng(s){let a=s;return()=>{a=(a*1664525+1013904223)%4294967296;return a/4294967296;};}
@@ -215,6 +216,7 @@ export function init3D(root){
     'Tháp 3 tầng':()=>{fillBox(5,0,5,15,0,15,'slab',2);let y=1;for(let f=0;f<3;f++){const s=f;const a=7+s,b=13-s;hollow(a,y,a,b,y+2,b,f===0?3:7);for(const [x,z] of [[a,a],[b,a],[a,b],[b,b]])fillBox(x,y,z,x,y+2,z,'pillar',1);
         for(let x=a+1;x<=b-1;x+=2)setV(x,y+1,a,'panel',8,2,true);roofRing(a-1,a-1,b+1,b+1,y+3,4);y+=4;}roofRing(9,9,11,11,y-1,4);fillBox(10,y,10,10,y+2,10,'pillar',14);},
   };
+  Object.assign(TPL,makeTpl({setV,delV,fillBox,hollow,roofRing}));
   // ===== xuất =====
   function boundsInfo(){const b=new THREE.Box3();for(const me of meshes.values())b.expandByObject(me);for(const g of pMesh.values())b.expandByObject(g);return b;}
   function expGLB(){if(!V.size&&!props.length)return toast('Chưa có khối nào');const groups=new Map();const root=new THREE.Group();
@@ -394,6 +396,6 @@ export function init3D(root){
   }
   (async()=>{LIB=(await idbGet('m3d_index'))||[];for(const c of ((await idbGet('thk_cmats3d'))||lsGet('thk_cmats',[])))await addCustomMat(c.n,c.url,true);const sv=lsGet('thk_proj3d',null);if(sv&&(Array.isArray(sv)?sv.length:(sv.v&&sv.v.length)))load(sv);else{TPL['Đình tứ trụ (võ hiệp)']();refreshVis();}syncEnts();syncProps();draw();})();
   draw();
-  const api={show(){run=true;loop();},hide(){run=false;},gameData:()=>{const used=[...new Set(props.map(p=>p.m))],pm={},pt={};for(const id of used){const b=BYTES.get(id);if(b){pm[id]={glb:b64(b.u8),pack:b.pack};pt[b.pack]=b.tex;}}return {kind:'3d',voxels:snapV(),ents:JSON.parse(JSON.stringify(ents)),cfg:Object.assign({},cfg),cmats:MATS.slice(BASE_N).map(m=>({n:m.n,url:m.url})),props:JSON.parse(JSON.stringify(props)),pmodels:pm,ptex:pt};},_t:{setV,clearAll,refreshVis,exp:expGLB}};
+  const api={cam,show(){run=true;loop();},hide(){run=false;},gameData:()=>{const used=[...new Set(props.map(p=>p.m))],pm={},pt={};for(const id of used){const b=BYTES.get(id);if(b){pm[id]={glb:b64(b.u8),pack:b.pack};pt[b.pack]=b.tex;}}return {kind:'3d',voxels:snapV(),ents:JSON.parse(JSON.stringify(ents)),cfg:Object.assign({},cfg),cmats:MATS.slice(BASE_N).map(m=>({n:m.n,url:m.url})),props:JSON.parse(JSON.stringify(props)),pmodels:pm,ptex:pt};},_t:{setV,clearAll,refreshVis,exp:expGLB}};
   return api;
 }
