@@ -110,6 +110,24 @@ export function init2D(root,A){
     return n;}
   function clearSel(all){if(!sel)return;pushUndo();const x0=Math.min(sel.x0,sel.x1),y0=Math.min(sel.y0,sel.y1),x1=Math.max(sel.x0,sel.x1),y1=Math.max(sel.y0,sel.y1);
     for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){if(all)for(let l=0;l<5;l++)put(x,y,0,l);else put(x,y,0);}after();}
+  // ===== thao tác nhanh trên vùng đang chọn (như bên 3D) =====
+  function grabR(r){const g=l=>{const a=[];for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)a.push(get(r.x0+i,r.y0+j,l));return a;};return {L:[0,1,2,3,4].map(g),E:M.ents.filter(e=>e.t!=='start'&&e.x>=r.x0&&e.x<=r.x1&&e.y>=r.y0&&e.y<=r.y1)};}
+  function clearR(r){for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)for(let l=0;l<5;l++)put(r.x0+i,r.y0+j,0,l);}
+  function putR(g,r,nx,ny,onlySet){for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)for(let l=0;l<5;l++){const v=g.L[l][j*r.w+i];if(!onlySet||v)put(nx+i,ny+j,v,l);}}
+  function selMove(dx,dy){const r=selRect();if(!r)return;const nx=r.x0+dx,ny=r.y0+dy;if(nx<0||ny<0||nx+r.w>M.w||ny+r.h>M.h){toast('Chạm mép bản đồ');return;}
+    pushUndo();const g=grabR(r);clearR(r);putR(g,r,nx,ny);for(const e of g.E){e.x+=dx;e.y+=dy;}sel={x0:nx,y0:ny,x1:nx+r.w-1,y1:ny+r.h-1};after();ui.sel&&ui.sel();}
+  function selDup(){const r=selRect();if(!r)return;let nx=r.x0+r.w,ny=r.y0;if(nx+r.w>M.w){nx=r.x0;ny=r.y0+r.h;}if(ny+r.h>M.h){toast('Không còn chỗ để nhân bản');return;}
+    pushUndo();const g=grabR(r);putR(g,r,nx,ny,true);for(const e of g.E){const c=JSON.parse(JSON.stringify(e));c.id=newId();c.x=nx+(e.x-r.x0);c.y=ny+(e.y-r.y0);M.ents.push(c);}
+    sel={x0:nx,y0:ny,x1:nx+r.w-1,y1:ny+r.h-1};after();ui.sel&&ui.sel();toast('Đã nhân bản — bản sao đang được chọn');}
+  function selFlip(){const r=selRect();if(!r)return;pushUndo();const g=grabR(r);
+    for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)for(let l=0;l<5;l++){let v=g.L[l][j*r.w+(r.w-1-i)];if(v&&l<4){const d=dec(v);v=enc(d.sid,d.idx,d.f^1);}put(r.x0+i,r.y0+j,v,l);}
+    for(const e of g.E)e.x=r.x0+(r.x1-e.x);after();toast('Đã lật ngang vùng chọn');}
+  function selCluster(c0){if(!c0||!inb(c0.x,c0.y))return;const has=(x,y)=>inb(x,y)&&(M.layers[1][y*M.w+x]||M.layers[2][y*M.w+x]||M.layers[3][y*M.w+x]||M.blk[y*M.w+x]||M.ents.some(e=>e.x===x&&e.y===y));
+    if(!has(c0.x,c0.y)){toast('Ô này trống — trỏ vào công trình rồi nhấn Enter');return;}
+    const seen=new Set([c0.x+','+c0.y]),st=[[c0.x,c0.y]];let x0=c0.x,x1=c0.x,y0=c0.y,y1=c0.y;
+    while(st.length&&seen.size<5000){const [a,b]=st.pop();for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const x=a+dx,y=b+dy,k=x+','+y;if(seen.has(k)||!has(x,y))continue;seen.add(k);st.push([x,y]);x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}}
+    sel={x0,y0,x1,y1};tool='select';ui.tools&&ui.tools();ui.sel&&ui.sel();dirty=true;toast('Đã chọn cả cụm '+(x1-x0+1)+'×'+(y1-y0+1)+' ô');}
+  function selFocus(){const r=selRect();if(!r)return;const W=cv.clientWidth,H=cv.clientHeight;view.z=Math.max(.6,Math.min(16,Math.min(W/(r.w*CELL+4*CELL),H/(r.h*CELL+4*CELL))));view.x=W/2-(r.x0+r.w/2)*CELL*view.z;view.y=H/2-(r.y0+r.h/2)*CELL*view.z;dirty=true;}
   // ===== con trỏ =====
   const P=new Map();let drag=null,gest=null;
   const cellAt=(px,py)=>({x:Math.floor((px-view.x)/(CELL*view.z)),y:Math.floor((py-view.y)/(CELL*view.z))});
@@ -132,6 +150,7 @@ export function init2D(root,A){
     if(drag.pan){view.x=drag.vx+p.x-drag.x;view.y=drag.vy+p.y-drag.y;dirty=true;return;}
     if(drag.rect){drag.rect.x1=c.x;drag.rect.y1=c.y;dirty=true;return;}
     if(drag.ent){const q=selEnt();if(q&&inb(c.x,c.y)&&(q.x!==c.x||q.y!==c.y)){q.x=c.x;q.y=c.y;dirty=true;}return;}
+    if(e.shiftKey&&tool==='draw'&&drag.sx!=null&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;const dx=c.x-drag.sx,dy=c.y-drag.sy,hz=Math.abs(dx)>=Math.abs(dy),sw=Math.max(1,stamp.w),sh=Math.max(1,stamp.h);const n=hz?Math.floor(Math.abs(dx)/sw):Math.floor(Math.abs(dy)/sh);for(let q=0;q<=n;q++)paste(drag.sx+(hz?Math.sign(dx||1)*q*sw:0),drag.sy+(hz?0:Math.sign(dy||1)*q*sh));after();return;}
     if(drag.last&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;if(tool==='draw'){if(stamp.w===1&&stamp.h===1||((c.x-drag.sx)%stamp.w===0&&(c.y-drag.sy)%stamp.h===0))paste(c.x,c.y);}else if(tool==='erase')erase(c.x,c.y);after();}});
   const end=e=>{P.delete(e.pointerId);if(P.size<2)gest=null;if(!drag)return;
     if(drag.paste){const o=pOrg();if(o&&e.type!=='pointercancel'){pushUndo();const n=pasteClip(o.x,o.y);after();toast('Đã dán'+(n?' + '+n+' đối tượng':''));}drag=null;dirty=true;return;}
@@ -147,6 +166,11 @@ export function init2D(root,A){
     const k=(e.key||'').toLowerCase(),m=e.ctrlKey||e.metaKey;
     if(m&&k==='z'){(e.shiftKey?doRedo:doUndo)();toast(e.shiftKey?'Làm lại':'Hoàn tác');e.preventDefault();}
     else if(m&&k==='y'){doRedo();e.preventDefault();}
+    else if(sel&&m&&k==='d'){selDup();e.preventDefault();}
+    else if(sel&&!m&&k.startsWith('arrow')){const n=e.shiftKey?5:1;selMove(k==='arrowleft'?-n:k==='arrowright'?n:0,k==='arrowup'?-n:k==='arrowdown'?n:0);e.preventDefault();}
+    else if(sel&&!m&&k==='h'){selFlip();e.preventDefault();}
+    else if(sel&&!m&&k==='f'){selFocus();e.preventDefault();}
+    else if(!m&&k==='enter'){selCluster(hov||(sel&&{x:sel.x0,y:sel.y0}));e.preventDefault();}
     else if(m&&k==='c'&&sel){copyArea(false);e.preventDefault();}
     else if(m&&k==='x'&&sel){copyArea(true);e.preventDefault();}
     else if(m&&k==='v'&&clip){tool='paste';draw();e.preventDefault();}
@@ -179,7 +203,7 @@ export function init2D(root,A){
           box.append(el('div',{class:'row'},el('label',{style:'font-size:13px'},c1,' Kèm quái/NPC/rương'),el('label',{style:'font-size:13px'},c2,' Kèm vùng chặn')));}
         if(clip)box.append(el('div',{class:'row'},el('span',{class:'lbl'},'📌 Đang giữ: '+clip.w+'×'+clip.h+' ô'+(clip.ents.length?' + '+clip.ents.length+' đối tượng':'')+' · '),tool==='paste'?btn('✔ Xong dán',()=>{tool='select';draw();},'on'):btn('📥 Dán',startPaste),btn('🖌 Vẽ bằng nó',()=>{tool='draw';draw();})));
         if(tool==='paste')box.append(el('div',{class:'hint'},clip?'Chạm/kéo để đặt (tâm vùng dán theo ngón tay), nhả ra là dán. Dán được nhiều lần. Esc hoặc "Xong dán" để thoát.':'Chưa có gì để dán — dùng "Chọn vùng" rồi "Sao chép" trước.'));
-        if(tool==='select')box.append(el('div',{class:'hint'},'Phím tắt: Ctrl+C sao chép · Ctrl+X cắt · Ctrl+V dán · Ctrl+A chọn tất cả · Delete xóa · Esc bỏ chọn.'));
+        if(tool==='select')box.append(el('div',{class:'hint'},'Phím tắt: ←↑↓→ di chuyển (Shift = 5 ô) · Ctrl+D nhân bản · H lật ngang · F phóng tới vùng · Enter chọn cả cụm công trình (trỏ chuột vào nó) · Ctrl+C/X/V · Ctrl+A · Delete · Esc · Ctrl+Z hoàn tác. Chế độ Vẽ: giữ Shift + kéo để đặt thành hàng.'));
         body.append(box);}
       const row=el('div',{class:'row'},el('span',{class:'lbl'},'Stamp: '),el('canvas',{class:'stampc'}),btn('↔ Lật ngang',flipStamp),btn(act===4?'(Vùng chặn: vẽ = chặn, xóa = mở)':'',()=>{},'ghost'));body.append(row);ui.stamp();
       body.append(el('div',{class:'hint'},'Mẹo: chọn ô trong tab Tileset (kéo để chọn nhiều ô liền nhau thành một stamp). Kéo 2 ngón để phóng/thu và di chuyển bản đồ. Dùng "Chọn vùng" → "Lấy làm stamp" để sao chép cả ngôi nhà.'));}
