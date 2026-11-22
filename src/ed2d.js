@@ -145,7 +145,9 @@ export function init2D(root,A){
   if(window.__kb2d)document.removeEventListener('keydown',window.__kb2d);
   window.__kb2d=e=>{const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(!M||!cv.offsetParent)return;
     const k=(e.key||'').toLowerCase(),m=e.ctrlKey||e.metaKey;
-    if(m&&k==='c'&&sel){copyArea(false);e.preventDefault();}
+    if(m&&k==='z'){(e.shiftKey?doRedo:doUndo)();toast(e.shiftKey?'Làm lại':'Hoàn tác');e.preventDefault();}
+    else if(m&&k==='y'){doRedo();e.preventDefault();}
+    else if(m&&k==='c'&&sel){copyArea(false);e.preventDefault();}
     else if(m&&k==='x'&&sel){copyArea(true);e.preventDefault();}
     else if(m&&k==='v'&&clip){tool='paste';draw();e.preventDefault();}
     else if(m&&k==='a'){sel={x0:0,y0:0,x1:M.w-1,y1:M.h-1};tool='select';draw();dirty=true;e.preventDefault();}
