@@ -295,7 +295,7 @@ export function init2D(root,A){
   async function addSheetUrl(url,nm){const g=null;const tw=+(await ask(g?'App tự đoán: ô '+g.tw+' px, khe '+g.m+' px ('+g.cols+'×'+g.rows+' ô). Sai thì sửa số.\n\nKích thước mỗi ô (px)?':'Không đoán được. Kích thước mỗi ô (px)?',g?String(g.tw):'16'));if(!tw)return;const m=+(await ask('Khoảng cách giữa các ô (px)?',g?String(g.m):'0'))||0;const s={name:nm.slice(0,24),url,tw,margin:m};loadSheet(s).then(()=>{sheets.push(s);uniqNames(sheets);curSheet=sheets.length-1;after();draw();toast('Đã thêm tileset');});}
   function sheetUse(){const u=new Array(sheets.length).fill(0);for(const a of M.layers)for(const v of a)if(v){const d=dec(v);if(u[d.sid]!=null)u[d.sid]++;}
     for(const e of M.ents)if(e.tile&&u[e.tile.sid]!=null)u[e.tile.sid]++;const h=M.cfg&&M.cfg.hero;if(h&&u[h.sid]!=null)u[h.sid]++;return u;}
-  function deleteSheets(D){const map=[];let k=0;for(let i=0;i<sheets.length;i++)map.push(D.has(i)?-1:k++);const seen=new WeakSet();
+  function deleteSheets(D){TG.hashes=[];const map=[];let k=0;for(let i=0;i<sheets.length;i++)map.push(D.has(i)?-1:k++);const seen=new WeakSet();
     const fix=v=>{if(!v)return 0;const d=dec(v),n=map[d.sid];if(n==null)return v;return n<0?0:enc(n,d.idx,d.f);};
     const fixA=a=>{if(!a||seen.has(a))return;seen.add(a);for(let i=0;i<a.length;i++)a[i]=fix(a[i]);};
     const fixT=(e,t)=>{if(!e.tile)return;const n=map[e.tile.sid];if(n==null)return;if(n<0)e.tile=e.t==='enemy'?{sid:2,idx:108}:e.t==='npc'?{sid:2,idx:96}:null;else e.tile={sid:n,idx:e.tile.idx};};
@@ -304,7 +304,7 @@ export function init2D(root,A){
     fixS(stamp);if(clip){clip.layers.forEach(fixA);clip.ents.forEach(fixT);}lib.forEach(fixS);lsSet('thk_stamps',lib);
     undo=[];redo=[];[...D].sort((a,b)=>b-a).forEach(i=>sheets.splice(i,1));curSheet=0;if(!stamp.tiles||!stamp.tiles.length)stamp={w:1,h:1,multi:false,tiles:[enc(0,5)]};
     after();}
-  async function wipeAll(){if(!await yes('XOÁ TẤT CẢ tài nguyên?\n\nGồm mọi tileset (kể cả 4 tileset gốc), nhãn, và xoá sạch hình đã vẽ trên bản đồ.\nĐối tượng và bộ hoạt ảnh dùng các hình này sẽ mất hình.\nKhông hoàn tác được.'))return;pushUndo();for(const a of M.layers)a.fill(0);const D=new Set();for(let i=4;i<sheets.length;i++)D.add(i);if(D.size)deleteSheets(D);for(let i=0;i<4;i++)HID.add(i);lsSet('thk_hide2d',[...HID]);TG=Object.assign({sheets:{},tiles:{},fav:[],recent:[]});tgSave();curSheet=0;after&&after();draw();toast('Đã xoá tất cả tài nguyên. Bạn có thể tải lại.');}
+  async function wipeAll(){if(!await yes('XOÁ TẤT CẢ tài nguyên?\n\nGồm mọi tileset (kể cả 4 tileset gốc), nhãn, và xoá sạch hình đã vẽ trên bản đồ.\nĐối tượng và bộ hoạt ảnh dùng các hình này sẽ mất hình.\nKhông hoàn tác được.'))return;pushUndo();for(const a of M.layers)a.fill(0);const D=new Set();for(let i=4;i<sheets.length;i++)D.add(i);if(D.size)deleteSheets(D);for(let i=0;i<4;i++)HID.add(i);lsSet('thk_hide2d',[...HID]);TG=Object.assign({sheets:{},tiles:{},fav:[],recent:[],hashes:[]});tgSave();curSheet=0;after&&after();draw();toast('Đã xoá tất cả tài nguyên. Bạn có thể tải lại.');}
   function manageSheets(){const custom=sheets.map((s,i)=>i).filter(i=>!HID.has(i));if(!custom.length&&!HID.size){toast('Không có tileset nào');return;}
     const ov=el('div',{style:'position:fixed;inset:0;z-index:200;background:#000b;display:flex;align-items:center;justify-content:center;padding:12px'});
     const box=el('div',{style:'background:#1b2733;border:1px solid #4a6178;border-radius:14px;padding:14px;max-width:640px;width:100%;max-height:92vh;display:flex;flex-direction:column;color:#fff;font:14px system-ui'});
@@ -404,14 +404,15 @@ export function init2D(root,A){
     else body.append(el('div',{class:'hint'},'Nhãn đã được app tự đoán (ô đặc kín → Nền, còn lại → Vật thể; loại theo tên tileset; nút 🪄 tinh chỉnh theo cách bạn đã vẽ). Bấm 1 ô để chọn vẽ ngay (nếu ô có nhãn lớp, app tự chuyển sang lớp đó). Muốn gắn nhãn: bật "Chọn nhiều", chọn các ô rồi bấm nhãn. Nhãn mặc định có thể gắn cho cả tileset khi đang lọc 1 tileset.'));
     if(S.focus){S.focus=false;q.focus();q.setSelectionRange(q.value.length,q.value.length);}}
   /* NẠP NGUYÊN HÌNH: không hỏi cỡ ô. Mỗi vật (mảng ảnh liền nhau) thành 1 ô 128×128, thu nhỏ vừa khung nếu to hơn, không bao giờ cắt */
-  async function addWhole(items){if(!items.length)return;const T=128,CAP=256,COLS=16;let sheetsMade=0,objs=0,cur=null,cnt=0,base=(items.length===1?items[0].name.replace(/\.\w+$/,''):'Hinh').slice(0,16);
+  async function addWhole(items){if(!items.length)return;const T=128,CAP=256,COLS=16;const HS=new Set(TG.hashes||[]);let dupI=0,dupO=0;const fnv=(d,n)=>{let h=2166136261>>>0;for(let i=0;i<n;i++){h^=d[i];h=Math.imul(h,16777619)>>>0;}return h.toString(36);};const fnvS=t=>{let h=2166136261>>>0;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h.toString(36)+t.length.toString(36);};
+    let sheetsMade=0,objs=0,cur=null,cnt=0,base=(items.length===1?items[0].name.replace(/\.\w+$/,''):'Hinh').slice(0,16);
     const flush=async()=>{if(!cur||!cnt)return;const s={name:(base+'-'+(++sheetsMade)).slice(0,24),url:cur.c.toDataURL('image/png'),tw:T,margin:0};await loadSheet(s);sheets.push(s);uniqNames(sheets);cur=null;cnt=0;};
     const put=(src,sx,sy,sw,sh)=>{if(!cur||cnt>=CAP){return flush().then(()=>{const c=document.createElement('canvas');c.width=COLS*T;c.height=Math.ceil(CAP/COLS)*T;cur={c,g:c.getContext('2d')};cur.g.imageSmoothingQuality='high';return put(src,sx,sy,sw,sh);});}
       const k=Math.min(1,(T-4)/sw,(T-4)/sh),w=Math.max(1,Math.round(sw*k)),h=Math.max(1,Math.round(sh*k)),ox=(cnt%COLS)*T+Math.floor((T-w)/2),oy=Math.floor(cnt/COLS)*T+T-2-h;cur.g.drawImage(src,sx,sy,sw,sh,ox,oy,w,h);cnt++;objs++;};
     let i=0;for(const it of items){i++;if(i%10===1)toast('Đang xử lý ảnh '+i+'/'+items.length+'…');
-      let bm;try{const im=new Image();await new Promise((ok,no)=>{im.onload=ok;im.onerror=no;im.src=it.url;});bm=im;}catch(e){continue;}
-      const W=bm.naturalWidth,H=bm.naturalHeight;let boxes=[[0,0,W,H]];
-      if(W>T||H>T){try{const B=4,gw=Math.ceil(W/B),gh=Math.ceil(H/B),c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(bm,0,0);const d=g.getImageData(0,0,W,H).data;
+      const ih='i'+fnvS(it.url);if(HS.has(ih)){dupI++;continue;}HS.add(ih);let bm;try{const im=new Image();await new Promise((ok,no)=>{im.onload=ok;im.onerror=no;im.src=it.url;});bm=im;}catch(e){continue;}
+      const W=bm.naturalWidth,H=bm.naturalHeight;let boxes=[[0,0,W,H]];const c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(bm,0,0);
+      if(W>T||H>T){try{const B=4,gw=Math.ceil(W/B),gh=Math.ceil(H/B);const d=g.getImageData(0,0,W,H).data;
         const occ=new Uint8Array(gw*gh);let tr=0;for(let y=0;y<H;y++)for(let x=0;x<W;x++){const a=d[(y*W+x)*4+3];if(a<250)tr++;if(a>16)occ[Math.floor(y/B)*gw+Math.floor(x/B)]=1;}
         if(tr>W*H*0.02){const G=2,dil=new Uint8Array(gw*gh);for(let y=0;y<gh;y++)for(let x=0;x<gw;x++)if(occ[y*gw+x])for(let yy=Math.max(0,y-G);yy<=Math.min(gh-1,y+G);yy++)for(let xx=Math.max(0,x-G);xx<=Math.min(gw-1,x+G);xx++)dil[yy*gw+xx]=1;
           const lab=new Int32Array(gw*gh),bb=[];let L=0;for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){if(!dil[y*gw+x]||lab[y*gw+x])continue;L++;const st=[[x,y]];lab[y*gw+x]=L;let x0=1e9,y0=1e9,x1=-1,y1=-1;
@@ -420,8 +421,8 @@ export function init2D(root,A){
             if(x1>=0)bb.push([x0*B,y0*B,Math.min(W,(x1+1)*B),Math.min(H,(y1+1)*B)]);}
           let ch=true;while(ch){ch=false;for(let a=0;a<bb.length&&!ch;a++)for(let b=a+1;b<bb.length;b++){const p=bb[a],q=bb[b];if(p[0]<q[2]&&q[0]<p[2]&&p[1]<q[3]&&q[1]<p[3]){bb[a]=[Math.min(p[0],q[0]),Math.min(p[1],q[1]),Math.max(p[2],q[2]),Math.max(p[3],q[3])];bb.splice(b,1);ch=true;break;}}}
           const ok=bb.filter(b=>(b[2]-b[0])>=8&&(b[3]-b[1])>=8);if(ok.length&&ok.length<=80)boxes=ok.sort((p,q)=>(p[1]-q[1])||(p[0]-q[0]));}}catch(e){}}
-      for(const b of boxes)await put(bm,b[0],b[1],b[2]-b[0],b[3]-b[1]);}
-    await flush();after();draw();curSheet=sheets.length-1;toast('Đã nạp '+items.length+' ảnh → '+objs+' vật, '+sheetsMade+' tileset (mỗi vật 1 ô, không bị cắt)');}
+      for(const b of boxes){const bw=b[2]-b[0],bh=b[3]-b[1];let oh='';try{const dd=g.getImageData(b[0],b[1],bw,bh).data;oh='o'+fnv(dd,dd.length)+'-'+bw+'x'+bh;}catch(e){}if(oh&&HS.has(oh)){dupO++;continue;}if(oh)HS.add(oh);await put(bm,b[0],b[1],bw,bh);}}
+    await flush();TG.hashes=[...HS].slice(-60000);tgSave();after();draw();curSheet=sheets.length-1;toast('Đã nạp '+objs+' vật mới ('+sheetsMade+' tileset). Bỏ '+dupI+' ảnh trùng + '+dupO+' vật trùng.');}
   async function addMany(items){if(!items.length)return;if(items.length>40&&!(await yes('Thêm '+items.length+' ảnh làm tileset? Nhiều ảnh có thể làm đầy bộ nhớ tự lưu của trình duyệt.')))return;
     const g=await guessTile(items[0].url);const tw=+(await ask((g?'Ảnh đầu tiên: app đoán ô '+g.tw+' px, khe '+g.m+' px. ':'')+'Kích thước mỗi ô (px) — áp dụng cho cả '+items.length+' ảnh?',g?String(g.tw):'16'));if(!tw)return;const m=+(await ask('Khoảng cách giữa các ô (px)?',g?String(g.m):'0'))||0;let first=-1,n=0;
     for(const it of items){const s={name:it.name.replace(/\.\w+$/,'').slice(0,24),url:it.url,tw,margin:m};await loadSheet(s);sheets.push(s);uniqNames(sheets);if(first<0)first=sheets.length-1;n++;}
