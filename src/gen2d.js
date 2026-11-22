@@ -8,17 +8,28 @@ const KINDS={
   wild:{name:'Đồng hoang',houses:[0,2],trees:[8,14],props:[16,26],pond:0,paths:1}};
 export const GEN_KINDS=Object.fromEntries(Object.entries(KINDS).map(([k,v])=>[k,v.name]));
 
+const MC=new WeakMap();
+function meanCols(sh,em){let m=MC.get(sh.img);if(m)return m;const n=sh.cols*sh.rows;m=new Array(n);const c=document.createElement('canvas');c.width=sh.img.width;c.height=sh.img.height;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(sh.img,0,0);const D=g.getImageData(0,0,c.width,c.height).data,W=c.width,st=sh.tw+sh.margin,S=Math.max(1,Math.floor(sh.tw/8));
+  for(let i=0;i<n;i++){if(em&&em[i]!==2)continue;const r0=Math.floor(i/sh.cols),c0=i%sh.cols;let R=0,G=0,Bb=0,k=0;for(let y=0;y<sh.tw;y+=S)for(let x=0;x<sh.tw;x+=S){const o=((r0*st+y)*W+c0*st+x)*4;R+=D[o];G+=D[o+1];Bb+=D[o+2];k++;}m[i]=[R/k,G/k,Bb/k];}
+  MC.set(sh.img,m);return m;}
+/* phân loại nền theo màu thật của ảnh: cỏ / đất / cát / đá / nước */
+export function groundKind(c){const [r,g,b]=c,mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+  if(b>r+22&&b>=g-6)return 'nước';
+  if(mx-mn<30)return 'đá';
+  if(g>r+6&&g>=b+8)return 'cỏ';
+  if(r>150&&g>130&&b<r-45&&mx>170)return 'cát';
+  return 'đất';}
 export function scanPools(ctx){
   const {sheets,eff,emptyMap,visSh}=ctx;
   const P={ground:[],water:[],'Cây':[],'Nhà':[],'Đồ vật':[],'Trang trí':[]};
   for(const sid of visSh()){const sh=sheets[sid];if(!sh||!sh.img||sid<4)continue;
-    const em=sh.cols*sh.rows<=20000?emptyMap(sh):null,nm=norm(sh.name),N=Math.min(sh.cols*sh.rows,4000),big=sh.tw>=48;
+    const em=sh.cols*sh.rows<=20000?emptyMap(sh):null,N=Math.min(sh.cols*sh.rows,4000),big=sh.tw>=48;let mc=null;
     for(let idx=0;idx<N;idx++){if(em&&em[idx]===1)continue;const e=eff(sid,idx),opaque=em&&em[idx]===2;
-      if(opaque&&e.layer===0){
-        if(e.type==='Nước'||/nuoc|water/.test(nm))P.water.push({sid,idx});
-        else if(e.type==='Đường'||/\b(nen|ground|grass|dirt|floor|sand|cat|co)\b/.test(nm))P.ground.push({sid,idx});
+      if(opaque&&e.layer===0&&(!e.type||e.type==='Đường'||e.type==='Nước')){
+        if(!mc)mc=meanCols(sh,em);const col=mc[idx];if(!col)continue;const kind=e.type==='Nước'?'nước':groundKind(col);
+        if(kind==='nước')P.water.push({sid,idx,kind});else P.ground.push({sid,idx,kind});
         continue;}
-      const t=e.type;if(!t||!P[t]||t==='Nước')continue;if(e.layer===1)continue;
+      const t=e.type;if(!t||!P[t]||t==='Nước'||t==='Đường')continue;if(e.layer===1)continue;
       P[t].push({sid,idx,big,layer3:e.layer===3});}}
   return P;}
 
@@ -33,10 +44,15 @@ export function build(ctx,opt){
   const layers=[0,1,2,3].map(()=>new Array(W*H).fill(0)),blk=new Array(W*H).fill(0),occ=new Uint8Array(W*H),ents=[];
   const info={ground:P.ground.length,water:P.water.length,tree:P['Cây'].length,house:P['Nhà'].length,prop:P['Đồ vật'].length+P['Trang trí'].length,placed:{house:0,tree:0,prop:0}};
   /* nền */
-  if(!P.ground.length)return {error:'Chưa có tài nguyên NỀN. Nạp tileset nền của bạn (ô đặc kín, gắn nhãn Đường) ở tab 🔎 Tài nguyên trước.'};
-  const base=pick(P.ground,r);
-  const alt=P.ground.length>1?shuffle(P.ground.filter(g=>!(g.sid===base.sid&&g.idx===base.idx)),r).slice(0,2):[];
-  const pathT=alt[0]||null;
+  if(!P.ground.length)return {error:'Chưa tìm thấy ô NỀN. App cần ảnh nền đặc kín (không trong suốt): cỏ, đất, cát, đá… Hãy nạp ảnh nền của bạn (ảnh vuông nhỏ, nền đặc) rồi tạo lại.'};
+  const byK={};for(const g of P.ground)(byK[g.kind]=byK[g.kind]||[]).push(g);const kinds=Object.keys(byK);
+  const prefB=['cỏ','đất','cát','đá'].filter(k=>byK[k]),bk=prefB.length?pick(prefB,r):kinds[0];
+  const base=pick(byK[bk],r);
+  const sameK=shuffle(byK[bk].filter(g=>!(g.sid===base.sid&&g.idx===base.idx)),r);
+  const pk=['đất','cát','đá','cỏ'].filter(k=>byK[k]&&k!==bk);
+  const pathT=pk.length?pick(byK[pk[0]],r):(sameK[0]||null);
+  const alt=[pathT,sameK[0]||null];
+  info.kinds=kinds.join('/');
   for(let i=0;i<W*H;i++){const g=(alt[1]&&r()<.07)?alt[1]:base;layers[0][i]=enc(g.sid,g.idx);}
   /* đường */
   const cy=Math.floor(H/2),A=Math.max(2,Math.floor(H/8)),ph=r()*6.28,fr=5+r()*4;let pathCells=[];
