@@ -1,0 +1,17 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+    pg=b.new_page(viewport={'width':1500,'height':900});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(1000)
+    pg.evaluate("[...document.querySelectorAll('.tabbtn')].find(b=>b.dataset.v==='3d').click()");pg.wait_for_timeout(1500)
+    B=lambda t:pg.evaluate("t=>{const b=[...document.querySelectorAll('#pn3 button,#pn3 .tab,#pn3 *')].find(b=>b.textContent===t&&b.children.length==0);if(b)b.click();return !!b}",t)
+    print('tpl tab',pg.evaluate("[...document.querySelectorAll('#pn3 *')].filter(e=>e.dataset&&e.dataset.t).map(e=>e.dataset.t)"))
+    pg.evaluate("[...document.querySelectorAll('#pn3 [data-t=tpl]')][0].click()");pg.wait_for_timeout(300)
+    pg.screenshot(path='ux8a.png')
+    print(B('Giếng nước cổ'));pg.wait_for_timeout(300)
+    pg.mouse.move(700,500);pg.wait_for_timeout(300);pg.mouse.move(720,510);pg.wait_for_timeout(300)
+    pg.screenshot(path='ux8b.png')
+    pg.mouse.click(720,510);pg.wait_for_timeout(500)
+    pg.screenshot(path='ux8c.png')
+    pg.keyboard.press('Escape');pg.wait_for_timeout(200)
+    print(errs);b.close()
