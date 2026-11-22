@@ -13,10 +13,12 @@ export function play2D(o){
   document.body.append(ov);if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
   const AN=makeAnims(CF,sheets);
   const blocked=(x,y)=>x<0||y<0||x>=W||y>=H||!!M.blk[y*W+x];
-  function mk(top){const c=document.createElement('canvas');c.width=W*16;c.height=H*16;const g=c.getContext('2d');g.imageSmoothingEnabled=false;
+  let CQ=16;for(const sh of sheets)if(sh&&sh.img&&sh.tw>CQ)CQ=Math.min(48,sh.tw);
+  while(W*H*CQ*CQ>2.2e7&&CQ>16)CQ-=8;
+  function mk(top){const c=document.createElement('canvas');c.width=W*CQ;c.height=H*CQ;const g=c.getContext('2d');g.imageSmoothingEnabled=CQ>16;g.imageSmoothingQuality='high';const h2=CQ/2;
     const ls=top?[3]:[0,1,2];for(const l of ls){const a=M.layers[l];for(let i=0;i<a.length;i++){const v=a[i];if(!v)continue;const n=v-1,f=n&7,t=n>>3,sid=t>>12,idx=t&4095,sh=sheets[sid];if(!sh||!sh.img)continue;
-      const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin),dx=(i%W)*16,dy=Math.floor(i/W)*16;
-      if(!f)g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,16,16);else{g.save();g.translate(dx+8,dy+8);if(f&4){g.rotate(Math.PI/2);g.scale(1,-1);}if(f&1)g.scale(-1,1);if(f&2)g.scale(1,-1);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-8,-8,16,16);g.restore();}}}return c;}
+      const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin),dx=(i%W)*CQ,dy=Math.floor(i/W)*CQ;
+      if(!f)g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,CQ,CQ);else{g.save();g.translate(dx+h2,dy+h2);if(f&4){g.rotate(Math.PI/2);g.scale(1,-1);}if(f&1)g.scale(-1,1);if(f&2)g.scale(1,-1);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-h2,-h2,CQ,CQ);g.restore();}}}return c;}
   const base=mk(false),top=mk(true);
   function tile(sid,idx,x,y,s,flip){const sh=sheets[sid];if(!sh||!sh.img)return;const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin);
     if(flip){cx.save();cx.translate(x+s,y);cx.scale(-1,1);cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,0,0,s,s);cx.restore();}else cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,x,y,s,s);}
@@ -73,7 +75,7 @@ export function play2D(o){
   }
   function draw(){
     const w=cv.clientWidth,h=cv.clientHeight,dp=Math.min(devicePixelRatio||1,2);if(cv.width!==Math.round(w*dp)||cv.height!==Math.round(h*dp)){cv.width=Math.round(w*dp);cv.height=Math.round(h*dp);}
-    cx.setTransform(dp,0,0,dp,0,0);cx.imageSmoothingEnabled=false;cx.fillStyle='#10161d';cx.fillRect(0,0,w,h);
+    cx.setTransform(dp,0,0,dp,0,0);cx.imageSmoothingEnabled=CQ>16;cx.fillStyle='#10161d';cx.fillRect(0,0,w,h);
     const k=Math.max(2,Math.round(Math.min(w,h)/160)),s=16*k;let ox=w/2-P.x*s,oy=h/2-P.y*s;
     if(W*s<=w)ox=(w-W*s)/2;else ox=Math.min(0,Math.max(w-W*s,ox));if(H*s<=h)oy=(h-H*s)/2;else oy=Math.min(0,Math.max(h-H*s,oy));
     cx.drawImage(base,ox,oy,W*s,H*s);
