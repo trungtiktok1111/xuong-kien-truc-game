@@ -1,0 +1,16 @@
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'])
+    pg=b.new_page(viewport={'width':1500,'height':900});errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto('file:///home/claude/ed/index.html');pg.wait_for_timeout(1000)
+    pg.evaluate("[...document.querySelectorAll('.tabbtn')].find(b=>b.dataset.v==='3d').click()");pg.wait_for_timeout(1500)
+    pg.evaluate("[...document.querySelectorAll('#pn3 [data-t=build]')][0].click()")
+    pg.evaluate("[...document.querySelectorAll('#pn3 button')].find(b=>b.textContent.includes('Chọn')).click()");pg.wait_for_timeout(300)
+    pg.mouse.click(560,350);pg.wait_for_timeout(100);pg.mouse.click(560,350);pg.wait_for_timeout(500)
+    pg.screenshot(path='ux10a.png')
+    B=lambda t:pg.evaluate("t=>{const b=[...document.querySelectorAll('#pn3 button')].find(b=>b.textContent.includes(t));if(b)b.click();return !!b}",t)
+    pg.keyboard.press('Home');pg.wait_for_timeout(400);pg.screenshot(path='ux10p.png')
+    print(B('Xoay cả cụm'));pg.wait_for_timeout(500);pg.screenshot(path='ux10q.png');print(pg.evaluate("[...document.querySelectorAll('div')].filter(d=>d.className.includes('toast')).map(d=>d.textContent)"))
+    print(B('4 ô'),B('X+'));pg.wait_for_timeout(500)
+    pg.screenshot(path='ux10b.png')
+    print(pg.evaluate("document.querySelector('#cnt3').textContent"),errs);b.close()

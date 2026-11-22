@@ -157,7 +157,7 @@ export function init3D(root){
     if(mode==='area'){arClick(px,py);return;}
     if(mode==='stamp'){const t=pickAt(px,py);if(t&&clip3){pasteAt(t.cell);pasteGhost(t.cell);}return;}
     if(mode==='sel'){const id=propHit(px,py);if(id){selV.clear();updSelV();selP=id;updSelBox();draw();return;}
-      selP=null;updSelBox();const t=pickAt(px,py);if(t&&t.vox){const k=key(t.vox.x,t.vox.y,t.vox.z);if(shH){if(selV.has(k))selV.delete(k);else selV.add(k);}else{selV.clear();selV.add(k);}}else if(!shH)selV.clear();updSelV();draw();return;}
+      selP=null;updSelBox();const t=pickAt(px,py);if(t&&t.vox){const k=key(t.vox.x,t.vox.y,t.vox.z);const now=Date.now();if(lastSel.k===k&&now-lastSel.t<450&&!shH){selCluster(k);lastSel={k:'',t:0};updSelV();draw();return;}lastSel={k,t:now};if(shH){if(selV.has(k))selV.delete(k);else selV.add(k);}else{selV.clear();selV.add(k);}}else if(!shH)selV.clear();updSelV();draw();return;}
     if(mode==='prop'){if(pmode==='sel'){selP=propHit(px,py);updSelBox();draw();}else{const t=pickAt(px,py);if(t&&inb(...t.cell))placeProp(t.cell);}return;}const t=pickAt(px,py);if(!t)return;
     if(mode==='build'){const [x,y,z]=t.cell;if(!inb(x,y,z))return;pushUndo();setV(x,y,z,shape,matI,rot);if(hideUp&&y>level){level=y;syncLevel();}refreshVis();}
     else if(mode==='erase'&&t.vox){pushUndo();delV(t.vox.x,t.vox.y,t.vox.z);refreshVis();}
@@ -457,24 +457,35 @@ export function init3D(root){
     props=(props||[]).filter(q=>ids.has(q.id));load(sn);refreshVis();syncProps();return ok;}
   function pasteGhost(c){if(!clip3||!c){if(pgH)pgH.visible=false;return;}if(!pgH)pgH=mkBox(0xffd24a);setBox(pgH,c,clip3.size);}
   // ===== chọn & sửa khối đã xây =====
-  let selV=new Set(),selVH=null,shH=false;
+  let selV=new Set(),selVH=null,shH=false,lastSel={k:'',t:0},selStep=1;const GROUND=new Set([9,10,11,12]);
   addEventListener('keydown',e=>{if(e.key==='Shift')shH=true;});addEventListener('keyup',e=>{if(e.key==='Shift')shH=false;});addEventListener('blur',()=>{shH=false;});
   function updSelV(){if(!selVH)selVH=mkBox(0xffd24a);if(!selV.size){selVH.visible=false;return;}let lo=[1e9,1e9,1e9],hi=[-1e9,-1e9,-1e9];for(const k of selV){const c=k.split(',').map(Number);for(let i=0;i<3;i++){lo[i]=Math.min(lo[i],c[i]);hi[i]=Math.max(hi[i],c[i]);}}setBox(selVH,lo,[hi[0]-lo[0]+1,hi[1]-lo[1]+1,hi[2]-lo[2]+1]);}
   const selList=()=>[...selV].map(k=>{const c=k.split(',').map(Number);const v=V.get(k);return v?{c,v}:null;}).filter(Boolean);
   function selEdit(fn){const L=selList();if(!L.length)return;pushUndo();for(const o of L)fn(o);refreshVis();changed();updSelV();draw();}
   function selDel(){const L=selList();if(!L.length)return;pushUndo();for(const o of L)delV(o.c[0],o.c[1],o.c[2],true);selV.clear();updSelV();refreshVis();changed();draw();toast('Đã xóa '+L.length+' khối');}
-  function selMove(d){const L=selList();if(!L.length)return;for(const o of L){const x=o.c[0]+d[0],y=o.c[1]+d[1],z=o.c[2]+d[2];if(!inb(x,y,z)){toast('Chạm biên khung dựng');return;}}
+  function selCluster(k0){const v0=V.get(k0);if(!v0)return;const ground=GROUND.has(v0.m);const seen=new Set([k0]),q=[k0];
+    while(q.length){const k=q.pop();const [x,y,z]=k.split(',').map(Number);const RR=ground?1:2;for(let dx=-RR;dx<=RR;dx++)for(let dy=-RR;dy<=RR;dy++)for(let dz=-RR;dz<=RR;dz++){if(!dx&&!dy&&!dz)continue;const n=key(x+dx,y+dy,z+dz);if(seen.has(n))continue;const v=V.get(n);if(!v)continue;if(!ground&&GROUND.has(v.m))continue;seen.add(n);q.push(n);}}
+    selV=seen;toast('Đã chọn cả cụm: '+seen.size+' khối (bấm đúp vào khối bất kỳ của công trình)');}
+  function selRotG(){const L=selList();if(L.length<2){selEdit(o=>setV(o.c[0],o.c[1],o.c[2],o.v.s,o.v.m,(o.v.r+1)%4,true));return;}
+    let lo=[1e9,1e9,1e9];for(const o of L)for(let i=0;i<3;i++)lo[i]=Math.min(lo[i],o.c[i]);
+    const R=L.map(o=>({x:o.c[2]-lo[2],y:o.c[1],z:-(o.c[0]-lo[0]),v:o.v}));let mz=1e9;for(const o of R)mz=Math.min(mz,o.z);
+    const N=R.map(o=>({c:[lo[0]+o.x,o.y,lo[2]+o.z-mz],v:o.v}));
+    for(const o of N)if(!inb(o.c[0],o.c[1],o.c[2])){toast('Xoay sẽ vượt biên khung dựng — hãy dời công trình vào giữa trước');return;}
+    pushUndo();for(const o of L)delV(o.c[0],o.c[1],o.c[2],true);selV=new Set();for(const o of N){setV(o.c[0],o.c[1],o.c[2],o.v.s,o.v.m,(o.v.r+1)%4,true);selV.add(key(o.c[0],o.c[1],o.c[2]));}
+    refreshVis();changed();updSelV();draw();}
+  function selMove(d){d=d.map(a=>a*selStep);const L=selList();if(!L.length)return;for(const o of L){const x=o.c[0]+d[0],y=o.c[1]+d[1],z=o.c[2]+d[2];if(!inb(x,y,z)){toast('Chạm biên khung dựng');return;}}
     pushUndo();for(const o of L)delV(o.c[0],o.c[1],o.c[2],true);selV.clear();for(const o of L){const x=o.c[0]+d[0],y=o.c[1]+d[1],z=o.c[2]+d[2];setV(x,y,z,o.v.s,o.v.m,o.v.r,true);selV.add(key(x,y,z));}refreshVis();changed();updSelV();draw();}
   function selDup(){const L=selList();if(!L.length)return;let d=[1,0,0];for(const o of L)if(!inb(o.c[0]+1,o.c[1],o.c[2])){d=[0,0,1];break;}pushUndo();selV.clear();for(const o of L){const x=o.c[0]+d[0],y=o.c[1],z=o.c[2]+d[2];if(inb(x,y,z)){setV(x,y,z,o.v.s,o.v.m,o.v.r,true);selV.add(key(x,y,z));}}refreshVis();changed();updSelV();draw();toast('Đã nhân đôi (bản sao đang được chọn, dùng mũi tên để dời)');}
   function selPanel(){const d=el('div',{style:'border:1px solid #ffd24a;border-radius:10px;padding:8px;margin:6px 0'});
-    if(!selV.size){d.append(el('div',{class:'lbl'},'👆 Bấm vào khối đã xây để sửa nó.'),el('div',{class:'hint'},'Giữ Shift + bấm = chọn thêm nhiều khối · bấm chỗ trống hoặc Esc = bỏ chọn · bấm mô hình (cây, nhà…) để sửa mô hình.'));return d;}
+    if(!selV.size){d.append(el('div',{class:'lbl'},'👆 Bấm vào khối đã xây để sửa nó.'),el('div',{class:'hint'},'<b>Bấm đúp</b> vào khối = chọn cả căn nhà/công trình · Giữ Shift + bấm = chọn thêm khối · bấm chỗ trống hoặc Esc = bỏ chọn · bấm mô hình (cây, nhà…) để sửa mô hình.'));return d;}
     const L=selList();const f=L[0];const one=L.length===1;
     d.append(el('div',{class:'lbl'},one?'Đang chọn 1 khối: '+(SHAPES.find(a=>a[0]===f.v.s)||[0,f.v.s])[1]+' · '+(MATS[f.v.m]?MATS[f.v.m].n:'?')+' · vị trí '+f.c.join(','):'Đang chọn '+L.length+' khối'));
     d.append(el('div',{class:'row'},el('span',{class:'lbl'},'Hình:'),SHAPES.map(([k,n])=>el('button',{class:'shp'+(one&&f.v.s===k?' on':''),onclick:()=>selEdit(o=>setV(o.c[0],o.c[1],o.c[2],k,o.v.m,o.v.r,true))},shapeIcon(k,one&&f.v.s===k),el('div',{},n)))));
     const mg=el('div',{class:'matgrid'});MATS.forEach((m,i)=>mg.append(el('button',{class:'mat'+(one&&f.v.m===i?' on':''),onclick:()=>selEdit(o=>setV(o.c[0],o.c[1],o.c[2],o.v.s,i,o.v.r,true))},el('img',{src:m.url,class:'matimg'}),el('div',{},m.n))));d.append(mg);
-    d.append(el('div',{class:'row'},btn('⟳ Xoay',()=>selEdit(o=>setV(o.c[0],o.c[1],o.c[2],o.v.s,o.v.m,(o.v.r+1)%4,true))),btn('⧉ Nhân đôi',selDup),btn('🗑 Xóa (Delete)',selDel),btn('✖ Bỏ chọn',()=>{selV.clear();updSelV();draw();})));
+    d.append(el('div',{class:'row'},btn('🏠 Chọn cả cụm',()=>{const k=[...selV][0];selCluster(k);updSelV();draw();}),btn(L.length>1?'⟳ Xoay cả cụm 90°':'⟳ Xoay',selRotG),btn('⧉ Nhân đôi',selDup),btn('🗑 Xóa (Delete)',selDel),btn('✖ Bỏ chọn',()=>{selV.clear();updSelV();draw();})));
+    d.append(el('div',{class:'row'},el('span',{class:'lbl'},'Bước dời:'),[1,2,4,8].map(n=>btn(n+' ô',()=>{selStep=n;draw();},selStep===n?'on':''))));
     d.append(el('div',{class:'row'},el('span',{class:'lbl'},'Dời:'),btn('◀ X−',()=>selMove([-1,0,0])),btn('X+ ▶',()=>selMove([1,0,0])),btn('▼ Xuống',()=>selMove([0,-1,0])),btn('▲ Lên',()=>selMove([0,1,0])),btn('Z− ↑',()=>selMove([0,0,-1])),btn('Z+ ↓',()=>selMove([0,0,1]))));
-    d.append(el('div',{class:'hint'},'Bấm hình/chất liệu để đổi ngay. Dời 1 ô mỗi lần bấm. Ctrl+Z hoàn tác.'));return d;}
+    d.append(el('div',{class:'hint'},'Bấm hình/chất liệu để đổi ngay. Dời theo bước đã chọn. Ctrl+Z hoàn tác.'));return d;}
   function areaPanel(){const d=el('div',{style:'border:1px solid #35e0ff;border-radius:10px;padding:8px;margin:6px 0'});
     d.append(el('div',{class:'lbl'},ar?(arStep?'Đang chọn… chạm góc đối diện':'Vùng đang chọn: '+(ar.hi[0]-ar.lo[0]+1)+'×'+(ar.hi[1]-ar.lo[1]+1)+'×'+(ar.hi[2]-ar.lo[2]+1)+' ô ('+arCount()+' khối)'):'Chạm 2 góc đối diện để chọn vùng (mặt sàn hoặc khối). Chọn xong chỉnh độ cao bằng nút bên dưới.'));
     if(arDone()){const ch=(i,sgn,k)=>()=>{const v=ar[k][i]+sgn;if(v<0||v>=[GX,GY,GZ][i])return;ar[k][i]=v;if(ar.lo[i]>ar.hi[i]){ar[k][i]=v-sgn;return;}updAr();draw();};
