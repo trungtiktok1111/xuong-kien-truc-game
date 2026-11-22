@@ -178,7 +178,13 @@ export function init3D(root){
     if(stroke.line){if(Math.abs(b[0]-a[0])>=Math.abs(b[2]-a[2])){z1=z0;}else{x1=x0;}}
     else if(!stroke.box){x0=x1=b[0];z0=z1=b[2];}
     for(let x=Math.min(x0,x1);x<=Math.max(x0,x1);x++)for(let z=Math.min(z0,z1);z<=Math.max(z0,z1);z++)for(let h=0;h<brushH;h++)out.push([x,a[1]+h,z]);return out;}
-  function applyCells(cells){for(const [x,y,z] of cells){if(!inb(x,y,z))continue;
+  function bigGate(cells){let lo=[1e9,1e9,1e9],hi=[-1e9,-1e9,-1e9];for(const c of cells)for(let i=0;i<3;i++){lo[i]=Math.min(lo[i],c[i]);hi[i]=Math.max(hi[i],c[i]);}
+    const wx=hi[0]-lo[0]+1,wz=hi[2]-lo[2]+1,h=hi[1]-lo[1]+1,ax=wx>=wz?0:2,w=ax===0?wx:wz;if(w<3||h<3)return false;
+    const pw=w-2,R=pw/2,top=[];for(let i=0;i<pw;i++){const dx=i+.5-R;const rise=Math.sqrt(Math.max(0,R*R-dx*dx));top.push(Math.max(1,Math.min(h-1,Math.round((h-1-R)+rise))));}
+    let n=0;for(let a=0;a<w;a++)for(let t=0;t<(ax===0?wz:wx);t++)for(let y=0;y<h;y++){const x=ax===0?lo[0]+a:lo[0]+t,z=ax===0?lo[2]+t:lo[2]+a,yy=lo[1]+y;if(!inb(x,yy,z))continue;
+      const open=a>=1&&a<=w-2&&y<top[a-1];if(open){if(V.has(key(x,yy,z)))delV(x,yy,z,true);}else{setV(x,yy,z,'cube',matI,0,true);n++;}}
+    toast('Đã dựng 1 cổng vòm lớn '+w+'×'+h+' (lối đi rộng '+pw+')');return true;}
+  function applyCells(cells){if(mode==='build'&&shape==='arch'&&stroke&&(stroke.box||stroke.line)&&cells.length>2&&bigGate(cells))return;for(const [x,y,z] of cells){if(!inb(x,y,z))continue;
       if(mode==='build'){setV(x,y,z,shape,matI,rot,true);if(hideUp&&y>level){level=y;syncLevel();}}
       else if(mode==='erase'){if(V.has(key(x,y,z)))delV(x,y,z,true);}
       else if(mode==='paint'){const v=V.get(key(x,y,z));if(v)setV(x,y,z,v.s,matI,v.r,true);}}}
@@ -249,7 +255,7 @@ export function init3D(root){
     const mk=(t,f)=>{const x=document.createElement('button');x.textContent=t;x.style.cssText='width:24px;height:24px;border-radius:6px;border:0;background:#2e3e50;color:#fff;cursor:pointer';x.onclick=f;return x;};
     bh.append(document.createTextNode('Cao'),mk('−',()=>setBH(brushH-1)),document.createTextNode(brushH),mk('+',()=>setBH(brushH+1)));bh.title='Số khối xếp chồng lên mỗi lần đặt (phím + / −)';hbBar.append(bh);
     hbHint.innerHTML=hintTxt();}
-  function hintTxt(){if(mode==='build')return '<b>Đặt khối</b>: kéo chuột trái = đặt liên tục · <b>chuột phải</b> = xoá · Shift+kéo = đường ngang/dọc · <b>giữ C + kéo = đường chéo</b> · Ctrl+kéo = cả vùng · R xoay · Tab đổi hình · 1–9 chọn nhanh · Q/E hạ/nâng tầng · +/− chiều cao';
+  function hintTxt(){if(mode==='build')return '<b>Đặt khối</b>: kéo chuột trái = đặt liên tục · <b>chuột phải</b> = xoá · Shift+kéo = đường ngang/dọc · <b>giữ C + kéo = đường chéo</b> · Ctrl+kéo = cả vùng (hình <b>Cổng vòm</b> + Ctrl+kéo = 1 cổng lớn vừa khít vùng) · R xoay · Tab đổi hình · 1–9 chọn nhanh · Q/E hạ/nâng tầng · +/− chiều cao';
     if(mode==='erase')return '<b>Xoá</b>: kéo trái = xoá liên tục · Shift+kéo = xoá đường · C+kéo = xoá chéo · <b>Ctrl+kéo = xoá cả vùng</b> (ô Cao = số tầng xoá) · hoặc M chọn vùng rồi Delete';
     if(mode==='paint')return '<b>Tô màu</b>: kéo = tô liên tục · Shift/Ctrl+kéo = tô đường/vùng';
     if(mode==='stamp')return '<b>Đặt mẫu</b>: di chuột để chọn vị trí (khung vàng) · bấm = đặt 1 bản · <b>Shift+kéo = đặt thành hàng thẳng</b> · <b>Ctrl+kéo = đặt thành lưới</b> · Ctrl+Z hoàn tác · Esc = thoát';
