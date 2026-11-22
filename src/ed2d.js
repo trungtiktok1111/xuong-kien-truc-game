@@ -7,7 +7,7 @@ const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
 import {build,GEN_KINDS} from './gen2d.js';
 export function init2D(root,A){
-  const sheets=A.sheets.map(s=>Object.assign({},s));let curSheet=0,shZ='fit',shQ='';let HID=new Set(lsGet('thk_hide2d',[]));const visSh=()=>sheets.map((s,i)=>i).filter(i=>!HID.has(i));
+  const sheets=A.sheets.map(s=>Object.assign({},s));let curSheet=0,shZ='fit',shQ='';let HID=new Set([0,1,2,3,...lsGet('thk_hide2d',[])]);const visSh=()=>sheets.map((s,i)=>i).filter(i=>!HID.has(i));
   const loadSheet=s=>new Promise(r=>{const i=new Image();i.onload=()=>{s.img=i;s.cols=Math.floor((i.width+s.margin)/(s.tw+s.margin));s.rows=Math.floor((i.height+s.margin)/(s.tw+s.margin));r();};i.onerror=r;i.src=s.url;});
   let colMode=0,selId=null,objType='enemy',M=null,vis=[1,1,1,1,0],act=2,tool='draw',stamp={w:1,h:1,multi:false,tiles:[0]},sel=null,undo=[],redo=[],view={x:10,y:10,z:3},grid=true,hov=null,dirty=true,lib=lsGet('thk_stamps',[]);
   const mc=document.createElement('canvas'),mx=mc.getContext('2d');let clip=null,inclEnt=true,inclBlk=true;
@@ -331,7 +331,7 @@ export function init2D(root,A){
       if(D0.size){for(const a of M.layers)for(let k=0;k<a.length;k++){const v=a[k];if(v&&D0.has(dec(v).sid))a[k]=0;}D0.forEach(i=>HID.add(i));lsSet('thk_hide2d',[...HID]);}
       if(D1.size)deleteSheets(D1);after&&after();toast('Đã xóa '+D.size+' tileset');ov.remove();draw();};
     box.append(el('div',{style:'font-size:16px;font-weight:800'},'🗑 Quản lý / xóa tileset (kể cả 4 tileset gốc)'),flt,
-      el('div',{class:'row',style:'margin-bottom:6px'},B('☑ Chọn tất cả (đang lọc)',()=>{visible().forEach(i=>chk.add(i));redraw();}),B('☑ Chọn tất cả chưa dùng',()=>{custom.forEach(i=>{if(sheets[i]&&!uses[i])chk.add(i);});redraw();}),B('☐ Bỏ chọn hết',()=>{chk.clear();redraw();}),B('☑ Chọn TOÀN BỘ',()=>{custom.forEach(i=>{if(sheets[i])chk.add(i);});redraw();}),HID.size?B('↩ Hiện lại tileset gốc',()=>{HID.clear();lsSet('thk_hide2d',[]);ov.remove();draw();toast('Đã hiện lại tileset gốc');}):null),
+      el('div',{class:'row',style:'margin-bottom:6px'},B('☑ Chọn tất cả (đang lọc)',()=>{visible().forEach(i=>chk.add(i));redraw();}),B('☑ Chọn tất cả chưa dùng',()=>{custom.forEach(i=>{if(sheets[i]&&!uses[i])chk.add(i);});redraw();}),B('☐ Bỏ chọn hết',()=>{chk.clear();redraw();}),B('☑ Chọn TOÀN BỘ',()=>{custom.forEach(i=>{if(sheets[i])chk.add(i);});redraw();}),HID.size?B('↩ Hiện lại tileset gốc',()=>{toast('Tileset gốc của app đã được gỡ');}):null),
       list,info,el('div',{class:'row'},B('🗑 Xóa các mục đã chọn',del,'background:#b3402f;color:#fff'),B('Đóng',done)));
     ov.append(box);document.body.append(ov);redraw();}
   // ===== Thư viện tài nguyên (nhãn) =====
@@ -491,6 +491,7 @@ export function init2D(root,A){
     if(!await yes('Tạo bối cảnh mới thay cho màn "'+(M.name||'')+'"?\n(Ctrl+Z hoàn tác được bản đồ; tileset mới tạo sẽ còn lại.)'))return;
     toast('Đang tạo bối cảnh…');await new Promise(r=>setTimeout(r,30));
     let R;try{R=build({sheets,eff,emptyMap,visSh,enc,newSid:sheets.length},{kind:k,w:z[0],h:z[1],goal:!!window.__gg});}catch(e){console.error(e);toast('Lỗi khi tạo: '+(e&&e.message||e));return;}
+    if(R.error){toast(R.error);return;}
     pushUndo();
     if(R.newSheet){const s={name:'Gen-'+Date.now().toString(36).slice(-4),url:R.newSheet.canvas.toDataURL('image/png'),tw:64,margin:0};await loadSheet(s);sheets.push(s);uniqNames(sheets);}
     M={name:M.name,w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:M.cfg};selId=null;after();fit();draw();

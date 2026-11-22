@@ -33,16 +33,17 @@ export function build(ctx,opt){
   const layers=[0,1,2,3].map(()=>new Array(W*H).fill(0)),blk=new Array(W*H).fill(0),occ=new Uint8Array(W*H),ents=[];
   const info={ground:P.ground.length,water:P.water.length,tree:P['Cây'].length,house:P['Nhà'].length,prop:P['Đồ vật'].length+P['Trang trí'].length,placed:{house:0,tree:0,prop:0}};
   /* nền */
-  const base=P.ground.length?pick(P.ground,r):{sid:0,idx:5};
+  if(!P.ground.length)return {error:'Chưa có tài nguyên NỀN. Nạp tileset nền của bạn (ô đặc kín, gắn nhãn Đường) ở tab 🔎 Tài nguyên trước.'};
+  const base=pick(P.ground,r);
   const alt=P.ground.length>1?shuffle(P.ground.filter(g=>!(g.sid===base.sid&&g.idx===base.idx)),r).slice(0,2):[];
-  const pathT=(alt[0])||{sid:0,idx:6};
+  const pathT=alt[0]||null;
   for(let i=0;i<W*H;i++){const g=(alt[1]&&r()<.07)?alt[1]:base;layers[0][i]=enc(g.sid,g.idx);}
   /* đường */
   const cy=Math.floor(H/2),A=Math.max(2,Math.floor(H/8)),ph=r()*6.28,fr=5+r()*4;let pathCells=[];
-  for(let x=1;x<W-1;x++){const y=cy+Math.round(A*Math.sin(x/fr+ph));for(let d=0;d<2;d++){const yy=Math.max(1,Math.min(H-2,y+d)),i=yy*W+x;layers[0][i]=enc(pathT.sid,pathT.idx);occ[i]=2;pathCells.push([x,yy]);}}
-  if(K.paths>1){const bx=Math.floor(W*(.3+r()*.4)),y0=pathCells.find(p=>p[0]===bx);if(y0)for(let y=1;y<H-1;y++){const dir=y<y0[1]?-1:1;for(let d=0;d<2;d++){const xx=bx+d,i=y*W+xx;layers[0][i]=enc(pathT.sid,pathT.idx);if(!occ[i])occ[i]=2;}}}
+  if(pathT)for(let x=1;x<W-1;x++){const y=cy+Math.round(A*Math.sin(x/fr+ph));for(let d=0;d<2;d++){const yy=Math.max(1,Math.min(H-2,y+d)),i=yy*W+x;layers[0][i]=enc(pathT.sid,pathT.idx);occ[i]=2;pathCells.push([x,yy]);}}
+  if(pathT&&K.paths>1){const bx=Math.floor(W*(.3+r()*.4)),y0=pathCells.find(p=>p[0]===bx);if(y0)for(let y=1;y<H-1;y++){const dir=y<y0[1]?-1:1;for(let d=0;d<2;d++){const xx=bx+d,i=y*W+xx;layers[0][i]=enc(pathT.sid,pathT.idx);if(!occ[i])occ[i]=2;}}}
   /* hồ */
-  if(K.pond&&(P.water.length||true)){const wt=P.water.length?pick(P.water,r):{sid:0,idx:0};
+  if(K.pond&&P.water.length){const wt=pick(P.water,r);
     for(let t=0;t<40;t++){const px=ri(r,6,W-7),py=ri(r,4,H-5),rx=ri(r,3,Math.max(3,Math.floor(W/9))),ry=ri(r,2,Math.max(2,Math.floor(H/8)));let bad=0,cells=[];
       for(let y=py-ry;y<=py+ry;y++)for(let x=px-rx;x<=px+rx;x++){if(x<1||y<1||x>=W-1||y>=H-1){bad=1;continue;}if(((x-px)/rx)**2+((y-py)/ry)**2<=1){if(occ[y*W+x]){bad=1;}cells.push(y*W+x);}}
       if(bad||cells.length<6)continue;for(const i of cells){layers[0][i]=enc(wt.sid,wt.idx);blk[i]=1;occ[i]=3;}break;}}
