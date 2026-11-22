@@ -1,4 +1,4 @@
-import {el,toast} from './util.js';
+import {el,toast,packBytes,expandPacks} from './util.js';
 import {unzipSync} from 'fflate';
 /* Hoạt ảnh nhân vật 2D: bộ hoạt ảnh = các trạng thái (đứng/chạy/đánh/trúng đòn), mỗi trạng thái là 1 dải ảnh nhiều khung.
    Hướng: 1 ảnh nhiều hàng (mỗi hàng 1 hướng) HOẶC mỗi hướng 1 ảnh (tên có số, vd CHAR_0_Run … CHAR_7_Run). */
@@ -161,11 +161,11 @@ const toURL=u8=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result
 const loadImg=s=>new Promise(r=>{const i=new Image();i.onload=()=>{s.img=i;s.cols=Math.max(1,Math.floor((i.width+s.margin)/(s.tw+s.margin)));s.rows=Math.max(1,Math.floor((i.height+s.margin)/(s.tw+s.margin)));r();};i.onerror=r;i.src=s.url;});
 async function readPacks(files){
   const packs=[];
-  for(const f of files){let data;try{data=new Uint8Array(await f.arrayBuffer());}catch(e){continue;}
+  for(const f of files){let data;try{data=await packBytes(f);}catch(e){toast('Không đọc được '+f.name);continue;}
     const entries=[];try{unzipSync(data,{filter:e=>{entries.push({n:e.name,s:e.originalSize});return false;}});}catch(e){toast('Không đọc được '+f.name);continue;}
     const jsonE=entries.filter(e=>/(^|\/)animation\.json$/i.test(e.n));let metas=[];
     for(const je of jsonE){try{const u=unzipSync(data,{filter:e=>e.name===je.n})[je.n];metas.push({path:je.n,j:JSON.parse(new TextDecoder().decode(u))});}catch(e){}}
-    packs.push({file:f,data,entries,metas,base:f.name.replace(/\.zip$/i,'')});}
+    packs.push({file:f,data,entries,metas,base:f.name.replace(/\.(zip|rar)$/i,'')});}
   return packs;}
 function analyze(packs){packs=packs.slice().sort((x,y)=>(y.metas.some(m=>m.j.frameCountPerDirection)?1:0)-(x.metas.some(m=>m.j.frameCountPerDirection)?1:0));
   const chars=new Map();const C=n=>{if(!chars.has(n))chars.set(n,{name:n,run:null,clips:[],bytes:0,files:[]});return chars.get(n);};
@@ -181,8 +181,8 @@ function analyze(packs){packs=packs.slice().sort((x,y)=>(y.metas.some(m=>m.j.fra
   return [...chars.values()].filter(c=>c.run||c.clips.length);}
 function describe(c){const t=[];if(c.run)t.push('Chạy '+c.run.dirs.size+' hướng × '+c.run.meta.frameCountPerDirection+' khung ('+c.run.meta.frameWidth+'×'+c.run.meta.frameHeight+')');if(c.clips.length)t.push('Đánh '+c.clips.length+' đòn liên hoàn: '+c.clips.map(x=>x.id+' ('+x.n+' khung)').join(' → '));return t.join(' · ');}
 export function packUI(cfg,sheets,after,draw,AN){
-  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='.zip,application/zip,application/x-zip-compressed';
-  inp.onchange=async()=>{const fs=[...inp.files];if(!fs.length)return;toast('Đang đọc '+fs.length+' gói…');const packs=await readPacks(fs);const chars=analyze(packs);
+  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='.zip,.rar,application/zip,application/x-zip-compressed';
+  inp.onchange=async()=>{let fs=[...inp.files];if(!fs.length)return;fs=await expandPacks(fs);if(!fs.length)return;toast('Đang đọc '+fs.length+' gói…');const packs=await readPacks(fs);const chars=analyze(packs);
     if(!chars.length){toast('Không thấy animation.json hợp lệ trong zip. Hãy dùng nút ⚡ Tự tạo từ ảnh đã tải.');return;}
     const total=chars.reduce((s,c)=>s+c.bytes,0);const picked=new Set(total<=45e6?chars.map(c=>c.name):[]);
     const ov=el('div',{style:'position:fixed;inset:0;z-index:150;background:#0d141bf2;display:flex;flex-direction:column;padding:10px;gap:8px;color:#fff;font:14px system-ui'});

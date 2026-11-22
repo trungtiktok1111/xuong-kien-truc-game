@@ -4,7 +4,7 @@ import {mergeGeometries} from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {logicTab,entExtra} from './logic.js';
 import {parseGLB,scanZip,b64} from './models3d.js';
 import {OT3,COLS,defCfg3,newEnt3,entModel} from './ents3d.js';
-import {idbDel,$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,ask,askText,yes,zipBrowser,slotsUI,exportGame} from './util.js';
+import {expandPacks,packBytes,idbDel,$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,ask,askText,yes,zipBrowser,slotsUI,exportGame} from './util.js';
 let GX=48,GZ=48,GY=24;
 import {makeTpl} from './tpl3d.js';
 const SHAPES=[['cube','Khối'],['slab','Tấm nửa'],['wedge','Mái dốc'],['pillar','Cột'],['panel','Vách mỏng'],['stairs','Cầu thang'],['arch','Cổng vòm'],['window','Khung cửa sổ'],['rail','Lan can'],['curve','Mái cong']];
@@ -405,8 +405,8 @@ export function init3D(root){
   function delP(){const p=selProp();if(!p)return;pushUndo();props=props.filter(q=>q.id!==p.id);const g=pMesh.get(p.id);if(g)scene.remove(g);pMesh.delete(p.id);selP=null;updSelBox();changed();draw();}
   async function dupP(){const p=selProp();if(!p)return;const o=await mObj(p.m);if(!o)return;pushUndo();const q=Object.assign({},p,{id:uid(),x:Math.min(GX-.5,p.x+1)});props.push(q);const g=o.clone(true);g.userData.propId=q.id;applyP(g,q);scene.add(g);pMesh.set(q.id,g);selP=q.id;updSelBox();changed();draw();}
   async function importPacks(files){try{await importPacks0(files);}catch(e){console.error(e);toast('Lỗi khi nhập gói: '+(e&&e.message||e));}}
-  async function importPacks0(files){let np=0,nm=0,bad=0;toast('Đang đọc gói mô hình…');const reads=files.map(f=>/\.rar$/i.test(f.name)?null:new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(new Uint8Array(r.result));r.onerror=()=>no(r.error);r.readAsArrayBuffer(f);}));
-    for(const f of files){if(/\.rar$/i.test(f.name)){toast('File .rar không mở được trong trình duyệt — hãy giải nén thành các file .zip rồi nhập');continue;}
+  async function importPacks0(files0){const files=await expandPacks(files0);let np=0,nm=0,bad=0;toast('Đang đọc gói mô hình…');const reads=files.map(f=>packBytes(f));
+    for(const f of files){
       const u8z=await reads[files.indexOf(f)];const packs=await scanZip(u8z,f.name);
       for(const pk of packs){const old=LIB.filter(m=>m.pack===pk.pack);for(const m of old){BYTES.delete(m.id);OBJC.delete(m.id);}LIB=LIB.filter(m=>m.pack!==pk.pack);PREC.delete(pk.pack);const glbs={};for(const m of pk.models)glbs[m.name]=m.glb;
         if(!(await idbSet('m3dp:'+pk.pack,{tex:pk.tex,glbs})))bad++;PTEX.set(pk.pack,pk.tex);

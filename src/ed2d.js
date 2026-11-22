@@ -409,7 +409,7 @@ export function init2D(root,A){
     curSheet=first;after();draw();toast('Đã thêm '+n+' tileset');}
   function addSheet(){pickFiles('image/*',items=>items.length===1?addSheetUrl(items[0].url,items[0].name):addMany(items),false);}
   /* Nạp nhiều gói zip một lần, tự phân loại: Tiles/ → 1 tileset ghép lưới; Atlas/ → tileset; còn lại (Sprites, lớp phủ…) bỏ qua để nhẹ máy */
-  async function bulkPacks(){const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='.zip,application/zip,application/x-zip-compressed';
+  async function bulkPacks(){const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='.zip,.rar,application/zip,application/x-zip-compressed';
     inp.onchange=async()=>{const fs=[...inp.files];if(!fs.length)return;let nt=0,na=0,skip=0;const seen=new Set();
       for(const f of fs){toast('Đang đọc '+f.name+'…');let u8;try{u8=new Uint8Array(await f.arrayBuffer());}catch(e){continue;}
         const key=f.name.replace(/^[0-9a-f]{8}-/,'')+'|'+f.size;if(seen.has(key)){skip++;continue;}seen.add(key);

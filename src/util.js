@@ -48,7 +48,25 @@ export const askText=(msg)=>dlg(msg,'','area');
 export const yes=msg=>dlg(msg,null,'yes');
 export function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return false;}}
 export function pickFile(accept,cb,asText=true){const i=document.createElement('input');i.type='file';i.accept=accept;i.onchange=()=>{const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>cb(r.result,f);asText?r.readAsText(f):r.readAsDataURL(f);};i.click();}
-import {unzipSync} from 'fflate';
+import {unzipSync,zipSync} from 'fflate';
+import {createExtractorFromData} from 'node-unrar-js';
+import unrarWasm from 'node-unrar-js/esm/js/unrar.wasm';
+/* .rar: giải nén (chỉ lấy zip/png/json/glb/…); mỗi .zip bên trong thành 1 gói riêng, tệp lẻ gộp thành 1 gói. Hàm trả danh sách "tệp ảo" dùng như File */
+const isRar=u8=>u8.length>7&&u8[0]===0x52&&u8[1]===0x61&&u8[2]===0x72&&u8[3]===0x21;
+const vf=(name,data)=>({name,size:data.length,arrayBuffer:async()=>data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)});
+export async function expandPacks(files){const out=[];
+  for(const f of files){const u8=new Uint8Array(await f.arrayBuffer());
+    if(!isRar(u8)){out.push(f);continue;}
+    toast('Đang giải nén '+f.name+' (RAR)…');
+    try{const ex=await createExtractorFromData({wasmBinary:unrarWasm.buffer.slice(unrarWasm.byteOffset,unrarWasm.byteOffset+unrarWasm.byteLength),data:u8});
+      const r=ex.extract({files:h=>!h.flags.directory&&/\.(zip|png|json|glb|gltf|jpe?g|webp|bin)$/i.test(h.name)&&!/(^|\/)(__MACOSX|\._)/.test(h.name)});
+      const loose={};let nz=0;
+      for(const e of r.files){if(!e.extraction)continue;const nm=e.fileHeader.name.replace(/\\/g,'/');
+        if(/\.zip$/i.test(nm)){out.push(vf(nm.split('/').pop(),e.extraction));nz++;}else loose[nm]=e.extraction;}
+      if(Object.keys(loose).length)out.push(vf(f.name.replace(/\.rar$/i,'')+'.zip',zipSync(loose,{level:0})));
+    }catch(er){console.error('RARERR',er&&er.message||er);toast('Không giải nén được '+f.name+' (RAR lỗi hoặc có mật khẩu)');}}
+  return out;}
+export async function packBytes(f){return new Uint8Array(await f.arrayBuffer());}
 const MIME={png:'image/png',webp:'image/webp',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif'};
 const blobURL=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b);});
 /* Chọn nhiều ảnh cùng lúc → cb([{url,name,file}]) */
@@ -57,10 +75,10 @@ export function pickFiles(accept,cb,asText=false){const i=document.createElement
 /* Chọn một hoặc nhiều gói .zip → duyệt ảnh bên trong (xem trước 1 ảnh, hoặc tích chọn nhiều/tất cả)
    onPick(dataURL, tênFile) cho 1 ảnh; onMany([{url,name}]) cho nhiều ảnh (nếu có) */
 export function zipBrowser(onPick,onMany){
-  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='.zip,application/zip,application/x-zip-compressed';
-  inp.onchange=async()=>{const fs=[...inp.files];if(!fs.length)return;toast('Đang đọc '+fs.length+' gói zip…');
+  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='.zip,.rar,application/zip,application/x-zip-compressed';
+  inp.onchange=async()=>{let fs=[...inp.files];if(!fs.length)return;fs=await expandPacks(fs);if(!fs.length)return;toast('Đang đọc '+fs.length+' gói…');
     const datas=[],list=[];
-    for(let z=0;z<fs.length;z++){try{const data=new Uint8Array(await fs[z].arrayBuffer());datas.push(data);const pre=fs.length>1?fs[z].name.replace(/\.zip$/i,'')+'/':'';
+    for(let z=0;z<fs.length;z++){try{const data=await packBytes(fs[z]);datas.push(data);const pre=fs.length>1?fs[z].name.replace(/\.(zip|rar)$/i,'')+'/':'';
       unzipSync(data,{filter:e=>{if(/\.(png|webp|jpe?g|gif)$/i.test(e.name)&&!/(^|\/)(__MACOSX|\._)/.test(e.name))list.push({n:pre+e.name,e:e.name,z,s:e.originalSize});return false;}});}
       catch(er){datas.push(null);toast('Không đọc được '+fs[z].name);}}
     if(!list.length){toast('Không có ảnh png/webp/jpg trong zip');return;}
