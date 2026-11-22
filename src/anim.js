@@ -42,7 +42,7 @@ export function makeAnims(cfg,sheets){uniqNames(sheets);
     cx.imageSmoothingEnabled=sm;return true;}
   function drawChar(cx,q,id,sx,sy,s,t,hint){
     const set=get(id);if(!set)return false;
-    if(q.lx!==undefined){const dx=q.x-q.lx,dy=q.y-q.ly;if(Math.abs(dx)+Math.abs(dy)>.0004){q.mvt=t;const m=Math.hypot(dx,dy);q.afx=dx/m;q.afy=dy/m;if(Math.abs(dx)>.0002)q.aface=dx>0?1:-1;}}q.lx=q.x;q.ly=q.y;
+    if(q.lx!==undefined){let dx=q.x-q.lx,dy=q.y-q.ly;if(hint&&hint.iso){const a=dx-dy,b=(dx+dy)*.5;dx=a;dy=b;}if(Math.abs(dx)+Math.abs(dy)>.0004){q.mvt=t;const m=Math.hypot(dx,dy);q.afx=dx/m;q.afy=dy/m;if(Math.abs(dx)>.0002)q.aface=dx>0?1:-1;}}q.lx=q.x;q.ly=q.y;
     const want=hint&&hint.hit?'hit':hint&&hint.atk?('atk'+(hint.atk>1?hint.atk:'')):(t-(q.mvt===undefined?-9:q.mvt)<.12?'run':'idle');
     const stn=pickState(set,want);if(!stn)return false;
     if(q.ast!==stn||(hint&&hint.atk&&hint.aid!==undefined&&q.aid!==hint.aid)){q.ast=stn;q.ast0=t;}if(hint&&hint.aid!==undefined)q.aid=hint.aid;
