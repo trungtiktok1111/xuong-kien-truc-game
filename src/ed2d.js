@@ -199,8 +199,8 @@ export function init2D(root,A){
     const seen=new Set([c0.x+','+c0.y]),st=[[c0.x,c0.y]];let x0=c0.x,x1=c0.x,y0=c0.y,y1=c0.y;
     while(st.length&&seen.size<5000){const [a,b]=st.pop();for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const x=a+dx,y=b+dy,k=x+','+y;if(seen.has(k)||!has(x,y))continue;seen.add(k);st.push([x,y]);x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}}
     sel={x0,y0,x1,y1};tool='select';ui.tools&&ui.tools();ui.sel&&ui.sel();dirty=true;toast('Đã chọn cả cụm '+(x1-x0+1)+'×'+(y1-y0+1)+' ô');}
-  function selFocus(){const r=selRect();if(!r)return;const W=cv.clientWidth,H=cv.clientHeight;if(ISOQ()){const n=r.w+r.h+4;view.z=Math.max(.25,Math.min(16,Math.min(W/(n*CELL),H/(n*CELL*.5))));const q=g2s(r.x0+r.w/2,r.y0+r.h/2),S0=g2s(0,0);view.x+=W/2-q[0];view.y+=H/2-q[1];dirty=true;return;}
-    view.z=Math.max(.25,Math.min(16,Math.min(W/(r.w*CELL+4*CELL),H/(r.h*CELL+4*CELL))));view.x=W/2-(r.x0+r.w/2)*CELL*view.z;view.y=H/2-(r.y0+r.h/2)*CELL*view.z;dirty=true;}
+  function selFocus(){const r=selRect();if(!r)return;const W=cv.clientWidth,H=cv.clientHeight;if(ISOQ()){const n=r.w+r.h+4;view.z=Math.max(.01,Math.min(16,Math.min(W/(n*CELL),H/(n*CELL*.5))));const q=g2s(r.x0+r.w/2,r.y0+r.h/2),S0=g2s(0,0);view.x+=W/2-q[0];view.y+=H/2-q[1];dirty=true;return;}
+    view.z=Math.max(.01,Math.min(16,Math.min(W/(r.w*CELL+4*CELL),H/(r.h*CELL+4*CELL))));view.x=W/2-(r.x0+r.w/2)*CELL*view.z;view.y=H/2-(r.y0+r.h/2)*CELL*view.z;dirty=true;}
   // ===== con trỏ =====
   const P=new Map();let drag=null,gest=null;
   const cellAt=(px,py)=>{const g=s2g(px,py);return {x:Math.floor(g.x),y:Math.floor(g.y)};};
@@ -217,7 +217,7 @@ export function init2D(root,A){
     else if(tool==='rect'||tool==='select'){drag={rect:{x0:c.x,y0:c.y,x1:c.x,y1:c.y}};if(tool==='select'){sel=null;ui.sel();}}
     dirty=true;});
   cv.addEventListener('pointermove',e=>{const p=pos(e);if(P.has(e.pointerId))P.set(e.pointerId,p);
-    if(P.size===2&&gest){const [a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),ccx=(a.x+b.x)/2,ccy=(a.y+b.y)/2;const nz=Math.max(.25,Math.min(16,view.z*d/gest.d));const k=nz/view.z;
+    if(P.size===2&&gest){const [a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),ccx=(a.x+b.x)/2,ccy=(a.y+b.y)/2;const nz=Math.max(.01,Math.min(16,view.z*d/gest.d));const k=nz/view.z;
       view.x=ccx-(gest.cx-view.x)*k;view.y=ccy-(gest.cy-view.y)*k;view.z=nz;gest={d,cx:ccx,cy:ccy};dirty=true;return;}
     const c=cellAt(p.x,p.y);if(!hov||hov.x!==c.x||hov.y!==c.y){hov=c;dirty=true;}
     if(tool==='zone'&&!(drag&&drag.pan)){zMoveE(p,e);return;}
@@ -233,7 +233,7 @@ export function init2D(root,A){
     if(drag.rect){if(tool==='rect'){pushUndo();rectFill(drag.rect);after();}else{sel=drag.rect;ui.sel();}}drag=null;dirty=true;};
   cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'){hov=null;dirty=true;}});
   cv.addEventListener('contextmenu',e=>e.preventDefault());
-  cv.addEventListener('wheel',e=>{e.preventDefault();const p=pos(e);const nz=Math.max(.25,Math.min(16,view.z*(e.deltaY<0?1.15:1/1.15)));const k=nz/view.z;view.x=p.x-(p.x-view.x)*k;view.y=p.y-(p.y-view.y)*k;view.z=nz;dirty=true;},{passive:false});
+  cv.addEventListener('wheel',e=>{e.preventDefault();const p=pos(e);const nz=Math.max(.01,Math.min(16,view.z*(e.deltaY<0?1.15:1/1.15)));const k=nz/view.z;view.x=p.x-(p.x-view.x)*k;view.y=p.y-(p.y-view.y)*k;view.z=nz;dirty=true;},{passive:false});
   // ===== VÙNG CHẶN (hình học) =====
   let zsel=null,zk='rect',zmode='edit',zsnap=.5,zpend=null,zd=null,zu=false,zw=null;
   const ZL=()=>M&&(M.cfg.zones||(M.cfg.zones=[]));
@@ -299,9 +299,9 @@ export function init2D(root,A){
       box.append(r2);}
     box.append(el('div',{class:'hint'},'VẼ: chọn hình rồi kéo trên bản đồ (hình CN/elip/tam giác; giữ Shift = vuông/tròn đều). Đa giác & Đường gấp khúc: bấm từng điểm, bấm đúp hoặc ✔ Xong để kết thúc (đa giác: bấm lại điểm đầu cũng được). SỬA: chạm vùng để chọn, kéo thân = di chuyển, kéo ô vuông = kéo dãn, chấm xanh = xoay, chấm nhỏ giữa cạnh = thêm đỉnh, Shift+bấm đỉnh = xóa đỉnh. Phím: Delete xóa · Enter xong · Esc hủy · ←↑↓→ dịch.'));
     return box;}
-  function zoomBy(f){const w=cv.clientWidth/2,h=cv.clientHeight/2;const nz=Math.max(.25,Math.min(16,view.z*f)),k=nz/view.z;view.x=w-(w-view.x)*k;view.y=h-(h-view.y)*k;view.z=nz;dirty=true;}
-  function fit(){if(!M)return;const w=cv.clientWidth,h=cv.clientHeight;if(ISOQ()){const n=M.w+M.h;view.z=Math.max(.25,Math.min(8,Math.min(w/(n*CELL),h/(n*CELL*.5+CELL*4))));const S=CELL*view.z;view.x=w/2-(M.w-M.h)*S/2;view.y=(h-n*S/2)/2;dirty=true;return;}
-    view.z=Math.max(.25,Math.min(8,Math.min(w/(M.w*CELL),h/(M.h*CELL))));view.x=(w-M.w*CELL*view.z)/2;view.y=(h-M.h*CELL*view.z)/2;dirty=true;}
+  function zoomBy(f){const w=cv.clientWidth/2,h=cv.clientHeight/2;const nz=Math.max(.01,Math.min(16,view.z*f)),k=nz/view.z;view.x=w-(w-view.x)*k;view.y=h-(h-view.y)*k;view.z=nz;dirty=true;}
+  function fit(){if(!M)return;const w=cv.clientWidth,h=cv.clientHeight;if(ISOQ()){const n=M.w+M.h;view.z=Math.max(.01,Math.min(8,Math.min(w/(n*CELL),h/(n*CELL*.5+CELL*4))));const S=CELL*view.z;view.x=w/2-(M.w-M.h)*S/2;view.y=(h-n*S/2)/2;dirty=true;return;}
+    view.z=Math.max(.01,Math.min(8,Math.min(w/(M.w*CELL),h/(M.h*CELL))));view.x=(w-M.w*CELL*view.z)/2;view.y=(h-M.h*CELL*view.z)/2;dirty=true;}
   if(window.__kb2d)document.removeEventListener('keydown',window.__kb2d);
   window.__kb2d=e=>{const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(!M||!cv.offsetParent)return;
     const k=(e.key||'').toLowerCase(),m=e.ctrlKey||e.metaKey;
@@ -327,7 +327,7 @@ export function init2D(root,A){
   document.addEventListener('keydown',window.__kb2d);
   // ===== giao diện =====
   const ANS={};const pn=$('#pn2'),ui={};const body=el('div',{class:'pbody'});const tabs=el('div',{class:'ptabs'});pn.append(tabs,body);
-  const TABS=[['tools','🛠 Công cụ'],['sheet','🧩 Tileset'],['res','🔎 Tài nguyên'],['maps','🗺 Màn & cửa'],['lib','📚 Thư viện'],['logic','⚙ Logic'],['anim','🎞 Hoạt ảnh'],['layers','🗂 Lớp'],['file','💾 Tệp']];let tab='tools';
+  const TABS=[['tools','🛠 Công cụ'],['sheet','🧩 Tileset'],['res','🔎 Tài nguyên'],['mau','🏠 Mẫu 2D'],['maps','🗺 Màn & cửa'],['lib','📚 Thư viện'],['logic','⚙ Logic'],['anim','🎞 Hoạt ảnh'],['layers','🗂 Lớp'],['file','💾 Tệp']];let tab='tools';
   TABS.forEach(([k,n])=>tabs.append(el('button',{class:'ptab','data-t':k,onclick:()=>{tab=k;if(k==='obj')tool='obj';draw();}},n)));
   const sc=el('canvas',{class:'stampc'});
   ui.stamp=()=>{const c=$('.stampc',pn);if(!c)return;const z=Math.max(1,Math.min(5,Math.floor(120/Math.max(stamp.w,stamp.h)/CELL*3)));c.width=stamp.w*CELL*z/1;c.height=stamp.h*CELL*z/1;const g=c.getContext('2d');g.imageSmoothingEnabled=false;g.fillStyle='#2a3340';g.fillRect(0,0,c.width,c.height);
@@ -386,6 +386,7 @@ export function init2D(root,A){
       body.append(el('div',{class:'row'},btn('➕ Thêm tileset từ ảnh…',addSheet),btn('📦 Nạp gói .zip…',addZip),btn('🗑 Quản lý / xóa tileset',manageSheets)),el('div',{class:'hint'},'Chọn ô: chạm 1 ô, hoặc kéo để chọn khối nhiều ô (ví dụ cả mái nhà). Sau đó quay lại tab Công cụ và chạm lên bản đồ.'));}
     else if(tab==='res'){resTab();}
     else if(tab==='maps'){mapsTab();}
+    else if(tab==='mau'){mauTab();}
     else if(tab==='lib'){
       body.append(el('div',{class:'row'},btn('💾 Lưu stamp hiện tại vào thư viện',async()=>{const n=await ask('Tên công trình/stamp:','Công trình '+(lib.length+1));if(!n)return;lib.push({name:n,w:stamp.w,h:stamp.h,multi:!!stamp.multi,layers:stamp.multi?stamp.layers:null,tiles:stamp.tiles});lsSet('thk_stamps',lib);draw();toast('Đã lưu "'+n+'"');})));
       if(!lib.length)body.append(el('div',{class:'hint'},'Thư viện trống. Dùng "Chọn vùng" → "Lấy làm stamp" để copy một công trình trên bản đồ, rồi lưu vào đây để dùng lại hoặc ghép vào bản đồ khác.'));
@@ -683,11 +684,51 @@ export function init2D(root,A){
     if(sid<0){const s={name,url:pk.atlas,tw:pk.tw,margin:0,iso:pk.iso===0?0:2,cy:pk.cy||0,wat};await loadSheet(s);sheets.push(s);sid=sheets.length-1;for(const [n,i] of Object.entries(pk.idx))TG.tiles[name+'#'+i]=nenTag(n);tgSave();}
     return {pk,sid};}
   let vatSel=null;const VROLE={'Nhà':'Nhà','Cây':'Cây','Vật':'Đồ vật','Hạ tầng':'Khác','Phủ nền':'Trang trí','Mái/cửa':'Nhà'};
-  function mineItems(){const out=[];for(const [k,t] of Object.entries(TG.tiles)){if(!t||t.fx==null||t.layer<1)continue;const h=k.lastIndexOf('#'),nm=k.slice(0,h),idx=+k.slice(h+1),sid=sheets.findIndex((s,i)=>i>=4&&s.name===nm);if(sid<0||/^(Nen|Vat)-/.test(nm))continue;
+  function mineItems(){const out=[];for(const [k,t] of Object.entries(TG.tiles)){if(!t||t.fx==null||t.layer<1)continue;const h=k.lastIndexOf('#'),nm=k.slice(0,h),idx=+k.slice(h+1),sid=sheets.findIndex((s,i)=>i>=4&&s.name===nm);if(sid<0||/^(Nen|Vat|Mau)-/.test(nm))continue;
       out.push({role:t.role||'Vật',name:nm+' · '+(idx+1),tile:{sid,idx},f:1,fx:t.fx,fy:t.fy,sc:t.sc||sheets[sid].tw/128,ox:0,oy:0,zb:[-t.fx,-t.fy,t.fx,t.fy]});}return out;}
   async function ensureVat(id){if(id==='mine')return mineItems();const pk=await vatPack(id),name='Vat-'+id;let sid=sheets.findIndex((s,i)=>i>=4&&s.name===name);
     if(sid<0){const s={name,url:pk.atlas,tw:pk.T,margin:0};await loadSheet(s);sheets.push(s);sid=sheets.length-1;pk.items.forEach(it=>{TG.tiles[name+'#'+it.i]={type:VROLE[it.role]||'Khác',layer:it.role==='Mái/cửa'?3:2,fn:it.role==='Mái/cửa'?'Chỉ trang trí':'Chặn đường'};});tgSave();}
     return pk.items.map(it=>({role:it.role,name:it.name,cv:it.cv?{sid,idx:it.cv}:null,tile:{sid,idx:it.i},f:1,fx:it.fx,fy:it.fy,sc:it.sc,ox:0,oy:0,zb:[-it.fx,-it.fy,it.fx,it.fy]}));}
+
+  /* ===== MẪU 2D: kho mẫu lớn (nhà, công trình…) giữ nguyên ảnh gốc, đánh số, không mất khi xoá tài nguyên ===== */
+  let MAU=null;
+  async function mauLoad(){if(MAU)return MAU;const v=await idbGet('thk_mau2d');MAU=(v&&v.items)?v:{next:1,items:[]};return MAU;}
+  const mauSave=async()=>{try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}catch(e){}const ok=await idbSet('thk_mau2d',MAU);if(!ok)toast('⚠ Không lưu được kho mẫu (hết chỗ trình duyệt?) — hãy bấm Sao lưu');return ok;};
+  const mauImg=url=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('Không đọc được ảnh'));i.src=url;});
+  function mauFoot(img){const W=img.width,Hh=img.height,c=document.createElement('canvas');c.width=W;c.height=Hh;const g=c.getContext('2d');g.drawImage(img,0,0);const d=g.getImageData(0,0,W,Hh).data;let x0=W,x1=-1,y1=-1;
+    for(let y=0;y<Hh;y++)for(let x=0;x<W;x++)if(d[(y*W+x)*4+3]>24){if(x<x0)x0=x;if(x>x1)x1=x;y1=y;}
+    if(x1<0)return{px:W/2,bot:Hh,n:1};const bot=y1+1,px=(x0+x1+1)/2;let n=1;
+    for(const k of [4,3,2]){const y=bot-48*k;let a=W,b=-1;for(let yy=Math.max(0,y-5);yy<Math.min(Hh,y+5);yy++)for(let x=0;x<W;x++)if(d[(yy*W+x)*4+3]>24){if(x<a)a=x;if(x>b)b=x;}if(b>=0&&(b-a+1)>=.78*192*k){n=k;break;}}
+    return{px,bot,n};}
+  const MAUROLE={'Nhà':'Nhà','Cây':'Cây','Vật':'Đồ vật'};
+  async function mauMake(m){const name='Mau-'+String(m.no).padStart(3,'0');let sid=sheets.findIndex((q,i)=>i>=4&&q.name===name);
+    const T=Math.ceil(Math.max(2*Math.max(m.px,m.w-m.px),m.bot)/32)*32;
+    if(sid<0){const img=await mauImg(m.url),c=document.createElement('canvas');c.width=T;c.height=T;c.getContext('2d').drawImage(img,Math.round(T/2-m.px),T-m.bot);
+      const sh={name,url:c.toDataURL('image/png'),tw:T,margin:0};await loadSheet(sh);sheets.push(sh);sid=sheets.length-1;}
+    TG.tiles[name+'#0']={type:MAUROLE[m.role]||'Khác',layer:2,fn:'Chặn đường'};tgSave();
+    return{role:m.role,name:'#'+m.no+' '+m.name,tile:{sid,idx:0},f:1,fx:m.fx,fy:m.fy,sc:T/128,ox:0,oy:0,zb:[-m.fx,-m.fy,m.fx,m.fy],_mau:m.no};}
+  async function mauAdd(items){await mauLoad();let n=0;for(const it of items){try{const img=await mauImg(it.url),f=mauFoot(img);
+      MAU.items.push({no:MAU.next++,name:(it.name||'Mẫu').replace(/\.[^.]+$/,'').slice(0,40),url:it.url,w:img.width,h:img.height,role:'Nhà',fx:f.n,fy:f.n,px:f.px,bot:f.bot});n++;}catch(e){toast('Bỏ qua '+(it.name||'ảnh')+': '+e.message);}}
+    if(n){await mauSave();toast('Đã thêm '+n+' mẫu (số '+(MAU.next-n)+(n>1?'–'+(MAU.next-1):'')+'). Ảnh giữ nguyên bản gốc.');}draw();}
+  let mauTok=0;
+  async function mauTab(){const tok=++mauTok;await mauLoad();if(tok!==mauTok||tab!=='mau')return;
+    body.append(el('div',{class:'lbl'},'🏠 MẪU 2D — kho mẫu của bạn'),el('div',{class:'hint'},'Ảnh nạp vào được giữ nguyên 100% (không cắt, không đổi cỡ). Mỗi mẫu có số thứ tự cố định, số đã xoá không dùng lại. Xoá tài nguyên/tileset không làm mất mẫu — chỉ mất khi bạn xoá đúng mẫu đó.'));
+    body.append(el('div',{class:'row'},btn('➕ Thêm mẫu từ ảnh…',()=>pickFiles('image/*',it=>mauAdd(it),false),'on'),btn('📦 Từ gói .zip…',()=>zipBrowser((u,n)=>mauAdd([{url:u,name:n}]),l=>mauAdd(l))),btn('🗑 Xoá mẫu theo số…',async()=>{
+      const t=await askText('Nhập số mẫu cần xoá (vd: 3 hoặc 3,5,8):','');if(!t)return;const set=new Set(t.split(/[^0-9]+/).filter(Boolean).map(Number));const hit=MAU.items.filter(m=>set.has(m.no));
+      if(!hit.length){toast('Không có mẫu số '+[...set].join(', '));return;}
+      if(!await yes('Xoá vĩnh viễn '+hit.length+' mẫu: '+hit.map(m=>'#'+m.no+' '+m.name).join(', ')+'?\nKhông hoàn tác được.'))return;
+      MAU.items=MAU.items.filter(m=>!set.has(m.no));await mauSave();toast('Đã xoá '+hit.length+' mẫu');draw();})));
+    body.append(el('div',{class:'row'},btn('💾 Sao lưu tất cả mẫu (.json)',()=>saveFile('mau_2d.json',new Blob([JSON.stringify(MAU)],{type:'application/json'}))),btn('⬆ Nạp lại bản sao lưu',()=>pickFile('.json,application/json',async t=>{try{const o=JSON.parse(t);if(!o||!Array.isArray(o.items))throw 0;const have=new Set(MAU.items.map(m=>m.no));let n=0;for(const m of o.items){if(have.has(m.no))continue;MAU.items.push(m);n++;}MAU.next=Math.max(MAU.next,o.next||0,...MAU.items.map(m=>m.no+1));MAU.items.sort((a,b)=>a.no-b.no);await mauSave();toast('Đã nạp lại '+n+' mẫu');draw();}catch(e){toast('File sao lưu không hợp lệ');}}))));
+    if(!MAU.items.length){body.append(el('div',{class:'hint'},'Chưa có mẫu nào. Bấm "Thêm mẫu từ ảnh…" và chọn nhiều ảnh nhà/công trình một lúc.'));return;}
+    body.append(el('div',{class:'hint'},MAU.items.length+' mẫu · số lớn nhất #'+(MAU.next-1)+'. Chọn mẫu → chạm bản đồ để đặt (nằm sát nền theo ô "chân").'));
+    const grid=el('div',{class:'libgrid'});
+    MAU.items.forEach(m=>{const c=el('img',{src:m.url,style:'max-width:100%;max-height:110px;object-fit:contain;image-rendering:auto;background:#2a3340;border-radius:6px'});
+      const roleSel=el('select',{class:'num',onchange:async e=>{m.role=e.target.value;await mauSave();}},['Nhà','Cây','Vật'].map(r=>{const o=el('option',{value:r},r);if(r===m.role)o.selected=true;return o;}));
+      const fp=(k)=>el('select',{class:'num',onchange:async e=>{m[k]=+e.target.value;await mauSave();const nm='Mau-'+String(m.no).padStart(3,'0');}},[1,2,3,4,5,6,8].map(v=>{const o=el('option',{value:v},v);if(v===m[k])o.selected=true;return o;}));
+      grid.append(el('div',{class:'libitem'},el('div',{style:'font-weight:800;color:#ffd24a'},'#'+m.no),c,el('div',{},m.name+' ('+m.w+'×'+m.h+')'),
+        el('div',{class:'row'},roleSel,el('span',{class:'lbl'},'chân'),fp('fx'),'×',fp('fy')),
+        el('div',{class:'row'},btn('Đặt',async()=>{try{vatSel=await mauMake(m);objType='deco';tool='obj';draw();toast('Đã chọn mẫu #'+m.no+' — chạm bản đồ để đặt');}catch(e){toast('Lỗi: '+e.message);}},(vatSel&&vatSel._mau===m.no)?'on':''),btn('✏',async()=>{const n=await askText('Tên mẫu #'+m.no+':',m.name);if(n){m.name=n.slice(0,40);await mauSave();draw();}}))));});
+    body.append(grid);}
   async function genRun(){const k=window.__gk||'village',z={s:[32,24],m:[48,36],l:[64,48]}[window.__gz||'m'];
     if(!await yes('Tạo bối cảnh mới thay cho màn "'+(M.name||'')+'"?\n(Ctrl+Z hoàn tác được bản đồ; tileset mới tạo sẽ còn lại.)'))return;
     toast('Đang tạo bối cảnh…');await new Promise(r=>setTimeout(r,30));
