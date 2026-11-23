@@ -15,7 +15,7 @@ const KINDS={
   immortal:{name:'Tiên môn',pack:'tien-cung',houses:[2,3],trees:[6,10],vat:[1,3],bush:[8,14],pond:0},
   cloud:{name:'Vân sơn (tuyết/mây)',pack:'van-son',houses:[1,3],trees:[10,18],vat:[2,4],bush:[2,5],pond:0},
   tunnel:{name:'Địa đạo',pack:'dia-dao',rooms:[2,3],houses:[0,1],trees:[0,0],vat:[10,18],bush:[0,0],pond:0},
-  dungeon:{name:'Địa cung',pack:'dia-cung',rooms:[3,5],houses:[0,1],trees:[0,0],vat:[14,24],bush:[0,0],pond:0},
+  dungeon:{name:'Địa cung',pack:'khe-ngoc',rooms:[3,5],houses:[0,1],trees:[0,0],vat:[14,24],bush:[0,0],pond:0},
   crypt:{name:'Hầm mộ',pack:'ham-mo',rooms:[2,4],houses:[0,1],trees:[0,0],vat:[12,20],bush:[0,0],pond:0},
   tomb:{name:'Lăng tẩm',pack:'lang-tam',houses:[1,2],trees:[8,14],vat:[4,8],bush:[2,5],pond:0},
   battlefield:{name:'Chiến trường',pack:'thao-nguyen',houses:[0,0],trees:[2,5],vat:[18,30],bush:[0,2],pond:0},
@@ -28,7 +28,7 @@ const KINDS={
   outpost:{name:'Trạm dịch',pack:'tram-dich',houses:[2,4],trees:[2,5],vat:[6,10],bush:[0,2],pond:0},
   forest:{name:'Rừng',pack:'rung-truc',houses:[0,1],trees:[70,110],vat:[2,4],bush:[8,14],pond:1},
   wild:{name:'Đồng hoang',pack:'thao-nguyen',houses:[0,2],trees:[8,14],vat:[4,8],bush:[3,8],pond:0}};
-const VAT={village:['lang-nui','cong-trinh','pho-cho'],mtvillage:['lang-nui'],town:['kinh-thanh','pho-cho','cong-trinh'],market:['pho-cho'],capital:['kinh-thanh','pho-cho'],palace:['kinh-thanh'],imperial:['kinh-thanh'],sect:['son-mon','van-son'],immortal:['van-son','son-mon'],cloud:['van-son','son-mon'],tunnel:['dia-cung'],dungeon:['dia-cung'],crypt:['dia-cung','khe-ngoc'],tomb:['khe-ngoc','dia-cung'],battlefield:['thao-nguyen'],lava:['dia-cung','khe-ngoc'],gem:['khe-ngoc'],port:['ben-song'],coast:['duyen-hai'],lotus:['dam-sen'],farm:['dong-que'],outpost:['tram-dich','thao-nguyen'],forest:['rung-truc'],wild:['thao-nguyen','rung-truc']};
+const VAT={village:['lang-nui','cong-trinh','pho-cho'],mtvillage:['lang-nui'],town:['kinh-thanh','pho-cho','cong-trinh'],market:['pho-cho'],capital:['kinh-thanh','pho-cho'],palace:['kinh-thanh'],imperial:['kinh-thanh'],sect:['son-mon','van-son'],immortal:['van-son','son-mon'],cloud:['van-son','son-mon'],tunnel:['khe-ngoc'],dungeon:['khe-ngoc'],crypt:['khe-ngoc'],tomb:['khe-ngoc'],battlefield:['thao-nguyen'],lava:['khe-ngoc'],gem:['khe-ngoc'],port:['ben-song'],coast:['duyen-hai'],lotus:['dam-sen'],farm:['dong-que'],outpost:['tram-dich','thao-nguyen'],forest:['rung-truc'],wild:['thao-nguyen','rung-truc']};
 export const GEN_KIND_VAT=VAT;
 export const GEN_KIND_PACK=Object.fromEntries(Object.entries(KINDS).map(([k,v])=>[k,v.pack]));
 export const GEN_KINDS=Object.fromEntries(Object.entries(KINDS).map(([k,v])=>[k,v.name]));

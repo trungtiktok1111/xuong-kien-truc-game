@@ -23,7 +23,7 @@ export function openRelease(o){
     const F={},nm=S.name||'Game',sl=slug(nm),pkg=S.pkg||('com.'+slug(S.studio)+'.'+sl),data=o.getData(S.kind);
     const i1024=await png(art(1024,1024,true)),i512=await png(art(512,512,true)),i192=await png(art(192,192,true)),feat=await png(art(1024,500,true)),cover=await png(art(630,500,true));
     const html=gameHTML(data,nm);
-    const credits='GHI CÔNG / CREDITS — '+nm+'\n\nTile đồ hoạ 2D: Kenney (kenney.nl) — Roguelike RPG Pack, Tiny Town, Tiny Dungeon, Roguelike Characters. Giấy phép CC0 (Public Domain).\n'+(S.credit?'\n'+S.credit+'\n':'')+'\nPhần mềm tạo bằng "Xưởng Kiến Trúc Võ Lâm". Dùng three.js (MIT) cho game 3D.\n\nLƯU Ý: nếu bạn nạp thêm ảnh/gói tài nguyên khác, hãy ghi công đúng yêu cầu giấy phép của từng gói tại đây.\n';
+    const credits='GHI CÔNG / CREDITS — '+nm+'\n\n'+(S.credit?'\n'+S.credit+'\n':'')+'\nPhần mềm tạo bằng "Xưởng Kiến Trúc Võ Lâm". Dùng three.js (MIT) cho game 3D.\n\nLƯU Ý: nếu bạn nạp thêm ảnh/gói tài nguyên khác, hãy ghi công đúng yêu cầu giấy phép của từng gói tại đây.\n';
     if(which==='web'||which==='all'){const d=which==='all'?'web/':'';F[d+'index.html']=strToU8(html);F[d+'cover_630x500.png']=cover;F[d+'icon_512.png']=i512;
       F[d+'HUONG_DAN.txt']=strToU8('ĐĂNG LÊN ITCH.IO / WEB\n1. Nén thư mục này (chỉ index.html) thành .zip, hoặc dùng luôn file zip này.\n2. itch.io > Upload new project > Kind of project: HTML > tải .zip > tick "This file will be played in the browser".\n3. Viewport: 390x800 (mobile) hoặc 960x600 (PC), bật Fullscreen button.\n4. Ảnh bìa: cover_630x500.png. Đặt giá hoặc "trả tuỳ ý".\n');}
     if(which==='pwa'||which==='all'){const d=which==='all'?'pwa/':'';
