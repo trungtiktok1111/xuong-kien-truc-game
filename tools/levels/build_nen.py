@@ -14,6 +14,8 @@ PACKS=[
  ('tram-dich','Trạm dịch Xích Sa',M+'Tram-Dich-Xich-Sa/dia-hinh','Cát gợn + đá; ốc đảo'),
  ('dong-que','Đồng quê ruộng bậc thang',R+'Dong-Que-Ruong-Bac-Thang-2D-Isometric','Ruộng lúa non/chín, sau gặt, mương, lối đất, kè đất, cửa nước'),
  ('van-son','Khu 12 Vân Sơn cổ tự',R+'Khu-12-13-Van-Son-Khe-Ngoc-2D-Isometric/12-Van-Son-Co-Tu','Cỏ + đá cổ tự; vực nước xanh'),
+ ('lang-nui','Làng núi võ hiệp',M+'Lang-Nui-Vo-Hiep/dia-hinh','Bộ nền riêng khu Làng núi võ hiệp'),
+ ('pho-cho','Phố chợ bến kênh',M+'Pho-Cho-Ben-Kenh/dia-hinh','Bộ nền riêng khu Phố chợ bến kênh'),
  ('khe-ngoc','Khu 13 Khe Ngọc phế tích',R+'Khu-12-13-Van-Son-Khe-Ngoc-2D-Isometric/13-Khe-Ngoc-Phe-Tich','Cỏ + đá phế tích; vực khe ngọc')]
 CELL=192;CY=42;COLS=8
 def meta_of(d):

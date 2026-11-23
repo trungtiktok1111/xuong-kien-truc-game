@@ -643,7 +643,7 @@ export function init2D(root,A){
     if(window.__gn==null)window.__gn='lang-nui-pho-kenh';try{const r=await ensureNen(window.__gn);curSheet=r.sid;}catch(e){}
     stamp={w:1,h:1,multi:false,tiles:[enc(0,5)]};draw();setTimeout(fit,50);})();
   async function ensureNen(id){const pk=await nenPack(id),name='Nen-'+id;let sid=sheets.findIndex((s,i)=>i>=4&&s.name===name);
-    if(sid<0){const s={name,url:pk.atlas,tw:pk.tw,margin:0,iso:2,cy:pk.cy};await loadSheet(s);sheets.push(s);sid=sheets.length-1;for(const [n,i] of Object.entries(pk.idx))TG.tiles[name+'#'+i]=nenTag(n);tgSave();}
+    if(sid<0){const s={name,url:pk.atlas,tw:pk.tw,margin:0,iso:pk.iso===0?0:2,cy:pk.cy||0};await loadSheet(s);sheets.push(s);sid=sheets.length-1;for(const [n,i] of Object.entries(pk.idx))TG.tiles[name+'#'+i]=nenTag(n);tgSave();}
     return {pk,sid};}
   async function genRun(){const k=window.__gk||'village',z={s:[32,24],m:[48,36],l:[64,48]}[window.__gz||'m'];
     if(!await yes('Tạo bối cảnh mới thay cho màn "'+(M.name||'')+'"?\n(Ctrl+Z hoàn tác được bản đồ; tileset mới tạo sẽ còn lại.)'))return;
@@ -679,7 +679,7 @@ export function init2D(root,A){
     if(window.__gn==null)window.__gn='lang-nui-pho-kenh';
     const nenD=el('div',{class:'hint'},'');
     const selN=el('select',{class:'num',style:'width:100%;max-width:230px',onchange:e=>{window.__gn=e.target.value;const o=selN._L&&selN._L.find(x=>x.id===e.target.value);nenD.textContent=o?o.desc:'';}},el('option',{value:''},'Nền cũ (Màn 1)'));
-    nenIndex().then(L=>{selN._L=L;for(const o of L){const op=el('option',{value:o.id},o.name+' ('+o.n+' ô)');if(o.id===window.__gn){op.selected=true;nenD.textContent=o.desc;}selN.append(op);}});
+    nenIndex().then(L=>{L=L.filter(o=>!o.pal);selN._L=L;for(const o of L){const op=el('option',{value:o.id},o.name+' ('+o.n+' ô)');if(o.id===window.__gn){op.selected=true;nenD.textContent=o.desc;}selN.append(op);}});
     const cbG=el('input',{type:'checkbox',onchange:e=>{window.__gg=e.target.checked;}});cbG.checked=GS.g;
     body.append(el('div',{style:'border:1px solid #5aa17a;border-radius:10px;padding:8px;margin-top:10px;background:#16261d'},
       el('div',{class:'lbl',style:'color:#9fe0b0'},'🎲 TỰ TẠO BỐI CẢNH TỪ TÀI NGUYÊN'),

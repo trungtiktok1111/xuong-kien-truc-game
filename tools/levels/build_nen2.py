@@ -161,4 +161,4 @@ def run():
         for c_,n in enumerate(['nen','san','duong-05','duong-15','bo-01','bo-05','bo-10','bo-00']):
             i=pk['idx'][n];t=at.crop(((i%COLS)*CELL,(i//COLS)*CELL+CY,(i%COLS)*CELL+192,(i//COLS)*CELL+CY+96));sh.alpha_composite(t,(c_*192,r_*100))
     sh.save('/tmp/nen2_sheet.png')
-run()
+if __name__=="__main__": run()
