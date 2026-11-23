@@ -101,7 +101,7 @@ function buildIso(ctx,opt,cat){
   const ok=(cells,mg)=>{for(const [x,y] of cells){if(x<2||y<2||x>=W-2||y>=H-2||occ[y*W+x])return false;if(Math.abs(x-sx)<4&&Math.abs(y-sy)<3)return false;
       for(let yy=y-mg;yy<=y+mg;yy++)for(let xx=x-mg;xx<=x+mg;xx++){const o=occ[yy*W+xx];if(o===1||o===3)return false;}}return true;};
   let nid=0;
-  const put=(it,x,y,cells,name)=>{for(const [cx,cy2] of cells)occ[cy2*W+cx]=1;const e={id:'d'+(nid++),t:'deco',x,y,f:it.f,fx:it.fx,fy:it.fy,sc:it.sc,ox:it.ox,oy:it.oy,flat:false,name:name||it.name,tile:it.tile,zb:it.zb};if(it.zp)e.zp=it.zp;if(it.cv)e.cv=it.cv;ents.push(e);};
+  const put=(it,x,y,cells,name)=>{for(const [cx,cy2] of cells)occ[cy2*W+cx]=1;const e={id:'d'+(nid++),t:'deco',x,y,f:it.f,fx:it.fx,fy:it.fy,sc:it.sc,ox:it.ox,oy:it.oy,flat:it.role==='Phủ nền',name:name||it.name,tile:it.tile,zb:it.zb};if(it.role==='Phủ nền')e.walk=true;if(it.zp)e.zp=it.zp;if(it.cv)e.cv=it.cv;ents.push(e);};
   const near=(cells,rad)=>cells.some(([x,y])=>pathCells.some(p=>Math.abs(p[0]-x)<rad&&Math.abs(p[1]-y)<rad));
   const place=(list,n,tries,mg,nearPath,name,key)=>{if(!list.length)return;for(let i=0;i<n;i++){const it=list[Math.floor(r()*list.length)];
       for(let t=0;t<tries;t++){const x=2+Math.floor(r()*(W-4)),y=2+Math.floor(r()*(H-4)),cells=bb(it,x,y);if(!cells.length||!ok(cells,mg))continue;if(nearPath&&!near(cells,7))continue;put(it,x,y,cells,name);info.placed[key]++;break;}}};
@@ -118,6 +118,8 @@ function buildIso(ctx,opt,cat){
   place(by('Vật'),rn(...(K.vat||[2,4])),160,1,false,null,'prop');
   place(by('Cây'),rn(K.trees[0],Math.min(K.trees[1],30)),100,0,false,'Cây','tree');
   place(by('Bụi'),rn(...(K.bush||[6,12])),100,0,false,'Bụi hoa','prop');
+  {const DK=/lá|cánh|hoa|cỏ|rêu|dương xỉ|dược thảo|sen|vệt|vết|bóng|decal|leaf|moss|crack|stain|puddle|blood|hiệu ứng|sỏi|rubble|debris|bone/i,L=by('Phủ nền').filter(i=>(DK.test(i.name)&&!/mặt sau|Base|Planks|Floor|Steps/i.test(i.name))||/ · \d+$/.test(i.name));
+    if(L.length){const n=rn(...(K.cover||[10,22]));info.placed.cover=0;for(let i=0;i<n;i++){const it=L[Math.floor(r()*L.length)];for(let t=0;t<40;t++){const x=2+Math.floor(r()*(W-4)),y=2+Math.floor(r()*(H-4)),cells=bb(it,x,y);if(!cells.length||cells.some(([a,b])=>occ[b*W+a]))continue;put(it,x,y,[],it.name);info.placed.cover++;break;}}}}
   for(let x=0;x<W;x++){blk[x]=1;blk[(H-1)*W+x]=1;}for(let y=0;y<H;y++){blk[y*W]=1;blk[y*W+W-1]=1;}
   ents.push({id:'s'+Date.now().toString(36),t:'start',x:sx,y:sy,name:'Xuất phát',tile:null});
   if(opt.goal){const e=pathCells[pathCells.length-3]||[W-3,cy];ents.push({id:'g'+Date.now().toString(36),t:'goal',x:e[0],y:e[1],name:'Đích',tile:null});}
