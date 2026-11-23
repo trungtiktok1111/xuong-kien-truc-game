@@ -346,6 +346,10 @@ export function init2D(root,A){
       const row=el('div',{class:'row'},el('span',{class:'lbl'},'Cọ đang cầm: '),el('canvas',{class:'stampc'}),btn('↔ Lật ngang',flipStamp),btn(act===4?'(Vùng chặn: vẽ = chặn, xóa = mở)':'',()=>{},'ghost'));body.append(row,el('div',{class:'hint'},'Ô bên trên là cái sẽ được vẽ ra khi chạm bản đồ (gọi là "cọ" hay stamp). Muốn đổi: vào tab 🧩 Tileset chọn ô khác, hoặc dùng 💧 Hút để lấy ô có sẵn trên bản đồ. Muốn dùng cả khối nhiều ô: Chọn vùng → Sao chép.'));ui.stamp();
       body.append(el('div',{class:'hint'},'Mẹo: chọn ô trong tab Tileset (kéo để chọn nhiều ô liền nhau thành một stamp). Kéo 2 ngón để phóng/thu và di chuyển bản đồ. Dùng "Chọn vùng" → "Lấy làm stamp" để sao chép cả ngôi nhà.'));}
     else if(tab==='sheet'){
+      {const nsel=el('select',{class:'num',style:'width:100%;max-width:100%'},el('option',{value:''},'… đang tải danh sách bộ nền …')),nd=el('div',{class:'hint'},'');
+      nenIndex().then(L=>{nsel.innerHTML='';nsel.append(el('option',{value:''},'— chọn bộ nền để vẽ ('+L.length+' bộ) —'));const cn=sheets[curSheet]&&/^Nen-/.test(sheets[curSheet].name)?sheets[curSheet].name.slice(4):'';for(const o of L){const op=el('option',{value:o.id},o.name+' ('+o.n+' ô)');if(o.id===cn){op.selected=true;nd.textContent=o.desc;}nsel.append(op);}nsel._L=L;});
+      nsel.onchange=async()=>{const id=nsel.value;if(!id)return;nd.textContent='Đang nạp…';try{const r=await ensureNen(id);curSheet=r.sid;HID.delete(r.sid);draw();toast('Đã chọn bộ nền — bấm một ô rồi vẽ lên bản đồ (cọ, tô, hình chữ nhật đều dùng được)');}catch(e){nd.textContent='Lỗi nạp bộ nền: '+(e&&e.message||e);}};
+      body.append(el('div',{class:'lbl'},'🧱 Nền mặc định theo khu (dùng cho mọi công cụ)'),nsel,nd);}
       {const vs=visSh();if(HID.has(curSheet))curSheet=vs.length?vs[0]:0;
       if(vs.length>10){const fq=el('input',{placeholder:'🔎 Lọc tên tileset…',class:'num',style:'width:100%;box-sizing:border-box;margin:2px 0'});fq.value=shQ;fq.addEventListener('input',()=>{shQ=fq.value;clearTimeout(fq._t);fq._t=setTimeout(()=>{draw();const n=body.querySelector('input[placeholder^="🔎 Lọc tên"]');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}},300);});
         const f=shQ.trim().toLowerCase();const lst=vs.filter(i=>!f||sheets[i].name.toLowerCase().includes(f)||i===curSheet);const pos=lst.indexOf(curSheet);
@@ -636,6 +640,7 @@ export function init2D(root,A){
   // khởi động
   (async()=>{await Promise.all(sheets.map(loadSheet));const sv=lsGet('thk_proj2d',null);const idbC=await idbGet('thk_sheets2d');
     if(sv&&sv.layers){for(const s of ((idbC&&idbC.length)?idbC:(sv.custom||[]))){const ns=Object.assign({},s);await loadSheet(ns);sheets.push(ns);}MAPS=Array.isArray(sv.maps)&&sv.maps.length?sv.maps:[];curMap=Math.min(sv.cur||0,Math.max(0,MAPS.length-1));M=clone(MAPS.length?MAPS[curMap]:sv);if(!MAPS.length){M.name=M.name||'Màn 1';MAPS=[clone(M)];}}else{M=fromVillage();M.name='Màn 1';MAPS=[clone(M)];}
+    if(window.__gn==null)window.__gn='lang-nui-pho-kenh';try{const r=await ensureNen(window.__gn);curSheet=r.sid;}catch(e){}
     stamp={w:1,h:1,multi:false,tiles:[enc(0,5)]};draw();setTimeout(fit,50);})();
   async function ensureNen(id){const pk=await nenPack(id),name='Nen-'+id;let sid=sheets.findIndex((s,i)=>i>=4&&s.name===name);
     if(sid<0){const s={name,url:pk.atlas,tw:pk.tw,margin:0,iso:2,cy:pk.cy};await loadSheet(s);sheets.push(s);sid=sheets.length-1;for(const [n,i] of Object.entries(pk.idx))TG.tiles[name+'#'+i]=nenTag(n);tgSave();}
