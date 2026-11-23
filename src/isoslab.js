@@ -40,3 +40,14 @@ export function tile192(cx,img,sx,sy,tw,cy0,px,py,S,f){const k=2*S/tw;
   const a=(d1[0]*e2[1]-d2[0]*e1[1])/det,c=(-d1[0]*e2[0]+d2[0]*e1[0])/det,b=(d1[1]*e2[1]-d2[1]*e1[1])/det,d=(-d1[1]*e2[0]+d2[1]*e1[0])/det;
   cx.save();{const k2=(2*S+1.2)/(2*S);cx.translate(px,py+S/2);cx.scale(k2,k2);cx.translate(-px,-(py+S/2));}cx.transform(a,b,c,d,px+D0[0]-(a*T[0]+c*T[1]),py+D0[1]-(b*T[0]+d*T[1]));
   cx.drawImage(img,sx,sy,tw,tw,0,0,tw,tw);cx.restore();}
+
+/* Xoá viền tối quanh mép ô nền iso: thay dải mép ~tw/38 px bằng ảnh phản chiếu từ bên trong → ô nền liền mạch, không còn "kẻ ô" */
+export function derim(img,tw,cy0){try{const W=img.width,H=img.height,c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(img,0,0);
+  const src=g.getImageData(0,0,W,H),out=g.getImageData(0,0,W,H),S=src.data,O=out.data,B=tw/38,k=tw*0.2236,hw=tw/2,hh=tw/4,cols=Math.floor(W/tw),rows=Math.floor(H/tw);
+  for(let r=0;r<rows;r++)for(let q=0;q<cols;q++){const ox=q*tw,oy=r*tw;let outside=0,inside=0;
+    for(let y=0;y<tw;y+=2)for(let x=0;x<tw;x+=2){const dx=x+.5-hw,dy=y-cy0+.5-hh,s=1-(Math.abs(dx)/hw+Math.abs(dy)/hh);if(S[((oy+y)*W+ox+x)*4+3]>128){if(s<-.04)outside++;else inside++;}}
+    if(!inside||outside>6)continue;
+    for(let y=Math.max(0,cy0-1);y<Math.min(tw,cy0+tw/2+1);y++)for(let x=0;x<tw;x++){const dx=x+.5-hw,dy=y-cy0+.5-hh,s=1-(Math.abs(dx)/hw+Math.abs(dy)/hh);if(s<=0)continue;const d=s*k;if(d>=B)continue;
+      const nx0=-Math.sign(dx)*2/tw,ny0=-Math.sign(dy)*4/tw,nl=Math.hypot(nx0,ny0),m=2*(B-d),sx=Math.round(x+nx0/nl*m),sy=Math.round(y+ny0/nl*m);
+      if(sx<0||sx>=tw||sy<0||sy>=tw)continue;const i=((oy+y)*W+ox+x)*4,j=((oy+sy)*W+ox+sx)*4;if(S[i+3]===0||S[j+3]<200)continue;O[i]=S[j];O[i+1]=S[j+1];O[i+2]=S[j+2];}}
+  g.putImageData(out,0,0);return c;}catch(e){return img;}}
