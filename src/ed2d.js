@@ -354,6 +354,18 @@ export function init2D(root,A){
      else if(k.startsWith('paste')){lab(clip?'Bấm lên bản đồ để dán ('+clip.w+'×'+clip.h+' ô)':'Chưa có gì để dán — hãy Chọn vùng rồi Sao chép');
        ft.append(fb('✔ Xong',()=>{tool='select';draw();dirty=true;},'#2f6b46'));}
    },150);}
+  // thanh nút tắt ở đáy bản đồ: công cụ + lớp + hoàn tác
+  {const host=document.getElementById('v2d');const dk=document.createElement('div');
+   dk.style.cssText='position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:6;display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:center;background:rgba(15,22,30,.92);border:1px solid #34485a;border-radius:14px;padding:6px 8px;max-width:96%';
+   host.append(dk);let dkey='';
+   const mk=(t,f,on,col)=>{const b=document.createElement('button');b.textContent=t;b.style.cssText='border:0;border-radius:9px;padding:8px 11px;font-size:13.5px;font-weight:600;color:#fff;background:'+(on?'#3a78d6':(col||'#2a3a4c'))+';cursor:pointer';b.onclick=e=>{e.stopPropagation();f();};return b;};
+   const sep=()=>{const d=document.createElement('span');d.style.cssText='width:1px;height:22px;background:#3a4a5c;margin:0 3px';return d;};
+   setInterval(()=>{const k=tool+'|'+act+'|'+(tab==='tools'?1:0);if(k===dkey)return;dkey=k;dk.textContent='';
+     [['draw','✏ Vẽ'],['erase','🧽 Xóa'],['select','⬚ Chọn vùng'],['paste','📥 Dán'],['pan','✋ Kéo']].forEach(([t,n])=>dk.append(mk(n,()=>{tool=t;tab='tools';draw();dirty=true;},tool===t)));
+     dk.append(sep());
+     ['Nền','Phủ nền','Vật thể','Mái/cửa'].forEach((n,i)=>dk.append(mk(n,()=>{act=i;if(tool==='select'||tool==='paste'||tool==='pan')tool='draw';tab='tools';draw();dirty=true;},act===i,'#35453a')));
+     dk.append(sep(),mk('↶',doUndo),mk('↷',doRedo),mk('⤢',fit));
+   },150);}
   const sc=el('canvas',{class:'stampc'});
   ui.stamp=()=>{const c=$('.stampc',pn);if(!c)return;const z=Math.max(1,Math.min(5,Math.floor(120/Math.max(stamp.w,stamp.h)/CELL*3)));c.width=stamp.w*CELL*z/1;c.height=stamp.h*CELL*z/1;const g=c.getContext('2d');g.imageSmoothingEnabled=false;g.fillStyle='#2a3340';g.fillRect(0,0,c.width,c.height);
     for(let j=0;j<stamp.h;j++)for(let i=0;i<stamp.w;i++){if(stamp.multi){for(let l=0;l<4;l++){const v=stamp.layers[l]&&stamp.layers[l][j*stamp.w+i];if(v)drawTile(g,v,i*CELL*z,j*CELL*z,CELL*z);}}else drawTile(g,stamp.tiles[j*stamp.w+i],i*CELL*z,j*CELL*z,CELL*z);}};
@@ -378,7 +390,7 @@ export function init2D(root,A){
         if(tool==='paste')box.append(el('div',{class:'hint'},clip?'Chạm/kéo để đặt (tâm vùng dán theo ngón tay), nhả ra là dán. Dán được nhiều lần. Esc hoặc "Xong dán" để thoát.':'Chưa có gì để dán — dùng "Chọn vùng" rồi "Sao chép" trước.'));
         if(tool==='select')box.append(el('div',{class:'hint'},'Phím tắt: ←↑↓→ di chuyển (Shift = 5 ô) · Ctrl+D nhân bản · H lật ngang · F phóng tới vùng · Enter chọn cả cụm công trình (trỏ chuột vào nó) · Ctrl+C/X/V · Ctrl+A · Delete · Esc · Ctrl+Z hoàn tác. Chế độ Vẽ: giữ Shift + kéo để đặt thành hàng.'));
         body.append(box);}
-      if(simple){body.append(el('div',{class:'guide',style:'margin-top:8px;padding:10px;border-radius:10px;background:#16261d;border:1px solid #3d6a4c;font-size:13.5px;line-height:1.7'},
+      if(simple){body.append(quickPick());body.append(el('div',{class:'guide',style:'margin-top:8px;padding:10px;border-radius:10px;background:#16261d;border:1px solid #3d6a4c;font-size:13.5px;line-height:1.7'},
         el('div',{style:'font-weight:700;color:#9fe0b0;margin-bottom:4px'},'Cách dùng nhanh'),
         el('div',{},'1. Muốn đặt nhà/cây: vào tab 🏠 Mẫu 2D hoặc 🔎 Tài nguyên, bấm một ô, rồi bấm lên bản đồ.'),
         el('div',{},'2. Muốn chép một khu: bấm ⬚ Chọn vùng → kéo trên bản đồ → bấm 📋 Sao chép (nút nổi trên bản đồ) → bấm chỗ cần dán.'),
@@ -538,6 +550,27 @@ export function init2D(root,A){
     for(const e of M.ents){if(!e.tile||!sheets[e.tile.sid])continue;const key=sheets[e.tile.sid].name+'#'+e.tile.idx,t=TG.tiles[key]||{};if(!t.type&&!(TG.sheets[sheets[e.tile.sid].name]||{}).type){t.type=e.t==='enemy'?'Quái':e.t==='npc'?'Nhân vật':'Đồ vật';TG.tiles[key]=t;nt++;}}
     tgSave();toast('Đã tinh chỉnh nhãn theo bản đồ của bạn: '+nt+' ô');}
   function keepScroll(f){const a=pn.scrollTop,b=body.scrollTop;f();pn.scrollTop=a;body.scrollTop=b;}
+  const QS={sh:-1,lim:90};
+  function quickPick(){const wrap=el('div',{style:'margin-top:8px;padding:8px;border:1px solid #34485a;border-radius:10px'});
+    if(act>=4){wrap.append(el('div',{class:'hint'},'Lớp Vùng chặn: chọn ✏ Vẽ rồi kéo trên bản đồ để chặn đường, 🧽 Xóa để mở lại.'));return wrap;}
+    if(!TG.auto){TG.auto=1;autoTag();}
+    const hd=el('div',{class:'row'},el('span',{class:'lbl',style:'font-weight:700'},'Đồ của lớp '+RL[act]+' · đang cầm:'),el('canvas',{class:'stampc',style:'height:38px;width:auto'}));wrap.append(hd);
+    const sl=el('select',{class:'num',style:'max-width:100%',onchange:e=>{QS.sh=+e.target.value;QS.lim=90;draw();}},el('option',{value:-1},'Tất cả bộ'),visSh().map(i=>el('option',{value:i},sheets[i].name)));if(HID.has(QS.sh))QS.sh=-1;sl.value=QS.sh;
+    wrap.append(el('div',{class:'row'},sl,act===2?btn('🏠 Mẫu 2D (nhà, cây lớn)',()=>{tab='mau';draw();}):btn('🔎 Xem thêm bộ lọc',()=>{RS.L=act;tab='res';draw();})));
+    const out=[];let total=0;
+    sheets.forEach((sh,sid)=>{if(HID.has(sid))return;if(QS.sh>=0&&QS.sh!==sid)return;if(!sh.img||!sh.cols)return;const em=emptyMap(sh);
+      for(let idx=0;idx<sh.cols*sh.rows;idx++){if(em[idx]===1)continue;const e=eff(sid,idx);if(e.layer!==act)continue;total++;if(out.length<QS.lim)out.push({sid,idx,e});}});
+    const cur=stamp.tiles&&!stamp.multi&&stamp.tiles.length===1?stamp.tiles[0]:0;
+    const grid=el('div',{style:'display:flex;flex-wrap:wrap;gap:3px;margin:6px 0'});
+    for(const o of out){const v=enc(o.sid,o.idx);
+      const c=el('canvas',{width:32,height:32,title:sheets[o.sid].name+' #'+o.idx,style:'width:44px;height:44px;image-rendering:pixelated;background:#2a3340;border-radius:4px;cursor:pointer;border:2px solid '+(v===cur?'#3ddc84':'transparent')+';box-sizing:border-box'});
+      const g=c.getContext('2d');g.imageSmoothingEnabled=false;drawTile(g,v,0,0,32);
+      c.addEventListener('click',()=>{stamp={w:1,h:1,multi:false,tiles:[v]};tool='draw';noteRecent(v);[...grid.children].forEach(x=>x.style.borderColor='transparent');c.style.borderColor='#3ddc84';ui.stamp&&ui.stamp();dirty=true;toast('Đã chọn — bấm hoặc kéo trên bản đồ để vẽ');});
+      grid.append(c);}
+    wrap.append(grid);
+    if(!total)wrap.append(el('div',{class:'hint'},'Chưa có đồ nào gắn cho lớp này. Nạp tài nguyên ở tab 💾 Tệp, hoặc bấm "Xem thêm bộ lọc".'));
+    if(total>out.length)wrap.append(el('div',{class:'row'},btn('Hiện thêm…',()=>{QS.lim+=90;keepScroll(draw);}),el('span',{class:'lbl'},out.length+' / '+total)));
+    setTimeout(()=>ui.stamp&&ui.stamp(),0);return wrap;}
   function resTab(){const S=RS;if(!TG.auto){TG.auto=1;autoTag();}const used=new Set();M.layers.forEach(a=>a.forEach(v=>{if(v){const d=dec(v);used.add(d.sid+':'+d.idx);}}));
     const reset=()=>{S.lim=300;draw();};
     const q=el('input',{placeholder:'🔎 Tìm: tên tileset, loại, tác dụng…',style:'width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid #34485a;background:#16202b;color:#fff;font-size:14px;margin-bottom:6px'});q.value=S.q;
