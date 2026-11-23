@@ -1,5 +1,5 @@
 import {logicTab,entExtra} from './logic.js';
-import {animTab,animPick,uniqNames} from './anim.js';
+import {animTab,animPick,uniqNames,makeAnims} from './anim.js';
 import {unzipSync} from 'fflate';
 import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,guessTile,ask,askText,yes,zipBrowser,slotsUI,exportGame} from './util.js';
 const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
@@ -50,7 +50,7 @@ export function init2D(root,A){
     if(t==='door'){Object.assign(b,{name:'Cửa',tile:null,to:Math.min(MAPS.length-1,curMap+1)===curMap?0:curMap+1,tx:null,ty:null});}
     return b;}
   function drawEnts(z){for(const e of M.ents){const X=view.x+e.x*CELL*z,Y=view.y+e.y*CELL*z,S=CELL*z,col=OT[e.t][2];
-      if(e.tile&&e.t!=='deco'){drawTile(cx,enc(e.tile.sid,e.tile.idx),X,Y,S);}else{cx.fillStyle='#0008';cx.fillRect(X+1,Y+1,S-2,S-2);cx.font=(S*.7)+'px serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillStyle='#fff';cx.fillText(OT[e.t][0],X+S/2,Y+S/2+1);}
+      if(e.tile&&e.t!=='deco'){drawTile(cx,enc(e.tile.sid,e.tile.idx),X,Y,S);}else{cx.fillStyle='#0008';cx.fillRect(X+1,Y+1,S-2,S-2);if(S>=14){cx.font='bold '+Math.max(8,S*.32)+'px system-ui';cx.textAlign='center';cx.textBaseline='middle';cx.fillStyle='#fff';cx.fillText((e.name||OT[e.t][1]).slice(0,4),X+S/2,Y+S/2+1);}}
       cx.strokeStyle=col;cx.lineWidth=e.id===selId?3:1.5;cx.strokeRect(X+1,Y+1,S-2,S-2);
       if(z>=2.2){cx.font='bold '+Math.max(9,S*.3)+'px system-ui';cx.textAlign='center';cx.textBaseline='alphabetic';cx.fillStyle=col;cx.fillText(OT[e.t][0],X+S*.2,Y+S*.3);}}
     cx.textBaseline='alphabetic';}
@@ -105,8 +105,11 @@ export function init2D(root,A){
       const p=g2s(e.x+.5,e.y+.5),col=OT[e.t][2],sz=S*1.5;
       cx.lineWidth=sel?3:1.5;cx.strokeStyle=col;pathQ(e.x,e.y,1,1);cx.stroke();
       if(e.tile){tileG0(enc(e.tile.sid,e.tile.idx),p[0]-sz/2,p[1]-sz*.85,sz);}
-      else{cx.fillStyle='#000a';cx.beginPath();cx.arc(p[0],p[1]-S*.35,S*.48,0,6.3);cx.fill();cx.stroke();cx.font=(S*.65)+'px serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillStyle='#fff';cx.fillText(OT[e.t][0],p[0],p[1]-S*.33);cx.textBaseline='alphabetic';}
+      else{let ok=false;if(e.anim){try{const A=isoAN();if(A){A.drawChar(cx,{x:0,y:0,dir:0,vx:0,vy:0},e.anim,p[0],p[1]+S*.1,sc,0,{iso:true});ok=true;}}catch(_){}}
+        if(!ok){cx.fillStyle=col+'55';pathQ(e.x,e.y,1,1);cx.fill();}
+        if(view.z>=.9){cx.font='bold '+Math.max(9,S*.5)+'px system-ui';cx.textAlign='center';cx.textBaseline='alphabetic';const t=e.name||OT[e.t][1],w=cx.measureText(t).width+6;cx.fillStyle='#000b';cx.fillRect(p[0]-w/2,p[1]-sz*.95-2,w,Math.max(11,S*.5)+4);cx.fillStyle=col;cx.fillText(t,p[0],p[1]-sz*.95+Math.max(9,S*.5)-1);}}
       isoHB.push({e,r:[p[0]-sz/2,p[1]-sz*.85,p[0]+sz/2,p[1]+S*.1],f:[e.x,e.y,e.x+1,e.y+1]});}}
+  let anC=null,anK='';function isoAN(){const k=((M.cfg.anims||[]).length)+'|'+sheets.filter(q=>q&&q.img).length;if(anC&&anK===k)return anC;anK=k;return anC=makeAnims(M.cfg,sheets);}
   function tileG0(v,x,y,s){drawTile(cx,v,x,y,s);}
   function entAtScreen(px,py){const g=s2g(px,py);for(let i=isoHB.length-1;i>=0;i--){const b=isoHB[i],r=b.r;if(px>=r[0]&&px<=r[2]&&py>=r[1]&&py<=r[3])return b.e;}
     for(let i=isoHB.length-1;i>=0;i--){const f=isoHB[i].f;if(g.x>=f[0]&&g.x<f[2]&&g.y>=f[1]&&g.y<f[3])return isoHB[i].e;}return null;}
