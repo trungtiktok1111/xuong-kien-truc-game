@@ -3,6 +3,7 @@ import {el} from './util.js';
 import {zonesHit,zRaster,zPath,decoZones} from './zones.js';
 import {makeAnims} from './anim.js';
 import {slab,shore,tile192,mirF} from './isoslab.js';
+import {bakeLayer0,noiseOverlay,paintSlab,drawFog} from './groundfx.js';
 const HERO=88,FOES=[108,109,120,121,122,111,110],TD=2;
 export function play2D(o){
   const M=o.M,W=M.w,H=M.h,sheets=o.sheets;const CF=Object.assign({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:TD,idx:HERO},win:'auto'},M.cfg||{});const EN=M.ents||[],legacy=!EN.length;const VW=CF.view||'rpg',SIDE=VW==='side',ISO=VW==='iso',DCL=EN.filter(e=>e.t==='deco');
@@ -28,18 +29,27 @@ export function play2D(o){
   const blocked=(x,y)=>x<0||y<0||x>=W||y>=H||!!M.blk[y*W+x]||!!ZR[y*W+x];
   let CQ=16;for(const sh of sheets)if(sh&&sh.img&&sh.tw>CQ)CQ=Math.min(48,sh.tw);
   while(W*H*CQ*CQ>2.2e7&&CQ>16)CQ-=8;
+  const FOG=(M.cfg&&M.cfg.fog)|0;
+  const SMG=!(M.cfg&&M.cfg.smooth===false);
+  const bakedOk=v=>{const t=(v-1)>>3,sh=sheets[t>>12];return !!(sh&&sh.img&&(!sh.iso||(sh.iso===2?!(sh.wat&&sh.wat.includes(t&4095)):!(((v-1)&7)&4))));};
   function mk(top){const c=document.createElement('canvas');c.width=W*CQ;c.height=H*CQ;const g=c.getContext('2d');g.imageSmoothingEnabled=CQ>16;g.imageSmoothingQuality='high';const h2=CQ/2;
-    const ls=top===2?[0,1]:(top?[3]:[0,1,2]);for(const l of ls){const a=M.layers[l];for(let i=0;i<a.length;i++){const v=a[i];if(!v)continue;const n=v-1,f=n&7,t=n>>3,sid=t>>12,idx=t&4095,sh=sheets[sid];if(!sh||!sh.img)continue;if(top===2&&sh.iso)continue;
+    const SM=top===2&&!(M.cfg&&M.cfg.smooth===false);
+    const ls=top===2?[0,1]:(top?[3]:[0,1,2]);for(const l of ls){const a=M.layers[l];
+      if(l===0&&SM){const pt=(g2,v,dx,dy,s)=>{const n=v-1,f=n&7,t=n>>3,sid=t>>12,idx=t&4095,sh=sheets[sid];if(!sh||!sh.img)return;if(sh.iso){paintSlab(g2,sh.img,(idx%sh.cols)*(sh.tw+sh.margin),Math.floor(idx/sh.cols)*(sh.tw+sh.margin),sh.tw,sh.iso===2?(sh.cy||0):0,dx,dy,s,f&3);return;}const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin),hh=s/2;
+          if(!f)g2.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,s,s);else{g2.save();g2.translate(dx+hh,dy+hh);if(f&4){g2.rotate(Math.PI/2);g2.scale(1,-1);}if(f&1)g2.scale(-1,1);if(f&2)g2.scale(1,-1);g2.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-hh,-hh,s,s);g2.restore();}};
+        bakeLayer0(g,{W,H,Q:CQ,a,paint:pt,smooth:true,ok:bakedOk});continue;}
+      for(let i=0;i<a.length;i++){const v=a[i];if(!v)continue;const n=v-1,f=n&7,t=n>>3,sid=t>>12,idx=t&4095,sh=sheets[sid];if(!sh||!sh.img)continue;if(top===2&&sh.iso)continue;
       const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin),dx=(i%W)*CQ,dy=Math.floor(i/W)*CQ;
-      if(!f)g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,CQ,CQ);else{g.save();g.translate(dx+h2,dy+h2);if(f&4){g.rotate(Math.PI/2);g.scale(1,-1);}if(f&1)g.scale(-1,1);if(f&2)g.scale(1,-1);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-h2,-h2,CQ,CQ);g.restore();}}}return c;}
+      if(!f)g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,CQ,CQ);else{g.save();g.translate(dx+h2,dy+h2);if(f&4){g.rotate(Math.PI/2);g.scale(1,-1);}if(f&1)g.scale(-1,1);if(f&2)g.scale(1,-1);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-h2,-h2,CQ,CQ);g.restore();}}}if(SM)noiseOverlay(g,W,H,CQ);return c;}
   const base=ISO?null:mk(false),top=ISO?null:mk(true),gnd=ISO?mk(2):null;
-  const SL=[];if(ISO){for(const l of [0,1])for(let i=0;i<W*H;i++){const v=M.layers[l][i];if(!v)continue;const t=(v-1)>>3,sid=t>>12,sh=sheets[sid];if(sh&&sh.img&&sh.iso)SL.push({x:i%W,y:(i/W)|0,sid,idx:t&4095,l,f:(v-1)&7});}SL.sort((a,b)=>(a.x+a.y)-(b.x+b.y)||a.l-b.l);}
-  const GR=[];if(ISO){const oc=new Uint8Array(W*H),lab=new Uint8Array(W*H);for(let i=0;i<W*H;i++)oc[i]=(M.layers[2][i]||M.layers[3][i])?1:0;
+  const SL=[];if(ISO){for(const l of [0,1])for(let i=0;i<W*H;i++){const v=M.layers[l][i];if(!v)continue;const t=(v-1)>>3,sid=t>>12,sh=sheets[sid];if(sh&&sh.img&&sh.iso&&!(SMG&&l===0&&bakedOk(v)))SL.push({x:i%W,y:(i/W)|0,sid,idx:t&4095,l,f:(v-1)&7});}SL.sort((a,b)=>(a.x+a.y)-(b.x+b.y)||a.l-b.l);}
+  const mkG=Ls=>{const out=[];if(!ISO)return out;const oc=new Uint8Array(W*H),lab=new Uint8Array(W*H);for(let i=0;i<W*H;i++)oc[i]=Ls.some(l=>M.layers[l][i])?1:0;
     for(let i=0;i<W*H;i++){if(!oc[i]||lab[i])continue;const st=[i],cells=[];lab[i]=1;let x0=W,y0=H,x1=-1,y1=-1;
       while(st.length){const c=st.pop();cells.push(c);const x=c%W,y=(c/W)|0;x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+a,ny=y+b;if(nx<0||ny<0||nx>=W||ny>=H)continue;const q=ny*W+nx;if(oc[q]&&!lab[q]){lab[q]=1;st.push(q);}}}
       const bw=x1-x0+1,bh=y1-y0+1,c=document.createElement('canvas');c.width=bw*CQ;c.height=bh*CQ;const g=c.getContext('2d');g.imageSmoothingEnabled=CQ>16;
-      for(const l of [2,3])for(const ci of cells){const v=M.layers[l][ci];if(!v)continue;const n=v-1,t=n>>3,sid=t>>12,idx=t&4095,sh=sheets[sid];if(!sh||!sh.img)continue;const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,((ci%W)-x0)*CQ,(((ci/W)|0)-y0)*CQ,CQ,CQ);}
-      GR.push({c,xc:(x0+x1+1)/2,yb:y1+1});}}
+      for(const l of Ls)for(const ci of cells){const v=M.layers[l][ci];if(!v)continue;const n=v-1,t=n>>3,sid=t>>12,idx=t&4095,sh=sheets[sid];if(!sh||!sh.img)continue;const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,((ci%W)-x0)*CQ,(((ci/W)|0)-y0)*CQ,CQ,CQ);}
+      out.push({c,xc:(x0+x1+1)/2,yb:y1+1,x0,y0,x1:x1+1,y1:y1+1,a:1});}return out;};
+  const GR=mkG([2]),OVG=mkG([3]);
   function ico(k,x,y,s){cx.save();cx.translate(x,y);
     if(k==='heart'){cx.fillStyle='#e8484f';cx.beginPath();cx.moveTo(0,s*.3);cx.bezierCurveTo(-s*.5,-s*.05,-s*.25,-s*.4,0,-s*.12);cx.bezierCurveTo(s*.25,-s*.4,s*.5,-s*.05,0,s*.3);cx.fill();}
     else if(k==='chest'||k==='chest2'){const o=k==='chest2';cx.fillStyle='#8a5a2b';cx.fillRect(-s*.3,-s*.05,s*.6,s*.3);cx.fillStyle='#b8823f';if(o){cx.fillRect(-s*.3,-s*.32,s*.6,s*.12);cx.fillStyle='#ffe58a';cx.fillRect(-s*.24,-s*.1,s*.48,s*.08);}else{cx.fillRect(-s*.3,-s*.22,s*.6,s*.18);cx.fillStyle='#e8c34a';cx.fillRect(-s*.05,-s*.1,s*.1,s*.14);}}
@@ -130,6 +140,8 @@ export function play2D(o){
       if(n.p){if(P.inv>0&&Math.floor(t*14)%2)continue;if(!(CF.heroAnim&&AN.drawChar(cx,P,CF.heroAnim,ox+P.x*s,oy+P.y*s,s,t,{iso:ISO,atk:P.atkT>0?(P.cs||1):0,aid:P.atkN,chain:P.cs>1,hit:P.hitT>0}))){const hs=sheets[CF.hero.sid];if(hs&&/đã gỡ/.test(hs.name)){cx.fillStyle='#e0b050';cx.beginPath();cx.arc(ox+P.x*s,oy+(P.y-.3)*s,s*.3,0,6.3);cx.fill();}else tile(CF.hero.sid,CF.hero.idx,ox+(P.x-.5)*s,oy+(P.y-.7)*s,s,P.face<0);}}
       else{const e=n.e;cx.globalAlpha=e.fl>0?.5:1;if(!(e.anim&&AN.drawChar(cx,e,e.anim,ox+e.x*s,oy+e.y*s,s,t,{iso:ISO,hit:e.fl>0,atk:Math.hypot(P.x-e.x,P.y-e.y)<.8})))fbk(e,ox+(e.x-.5)*s,oy+(e.y-.7)*s,s,e.x<P.x);cx.globalAlpha=1;cx.fillStyle='#000a';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7,3);cx.fillStyle='#e74c3c';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7*Math.max(0,e.hp)/e.mhp,3);}}
     for(const q of TC){const d=q.d,zb=d.zb||[-(d.fx||1),-(d.fy||1),d.fx||1,d.fy||1],x0=d.x+1+zb[0]-.7,y0=d.y+1+zb[1]-.7,ins=P.x>x0&&P.x<x0+zb[2]+1.4&&P.y>y0&&P.y<y0+zb[3]+1.4;d._a=(d._a==null?1:d._a)+((ins?.3:1)-(d._a==null?1:d._a))*.2;const sh=sheets[d.cv.sid];if(!sh||!sh.img)continue;const sx=(d.cv.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(d.cv.idx/sh.cols)*(sh.tw+sh.margin);cx.globalAlpha=d._a;cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,q.X-q.ws/2+(d.ox||0)*q.ws,q.Y-q.ws+(d.oy||0)*q.ws,q.ws,q.ws);cx.globalAlpha=1;}
+    if(ISO)for(const g of OVG){const ins=P.x>g.x0-.4&&P.x<g.x1+.4&&P.y>g.y0-.4&&P.y<g.y1+.4;g.a+=((ins?.35:1)-g.a)*.18;const k2=s*.95/CQ,wp=g.c.width*k2,hp=g.c.height*k2;cx.globalAlpha=g.a;cx.drawImage(g.c,pX(g.xc,g.yb)-wp/2,pY(g.xc,g.yb)-hp,wp,hp);cx.globalAlpha=1;}
+    if(ISO&&FOG)drawFog(cx,w,h,FOG,t,(P.x-P.y)*s*.75,(P.x+P.y)*s*.375);
     ox=ox1;oy=oy1;for(const d of DR){if(ISO){ox=pX(d.x,d.y)-d.x*s;oy=pY(d.x,d.y)-d.y*s;}cx.font=(s*.8)+'px serif';cx.textAlign='center';ico('door',ox+d.x*s,oy+d.y*s,s*1.2);}
     if(!ISO)cx.drawImage(top,ox,oy,W*s,H*s);
     if(window.__dbg){window.__P=P;window.__Z=ZS;}

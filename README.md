@@ -15,7 +15,7 @@ Mẫu 2D, bản đồ, tài nguyên đã nạp lưu trong **trình duyệt** (In
 - **Chơi thử** 2D/3D: nhân vật, va chạm theo dấu chân, sắp xếp che khuất theo dấu chân.
 
 ## Cấu trúc thư mục
-- `src/` mã nguồn. Chính: `main.js` (vào), `ed2d.js` (editor 2D), `mau2d.js` (kho mẫu), `ed3d.js`, `play2d.js`, `play3d.js`, `isoslab.js` (vẽ ô nền chéo), `gen2d.js` (sinh bản đồ), `logic.js`, `util.js`.
+- `src/` mã nguồn. Chính: `main.js` (vào), `ed2d.js` (editor 2D), `mau2d.js` (kho mẫu), `ed3d.js`, `play2d.js`, `play3d.js`, `isoslab.js` (vẽ ô nền chéo), `groundfx.js` (nền mượt: hòa trộn mép, đốm sáng tối, sương), `gen2d.js` (sinh bản đồ), `logic.js`, `util.js`.
 - `tpl.html` khung trang; `index.html` là **bản đã đóng gói** (sinh ra, đừng sửa tay).
 - `nen/` gói nền (atlas ô 192px, `index.json` liệt kê); `vat/` gói vật thể; `assets/` danh mục.
 - `tests/` kịch bản kiểm thử Playwright (`t*.py`); `tools/` script phụ; `docs/` ghi chú thiết kế (vùng chặn).
