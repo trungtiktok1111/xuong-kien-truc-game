@@ -4,9 +4,31 @@ import {genTerrain} from './terrain.js';
 const B=64;
 const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d');
 const KINDS={
-  village:{name:'Làng',houses:[4,6],trees:[14,22],props:[14,22],pond:1,paths:2},
-  forest:{name:'Rừng',houses:[0,1],trees:[70,110],props:[10,18],pond:1,paths:1},
-  wild:{name:'Đồng hoang',houses:[0,2],trees:[8,14],props:[16,26],pond:0,paths:1}};
+  village:{name:'Làng',pack:'lang-nui-pho-kenh',houses:[4,6],trees:[14,22],props:[14,22],pond:1,paths:2},
+  mtvillage:{name:'Làng núi',pack:'lang-nui',houses:[3,5],trees:[16,24],vat:[2,4],pond:1},
+  town:{name:'Thành trấn',pack:'thanh-thi',houses:[9,13],trees:[3,6],vat:[4,7],bush:[2,5],pond:0},
+  market:{name:'Phố chợ',pack:'pho-cho',houses:[7,10],trees:[2,5],vat:[5,8],bush:[0,3],pond:0},
+  capital:{name:'Kinh đô',pack:'kinh-thanh',houses:[10,14],trees:[4,8],vat:[4,7],bush:[3,6],pond:1},
+  palace:{name:'Cung điện',pack:'cung-dien',houses:[2,4],trees:[4,8],vat:[3,6],bush:[4,8],pond:0},
+  imperial:{name:'Hoàng thành',pack:'hoang-thanh',houses:[3,5],trees:[3,6],vat:[3,6],bush:[2,5],pond:0},
+  sect:{name:'Tông môn',pack:'son-mon',houses:[3,5],trees:[20,30],vat:[2,4],bush:[6,12],pond:0},
+  immortal:{name:'Tiên môn',pack:'tien-cung',houses:[2,3],trees:[6,10],vat:[1,3],bush:[8,14],pond:0},
+  cloud:{name:'Vân sơn (tuyết/mây)',pack:'van-son',houses:[1,3],trees:[10,18],vat:[2,4],bush:[2,5],pond:0},
+  tunnel:{name:'Địa đạo',pack:'dia-dao',houses:[0,0],trees:[0,0],vat:[0,2],bush:[0,0],pond:0},
+  dungeon:{name:'Địa cung',pack:'dia-cung',houses:[0,0],trees:[0,0],vat:[0,3],bush:[0,0],pond:0},
+  crypt:{name:'Hầm mộ',pack:'ham-mo',houses:[0,0],trees:[0,0],vat:[1,4],bush:[0,0],pond:0},
+  tomb:{name:'Lăng tẩm',pack:'lang-tam',houses:[1,2],trees:[8,14],vat:[4,8],bush:[2,5],pond:0},
+  battlefield:{name:'Chiến trường',pack:'thao-nguyen',houses:[0,0],trees:[2,5],vat:[18,30],bush:[0,2],pond:0},
+  lava:{name:'Dung nham',pack:'dung-nham',houses:[0,0],trees:[0,2],vat:[6,12],bush:[0,0],pond:1},
+  gem:{name:'Khe ngọc',pack:'khe-ngoc',houses:[0,1],trees:[0,3],vat:[6,12],bush:[0,2],pond:1},
+  port:{name:'Bến sông',pack:'ben-song',houses:[3,6],trees:[4,8],vat:[6,10],bush:[2,5],pond:1},
+  coast:{name:'Duyên hải',pack:'duyen-hai',houses:[2,4],trees:[5,10],vat:[3,6],bush:[2,5],pond:1},
+  lotus:{name:'Đầm sen',pack:'dam-sen',houses:[1,3],trees:[8,14],vat:[2,4],bush:[6,10],pond:1},
+  farm:{name:'Đồng quê',pack:'dong-que',houses:[2,4],trees:[8,14],vat:[3,6],bush:[4,8],pond:0},
+  outpost:{name:'Trạm dịch',pack:'tram-dich',houses:[2,4],trees:[2,5],vat:[6,10],bush:[0,2],pond:0},
+  forest:{name:'Rừng',pack:'rung-truc',houses:[0,1],trees:[70,110],vat:[2,4],bush:[8,14],pond:1},
+  wild:{name:'Đồng hoang',pack:'thao-nguyen',houses:[0,2],trees:[8,14],vat:[4,8],bush:[3,8],pond:0}};
+export const GEN_KIND_PACK=Object.fromEntries(Object.entries(KINDS).map(([k,v])=>[k,v.pack]));
 export const GEN_KINDS=Object.fromEntries(Object.entries(KINDS).map(([k,v])=>[k,v.name]));
 
 
@@ -53,7 +75,7 @@ function buildIso(ctx,opt,cat){
   const info={ground:G?G.grass.length:1,water:1,tree:by('Cây').length,house:by('Nhà').length,prop:by('Vật').length+by('Bụi').length,placed:{house:0,tree:0,prop:0}};
   if(!NEN&&!by('Nhà').length&&!by('Cây').length)return {error:'Danh mục tài nguyên trống. Hãy mở "Màn 1 có sẵn" trước (nó nạp bộ tài nguyên + danh mục) rồi tạo lại.'};
   let cy=Math.floor(H/2),A=Math.max(1,Math.floor(H/10)),ph=r()*6.28,fr=5+r()*4;const pathCells=[];
-  if(NEN){const TT=genTerrain({pk:NEN.pk,sid:NEN.sid,enc,W,H,r,opt});for(let i=0;i<W*H;i++){layers[0][i]=TT.L0[i];blk[i]=TT.blk[i];occ[i]=TT.occ[i];}TT.pathCells.forEach(q=>pathCells.push(q));cy=TT.cy;zonesOut=TT.zones;info.terrain=TT.info;}
+  if(NEN){if(K.pond===0)opt={...opt,pond:0};const TT=genTerrain({pk:NEN.pk,sid:NEN.sid,enc,W,H,r,opt});for(let i=0;i<W*H;i++){layers[0][i]=TT.L0[i];blk[i]=TT.blk[i];occ[i]=TT.occ[i];}TT.pathCells.forEach(q=>pathCells.push(q));cy=TT.cy;zonesOut=TT.zones;info.terrain=TT.info;}
   else{
   for(let i=0;i<W*H;i++)layers[0][i]=enc(G.sid,r()<.13?G.grass[1]:G.grass[0]);
   const road=(x,y)=>{if(x<1||y<1||x>=W-1||y>=H-1)return;const i=y*W+x;layers[0][i]=enc(G.sid,G.path);occ[i]=2;};
@@ -83,9 +105,9 @@ function buildIso(ctx,opt,cat){
       for(let t=0;t<tries;t++){const x=2+Math.floor(r()*(W-4)),y=2+Math.floor(r()*(H-4)),cells=bb(it,x,y);if(!cells.length||!ok(cells,mg))continue;if(nearPath&&!near(cells,7))continue;put(it,x,y,cells,name);info.placed[key]++;break;}}};
   const rn=(a,b)=>a+Math.floor(r()*(b-a+1));
   place(by('Nhà'),rn(K.houses[0],K.houses[1])||0,300,1,true,null,'house');
-  place(by('Vật'),rn(2,4),120,1,false,null,'prop');
+  place(by('Vật'),rn(...(K.vat||[2,4])),160,1,false,null,'prop');
   place(by('Cây'),rn(K.trees[0],Math.min(K.trees[1],30)),100,0,false,'Cây','tree');
-  place(by('Bụi'),rn(6,12),100,0,false,'Bụi hoa','prop');
+  place(by('Bụi'),rn(...(K.bush||[6,12])),100,0,false,'Bụi hoa','prop');
   for(let x=0;x<W;x++){blk[x]=1;blk[(H-1)*W+x]=1;}for(let y=0;y<H;y++){blk[y*W]=1;blk[y*W+W-1]=1;}
   ents.push({id:'s'+Date.now().toString(36),t:'start',x:sx,y:sy,name:'Xuất phát',tile:null});
   if(opt.goal){const e=pathCells[pathCells.length-3]||[W-3,cy];ents.push({id:'g'+Date.now().toString(36),t:'goal',x:e[0],y:e[1],name:'Đích',tile:null});}
