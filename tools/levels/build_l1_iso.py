@@ -179,7 +179,7 @@ for i,n in enumerate(names):
     OXY[n]=(round(.5-(ix+tx_*kf)/TW,4),round(1-(iy+ty_*kf)/TW,4)) if n not in KOBJ and n not in ('Gieng','Sen') and n not in FPO else (0,0)
 # ---- bản đồ ----
 W=H=44
-enc=lambda sid,idx:((sid*4096+idx)*8)+1
+enc=lambda sid,idx,f=0:((sid*4096+idx)*8)+1+f
 SID_SL,SID_OB=39,40
 L=[[0]*(W*H) for _ in range(4)];blk=[0]*(W*H)
 off=lambda y:round(1.5*math.sin(y/5))
@@ -195,7 +195,7 @@ for y in range(1,43):
 for y in range(H):
     for x in range(W):
         i=y*W+x
-        if (x,y) in water:L[0][i]=enc(SID_SL,2);blk[i]=1
+        if (x,y) in water:L[0][i]=enc(SID_SL,2,4|(x&1)|((y&1)<<1));blk[i]=1
         elif (x,y) in road or (x,y) in plaza:L[0][i]=enc(SID_SL,3)
         else:L[0][i]=enc(SID_SL,1 if random.random()<.13 else 0)
 for x in range(W):blk[x]=blk[(H-1)*W+x]=1

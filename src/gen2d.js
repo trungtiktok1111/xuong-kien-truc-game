@@ -57,9 +57,15 @@ function buildIso(ctx,opt,cat){
   for(let x=1;x<W-1;x++){const y=cy+Math.round(A*Math.sin(x/fr+ph));for(let d=0;d<2;d++){road(x,y+d);pathCells.push([x,y+d]);}}
   const bx=Math.floor(W*(.4+r()*.2));for(let y=1;y<H-1;y++)for(let d=0;d<2;d++)road(bx+d,y);
   const pw=Math.min(8,Math.floor(W/4));for(let y=cy-Math.floor(pw/2);y<cy+Math.ceil(pw/2);y++)for(let x=bx-Math.floor(pw/2);x<bx+Math.ceil(pw/2);x++)road(x,y);
-  if(K.pond&&G.water!=null){for(let t=0;t<60;t++){const px=1+Math.floor(r()*(W-2)),py=1+Math.floor(r()*(H-2)),rx=3+Math.floor(r()*3),ry=2+Math.floor(r()*2);const cells=[];let bad=0;
-    for(let y=py-ry;y<=py+ry;y++)for(let x=px-rx;x<=px+rx;x++){if(((x-px)/rx)**2+((y-py)/ry)**2<=1){if(x<3||y<3||x>=W-3||y>=H-3||occ[y*W+x]){bad=1;}cells.push(y*W+x);}}
-    if(bad||cells.length<8)continue;for(const i of cells){layers[0][i]=enc(G.sid,G.water);blk[i]=1;occ[i]=3;}break;}}
+  /* mặt nước: ao hình tự nhiên (bờ lượn) + suối chảy vào ao, nằm gọn trong 1 góc giữa các đường (không cắt đường) */
+  if(K.pond&&G.water!=null){const wat=(x,y)=>{if(x<2||y<2||x>=W-2||y>=H-2)return;const i=y*W+x;if(occ[i]===2)return;layers[0][i]=enc(G.sid,G.water,4|(x&1)|((y&1)<<1));blk[i]=1;occ[i]=3;};
+    const qx=r()<.5?0:1,qy=r()<.5?0:1,x0=qx?bx+4:3,x1=qx?W-4:bx-3,y0=qy?cy+A+4:3,y1=qy?H-4:cy-A-3;
+    if(x1-x0>=8&&y1-y0>=7){const pcx=Math.round(x0+(x1-x0)*(.35+r()*.3)),pcy=Math.round(y0+(y1-y0)*(.35+r()*.3));
+      const rx=Math.max(3,Math.min(6,Math.floor((x1-x0)/3))),ry=Math.max(2,Math.min(4,Math.floor((y1-y0)/3))),p1=r()*6.28,p2=r()*6.28,p3=r()*6.28;
+      for(let y=pcy-ry-2;y<=pcy+ry+2;y++)for(let x=pcx-rx-2;x<=pcx+rx+2;x++){const th=Math.atan2((y-pcy)/ry,(x-pcx)/rx),rr=1+.22*Math.sin(3*th+p1)+.14*Math.sin(5*th+p2)+.08*Math.sin(2*th+p3);
+        if(((x-pcx)/rx)**2+((y-pcy)/ry)**2<=rr*rr*.9)wat(x,y);}
+      const ye=qy?H-2:1,dir=qy?1:-1,xr=qx?x1:x0,amp=2+r()*2,fr2=3+r()*2,ph2=r()*6.28;
+      for(let y=pcy;qy?y<=ye:y>=ye;y+=dir){const t=Math.abs(y-pcy),cxr=Math.round(pcx+(Math.sin(t/fr2+ph2)*amp)*Math.min(1,t/3));for(let dx=-1;dx<=1;dx++)wat(cxr+dx,y);}}}
   const sx=3,sy=(pathCells[2]||[3,cy])[1];
   const bb=(it,x,y)=>{let a=1e9,b=1e9,c=-1e9,d=-1e9;const P=(it.zp&&it.zp.length>2)?it.zp:[[it.zb[0],it.zb[1]],[it.zb[0]+it.zb[2],it.zb[1]+it.zb[3]]];
     for(const q of P){const X=x+1+q[0],Y=y+1+q[1];a=Math.min(a,X);c=Math.max(c,X);b=Math.min(b,Y);d=Math.max(d,Y);}

@@ -6,6 +6,7 @@ const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
 import {build,GEN_KINDS,GEN_VIEWS} from './gen2d.js';
+import {slab,shore} from './isoslab.js';
 import {decoZones,ZK,isBox,isPts,mkBox,mkPts,zHit,zPts,zBounds,zCenter,zMove,zScale,zRotate,zClone,zHandles,zDragHandle,zPath,toLocal} from './zones.js';
 export function init2D(root,A){
   const sheets=A.sheets.map(s=>Object.assign({},s));let curSheet=0,shZ='fit',shQ='';let HID=new Set([0,1,2,3,...lsGet('thk_hide2d',[])]);const visSh=()=>sheets.map((s,i)=>i).filter(i=>!HID.has(i));
@@ -68,7 +69,7 @@ export function init2D(root,A){
   function tileG(v,gx,gy){if(!v)return;const S=CELL*view.z,p=g2s(gx,gy);
     if(!ISOQ()){drawTile(cx,v,p[0],p[1],S);return;}
     const d=dec(v),sh=sheets[d.sid];if(!sh||!sh.img)return;
-    if(sh.iso){const sx=(d.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(d.idx/sh.cols)*(sh.tw+sh.margin);cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,p[0]-S,p[1],2*S,2*S);return;}
+    if(sh.iso){const sx=(d.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(d.idx/sh.cols)*(sh.tw+sh.margin);slab(cx,sh.img,sx,sy,sh.tw,p[0],p[1],S,d.f||0);return;}
     cx.save();cx.transform(S,S/2,-S,S/2,p[0],p[1]);drawTile(cx,v,0,0,1);cx.restore();}
   function isoBuild(){const W=M.w,H=M.h,nl=sheets.filter(s=>s&&s.img).length;let h=0;
     for(let l=0;l<4;l++){const a=M.layers[l];for(let i=0;i<a.length;i++)h=(h*31+a[i]+i)|0;}
@@ -90,6 +91,7 @@ export function init2D(root,A){
   function drawIso(){const B=isoBuild(),S=CELL*view.z,w=cv.clientWidth,h=cv.clientHeight,O=g2s(0,0),sc=S/.75;
     cx.save();cx.imageSmoothingEnabled=true;cx.transform(S/B.CQ,S/(2*B.CQ),-S/B.CQ,S/(2*B.CQ),O[0],O[1]);cx.drawImage(B.gnd,0,0);cx.restore();cx.imageSmoothingEnabled=false;
     for(const q of B.SL){const p=g2s(q.x,q.y);if(p[0]>w+S||p[0]<-S||p[1]>h||p[1]<-2*S)continue;tileG(q.v,q.x,q.y);}
+    {const wc=B.SL.filter(q=>(dec(q.v).f&4));if(wc.length)shore(cx,wc,(x,y)=>g2s(x,y),S);}
     const items=[];for(const g of B.GR)items.push({k:g.yb+g.xc,g});
     for(const e of M.ents){items.push({k:e.t==='deco'?(e.flat?e.x+e.y-2*((e.f||1)-1):e.x+e.y+1):e.x+e.y+1,e});}
     items.sort((a,b)=>a.k-b.k);isoHB=[];const cur=tool==='obj'||tool==='zone';

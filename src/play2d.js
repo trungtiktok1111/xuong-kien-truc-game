@@ -2,6 +2,7 @@ import {createLogic} from './logic.js';
 import {el} from './util.js';
 import {zonesHit,zRaster,zPath,decoZones} from './zones.js';
 import {makeAnims} from './anim.js';
+import {slab,shore} from './isoslab.js';
 const HERO=88,FOES=[108,109,120,121,122,111,110],TD=2;
 export function play2D(o){
   const M=o.M,W=M.w,H=M.h,sheets=o.sheets;const CF=Object.assign({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:TD,idx:HERO},win:'auto'},M.cfg||{});const EN=M.ents||[],legacy=!EN.length;const VW=CF.view||'rpg',SIDE=VW==='side',ISO=VW==='iso',DCL=EN.filter(e=>e.t==='deco');
@@ -32,7 +33,7 @@ export function play2D(o){
       const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin),dx=(i%W)*CQ,dy=Math.floor(i/W)*CQ;
       if(!f)g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,CQ,CQ);else{g.save();g.translate(dx+h2,dy+h2);if(f&4){g.rotate(Math.PI/2);g.scale(1,-1);}if(f&1)g.scale(-1,1);if(f&2)g.scale(1,-1);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-h2,-h2,CQ,CQ);g.restore();}}}return c;}
   const base=ISO?null:mk(false),top=ISO?null:mk(true),gnd=ISO?mk(2):null;
-  const SL=[];if(ISO){for(const l of [0,1])for(let i=0;i<W*H;i++){const v=M.layers[l][i];if(!v)continue;const t=(v-1)>>3,sid=t>>12,sh=sheets[sid];if(sh&&sh.img&&sh.iso)SL.push({x:i%W,y:(i/W)|0,sid,idx:t&4095,l});}SL.sort((a,b)=>(a.x+a.y)-(b.x+b.y)||a.l-b.l);}
+  const SL=[];if(ISO){for(const l of [0,1])for(let i=0;i<W*H;i++){const v=M.layers[l][i];if(!v)continue;const t=(v-1)>>3,sid=t>>12,sh=sheets[sid];if(sh&&sh.img&&sh.iso)SL.push({x:i%W,y:(i/W)|0,sid,idx:t&4095,l,f:(v-1)&7});}SL.sort((a,b)=>(a.x+a.y)-(b.x+b.y)||a.l-b.l);}
   const GR=[];if(ISO){const oc=new Uint8Array(W*H),lab=new Uint8Array(W*H);for(let i=0;i<W*H;i++)oc[i]=(M.layers[2][i]||M.layers[3][i])?1:0;
     for(let i=0;i<W*H;i++){if(!oc[i]||lab[i])continue;const st=[i],cells=[];lab[i]=1;let x0=W,y0=H,x1=-1,y1=-1;
       while(st.length){const c=st.pop();cells.push(c);const x=c%W,y=(c/W)|0;x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+a,ny=y+b;if(nx<0||ny<0||nx>=W||ny>=H)continue;const q=ny*W+nx;if(oc[q]&&!lab[q]){lab[q]=1;st.push(q);}}}
@@ -115,7 +116,8 @@ export function play2D(o){
     let pX=()=>0,pY=()=>0;
     if(ISO){const hw=s*.75,hh=s*.375,ox0=w/2-(P.x-P.y)*hw,oy0=h/2-(P.x+P.y)*hh;pX=(x,y)=>ox0+(x-y)*hw;pY=(x,y)=>oy0+(x+y)*hh;cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);
       cx.save();cx.transform(hw/CQ,hh/CQ,-hw/CQ,hh/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();
-      for(const q of SL){const X=pX(q.x,q.y)-hw,Y=pY(q.x,q.y);if(X>w||X<-2*hw||Y>h||Y<-2*hw)continue;const sh=sheets[q.sid],sx=(q.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(q.idx/sh.cols)*(sh.tw+sh.margin);cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,X,Y,2*hw+.6,2*hw+.6);}}
+      for(const q of SL){const X=pX(q.x,q.y)-hw,Y=pY(q.x,q.y);if(X>w||X<-2*hw||Y>h||Y<-2*hw)continue;const sh=sheets[q.sid],sx=(q.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(q.idx/sh.cols)*(sh.tw+sh.margin);slab(cx,sh.img,sx,sy,sh.tw,X+hw,Y,hw,q.f);}
+      {const wc=SL.filter(q=>q.f&4);if(wc.length)shore(cx,wc,(x,y)=>[pX(x,y),pY(x,y)],hw);}}
     else{if(SIDE){const gr=cx.createLinearGradient(0,oy,0,oy+H*s);gr.addColorStop(0,'#5fa8dd');gr.addColorStop(1,'#d6edf8');cx.fillStyle=gr;cx.fillRect(ox,oy,W*s,H*s);}cx.drawImage(base,ox,oy,W*s,H*s);}
     cx.font=(s*.6)+'px serif';cx.textAlign='center';for(const it of items)ico('heart',ISO?pX(it.x,it.y):ox+it.x*s,(ISO?pY(it.x,it.y):oy+it.y*s),s*.8);
     const ents=[{y:P.y,x:P.x,p:1},...E.map(e=>({y:e.y,x:e.x,e})),...NP.map(n=>({y:n.y,x:n.x,n})),...CH.map(c=>({y:c.y,x:c.x,c})),...(GL?[{y:GL.y,x:GL.x,g:GL}]:[]),...(ISO?GR.map(g=>({y:g.yb,x:g.xc,grp:g})):[]),...DCL.map(d=>({y:d.flat?d.y-(d.f||1)+1:d.y,x:d.flat?d.x-(d.f||1)+1:d.x+1,dc:d}))].sort(ISO?((a,b)=>(a.x+a.y)-(b.x+b.y)):((a,b)=>a.y-b.y));
