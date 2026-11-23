@@ -16,6 +16,11 @@ export function init2D(root,A){
   let colMode=0,selId=null,objType='enemy',M=null,vis=[1,1,1,1,0],act=2,tool='draw',stamp={w:1,h:1,multi:false,tiles:[0]},sel=null,undo=[],redo=[],view={x:10,y:10,z:3},grid=true,hov=null,dirty=true,lib=lsGet('thk_stamps',[]);
   const mc=document.createElement('canvas'),mx=mc.getContext('2d');let clip=null,inclEnt=true,inclBlk=true;
   const cv=$('#cv2'),cx=cv.getContext('2d');
+  {const H2={draw:'<b>Vẽ</b>: chạm/kéo = tô ô đang cầm · Kéo 2 ngón = phóng/thu và di chuyển · Chuột giữa hoặc Space+kéo = di chuyển bản đồ',erase:'<b>Xóa</b>: kéo = xóa ô ở lớp đang vẽ',fill:'<b>Đổ</b>: bấm = đổ đầy vùng cùng loại',rect:'<b>Hình CN</b>: kéo = tô cả hình chữ nhật',pick:'<b>Hút</b>: bấm ô trên bản đồ để lấy làm cọ',select:'<b>Chọn vùng</b>: kéo khung → Sao chép / Cắt / Lấy làm stamp',paste:'<b>Dán</b>: bấm để dán vùng đã sao chép',zone:'<b>Vùng chặn</b>: kéo vẽ vùng nhân vật không đi qua được',obj:'<b>Đối tượng/Vật thể</b>: chọn vật thể ở danh sách, bấm lên bản đồ để đặt · bấm vật đã đặt để sửa/xóa · kéo để di chuyển',pan:'<b>Kéo</b>: kéo để di chuyển bản đồ'};
+  const hb=document.createElement('div');hb.style.cssText='position:absolute;left:10px;top:10px;z-index:5;pointer-events:none;background:rgba(15,22,30,.78);color:#cfe;font:12px/1.5 system-ui;padding:6px 10px;border-radius:8px;max-width:430px';
+  const host=document.getElementById('v2d');host.style.position='relative';host.append(hb);let lt='';
+  setInterval(()=>{const t=H2[tool]||'';const x=t+' · Lớp đang vẽ: '+(['Nền','Phủ nền','Vật thể','Mái/cửa','Vùng chặn'][act]||'');if(x!==lt){lt=x;hb.innerHTML=x;}},300);}
+
   // ===== dữ liệu =====
   const defCfg=()=>({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:2,idx:88},win:'auto'});
   const newMap=(w,h)=>({w,h,layers:[0,1,2,3].map(()=>new Array(w*h).fill(0)),blk:new Array(w*h).fill(0),ents:[],cfg:defCfg()});
@@ -426,9 +431,10 @@ export function init2D(root,A){
     else if(tab==='file'){
       body.append(el('div',{style:'border:1px solid #4a7a5a;border-radius:10px;padding:8px;margin-bottom:10px;background:#16261d'},el('div',{class:'lbl',style:'color:#9fe0b0;margin-bottom:6px'},'📂 TẢI TỆP LÊN'),el('div',{class:'row'},btn('🖼 Ảnh tileset (.png)…',addSheet),btn('📦 Gói tài nguyên .zip…',addZip),btn('⬆ Dự án .json…',()=>pickFile('.json,application/json',t=>importJSON(t))),btn('🏯 Mở Màn 1 có sẵn (Làng sa mạc)',openLevel1)),el('div',{class:'hint'},'Ảnh/zip sẽ thành tileset mới trong tab 🧩 Tileset. Gói zip: chọn ảnh bên trong rồi nhập kích thước ô.')));
       body.append(slotsUI('2d',()=>clone(M),o=>{pushUndo();M=clone(o);selId=null;after();fit();},'Làng của tôi'));
-      const wi=el('input',{type:'number',value:M.w,min:4,max:200,class:'num'}),hi=el('input',{type:'number',value:M.h,min:4,max:200,class:'num'});
+      const wi=el('input',{type:'number',value:M.w,min:4,max:600,class:'num'}),hi=el('input',{type:'number',value:M.h,min:4,max:600,class:'num'});
       body.append(el('div',{class:'row'},btn('🏘 Mở lại làng Thanh Hồ',async()=>{if(await yes('Thay bản đồ hiện tại bằng làng Thanh Hồ gốc?')){pushUndo();M=fromVillage();after();fit();}}),btn('🆕 Bản đồ trống',async()=>{if(await yes('Tạo bản đồ trống '+wi.value+'×'+hi.value+'? (có thể hoàn tác)')){pushUndo();M=newMap(+wi.value,+hi.value);after();fit();}})));
       body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Cỡ (ô): '),wi,'×',hi,btn('Đổi cỡ giữ nội dung',()=>{pushUndo();resize(+wi.value,+hi.value);after();fit();})));
+      body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Cỡ nhanh: '),[[48,36],[64,48],[96,72],[128,96],[200,150],[300,225],[400,300]].map(([a,b])=>btn(a+'×'+b,()=>{wi.value=a;hi.value=b;})),el('span',{class:'lbl'},'Tối đa 600×600. Bản càng lớn càng nặng máy.')));
       const sc=el('select',{class:'num'},el('option',{value:1},'Ảnh 1×'),el('option',{value:2,selected:true},'Ảnh 2×'),el('option',{value:4},'Ảnh 4×'));
       body.append(el('div',{class:'row'},sc,btn('🖼 Xuất ảnh PNG',()=>exportPNG(+sc.value)),btn('⬇ Xuất dữ liệu .json',exportJSON),btn('📋 Sao chép JSON',copyJSON)));
       body.append(el('div',{class:'row'},btn('⬆ Nhập .json',()=>pickFile('.json,application/json',t=>importJSON(t))),btn('📝 Dán JSON…',async()=>{const t=await askText('Dán nội dung JSON:');if(t)importJSON(t);})));
