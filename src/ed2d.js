@@ -1,3 +1,4 @@
+import {openRefMap} from './refmap.js';
 import {logicTab,entExtra} from './logic.js';
 import {animTab,animPick,uniqNames,makeAnims} from './anim.js';
 import {unzipSync} from 'fflate';
@@ -654,7 +655,7 @@ export function init2D(root,A){
   function addGridZip(){zipBrowser(addSheetUrl,addMany);}
   function exportPNG(k){const c=document.createElement('canvas');c.width=M.w*CELL*k;c.height=M.h*CELL*k;const g=c.getContext('2d');g.imageSmoothingEnabled=false;const sv=vis.slice();rebuild();g.drawImage(mc,0,0,c.width,c.height);c.toBlob(b=>saveFile('ban_do_2d.png',b));}
   function proj(){return {tags:TG,format:'thk-map-1',cell:CELL,w:M.w,h:M.h,layerNames:LAYN,layers:M.layers,collision:M.blk,ents:M.ents,cfg:M.cfg,sheets:sheets.map(s=>({name:s.name,tw:s.tw,margin:s.margin,iso:s.iso||0,cy:s.cy||0,wat:s.wat||null,cols:s.cols,rows:s.rows,url:s.url})),note:'Giá trị ô v>0: n=v-1; flip=n&7 (1=ngang,2=dọc,4=chéo); t=n>>3; sheet=t>>12; tile=t&4095; tile (col,row)=(tile%cols, floor(tile/cols)); nguồn ảnh: sx=col*(tw+margin), sy=row*(tw+margin)'};}
-  window.__TG=()=>TG;window.__guess=p=>guessObj(p);window.__proj=()=>proj();window.__loadProj=t=>importJSON(t);
+  window.__TG=()=>TG;window.__guess=p=>guessObj(p);window.__proj=()=>proj();window.__view=()=>view;window.__redraw=()=>draw();window.__loadProj=t=>importJSON(t);
   async function openLevel1(){if(!(await yes('Mở Màn 1? Bản đồ đang làm sẽ bị thay (có thể hoàn tác). App sẽ nạp luôn nhân vật và tileset của màn.')))return;toast('Đang tải Màn 1 (~12 MB)…');
     try{const r=await fetch('man1.json?v='+Date.now(),{cache:'no-store'});if(!r.ok)throw 0;const t=await r.text();await importJSON(t);}catch(e){toast('Không tải được Màn 1 — thử tải lại trang');}}
   function exportJSON(){saveFile('ban_do_2d.json',new Blob([JSON.stringify(proj())],{type:'application/json'}));}
@@ -714,6 +715,9 @@ export function init2D(root,A){
       window.__vr=window.__vr||'obj';vl._r=()=>{vl.textContent='';const pn=window.__vr==='pn';(vl._it||[]).filter(q=>pn?q.role==='Phủ nền':(q.role!=='Mái/cửa'&&q.role!=='Phủ nền')).forEach(q=>vl.append(btn(q.name+(q.role==='Hạ tầng'?' ⛓':''),()=>{vatSel=q;objType='deco';tool='obj';draw();},(vatSel&&vatSel.name===q.name&&vatSel.tile.sid===q.tile.sid)?'on':'')));if(!vl.childNodes.length)vl.textContent=pn?'Bộ này chưa có phủ nền — tải ảnh họa tiết/hiệu ứng nền lên, app tự xếp vào đây.':'Bộ này không có vật thể.';};
       [['obj','🏛 Vật thể'],['pn','🍂 Phủ nền']].forEach(([k,n])=>rc.append(btn(n,()=>{window.__vr=k;[...rc.children].forEach((c,i)=>c.classList.toggle('on',(i===0)===(k==='obj')));vl._r();},window.__vr===k?'on':'')));
       vbox.append(el('div',{class:'lbl',style:'color:#e8c08a'},'🏛 VẬT THỂ / 🍂 PHỦ NỀN — chọn rồi chạm bản đồ để đặt (phủ nền nằm sát đất, không chặn)'),sv,rc,vl);body.append(vbox);}
+    {const rb=el('div',{style:'border:1px solid #6aa8ff;border-radius:10px;padding:8px;margin-top:8px;background:#1b2430'});
+      rb.append(el('div',{class:'lbl',style:'color:#9cc4ff'},'🖼 DỰNG TỪ ẢNH MẪU — app tự nhận dạng ảnh, chọn đúng tài nguyên và báo thiếu'),
+        btn('Mở ảnh mẫu…',()=>openRefMap({el,btn,toast,yes,get sheets(){return sheets;},nenIndex,nenPack,vatIndex,ensureNen,ensureVat,enc,apply(R){pushUndo();M={name:M.name,w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({},M.cfg,{view:'iso',zones:[]})};selId=null;after();fit();draw();}}),'on'));body.append(rb);}
     const GS={v:window.__gv||'rpg',k:window.__gk||'village',z:window.__gz||'m',g:!!window.__gg};
     const selK=el('select',{class:'num',onchange:e=>{window.__gk=e.target.value;const p=GEN_KIND_PACK[e.target.value];if(p){window.__gn=p;selN.value=p;const o=selN._L&&selN._L.find(x=>x.id===p);nenD.textContent=o?o.desc:'';}}},Object.entries(GEN_KINDS).map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.k)o.selected=true;return o;}));
     const selZ=el('select',{class:'num',onchange:e=>{window.__gz=e.target.value;}},[['s','Nhỏ 32×24'],['m','Vừa 48×36'],['l','Lớn 64×48']].map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.z)o.selected=true;return o;}));
