@@ -145,6 +145,7 @@ BASEQ['Choi_ven_nuoc']=((140,327),(227,255),(36,271))
 BASEQ['Tram_nghi']=((229,302),(325,238),(29,231))
 BASEQ['Tuong_bao']=((170,191),(188,182),(2,127))
 BASEQ['Vong_lau']=((126,343),(204,300),(20,315))
+BASEQ['Gieng']=((68,125),(123,84),(1,93))
 BASEQ['Sap_hang']=((94,145),(129,129),(31,120))
 def fquad(n,k,ref):
     """4 góc nền đo trên hình (pixel) -> toạ độ lưới so với góc trước x+1,y+1"""
@@ -200,6 +201,7 @@ for y in range(H):blk[y*W]=blk[y*W+W-1]=1
 for (x,y) in water:
     if y in (24,25):blk[y*W+x]=0
 ents=[];occ=set()
+GATEZ=[[[-3.4,-.3],[-2.2,-.3],[-2.2,.1],[-3.4,.1]],[[-1.2,-.3],[0,-.3],[0,.1],[-1.2,.1]]]
 def deco(n,x,y,f,walk=False,flat=False,name=None):
     fx,fy=FP[n]
     cells=[(x-a,y-b) for a in range(fx) for b in range(fy)]
@@ -211,6 +213,7 @@ def deco(n,x,y,f,walk=False,flat=False,name=None):
     e={'id':'d%d'%len(ents),'t':'deco','x':x,'y':y,'f':max(fx,fy),'fx':fx,'fy':fy,'sc':SC[n],'ox':OXY[n][0],'oy':OXY[n][1],'flat':flat,'name':name or n,'tile':{'sid':SID_OB,'idx':IDX[n]},'zb':zb}
     if zp:e['zp']=[list(q) for q in zp]
     if walk:e['walk']=True
+    if n=='Cong_tran':e['zps']=GATEZ
     ents.append(e)
     for c in cells:occ.add(c)
 wx=34+off(25)
@@ -223,7 +226,7 @@ P=[ # (tên, x, y, f, walk, flat)
  ('Nha_ba_gian',7,38,3),('Nha_mot_gian',13,38,2),
  ('Cau_nho',wx+1,25,2,True),('Ben_go',wx+1,36,2,True),
  ('Choi_gac',18,41,2),('Vong_lau',26,41,2),
- ('Cong_tran',22,42,2,True),
+ ('Cong_tran',23,42,2),
  ('Chinh_dien',9,15,3),('Nha_mot_gian',33,12,2)]
 for p in P:
     n,x,y,f=p[:4];deco(n,x,y,f,p[4] if len(p)>4 else False,p[5] if len(p)>5 else False)
