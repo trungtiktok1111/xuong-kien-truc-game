@@ -43,8 +43,48 @@ const pick=(a,r)=>a[Math.floor(r()*a.length)];
 const shuffle=(a,r)=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
 const ri=(r,a,b)=>a+Math.floor(r()*(b-a+1));
 
+
+/* ===== Tự sinh isometric theo DANH MỤC tài nguyên (cfg.catalog): chỉ dùng ô nền đã gắn vai trò, vật cảnh có sẵn vùng chặn đo từ nền hình ===== */
+function buildIso(ctx,opt,cat){
+  const {enc}=ctx,r=Math.random,W=opt.w,H=opt.h,K=KINDS[opt.kind]||KINDS.village,G=cat.ground,IT=cat.items||[];
+  const layers=[0,1,2,3].map(()=>new Array(W*H).fill(0)),blk=new Array(W*H).fill(0),occ=new Uint8Array(W*H),ents=[];
+  const by=ro=>IT.filter(i=>i.role===ro);
+  const info={ground:G.grass.length,water:1,tree:by('Cây').length,house:by('Nhà').length,prop:by('Vật').length+by('Bụi').length,placed:{house:0,tree:0,prop:0}};
+  if(!by('Nhà').length&&!by('Cây').length)return {error:'Danh mục tài nguyên trống. Hãy mở "Màn 1 có sẵn" trước (nó nạp bộ tài nguyên + danh mục) rồi tạo lại.'};
+  for(let i=0;i<W*H;i++)layers[0][i]=enc(G.sid,r()<.13?G.grass[1]:G.grass[0]);
+  const cy=Math.floor(H/2),A=Math.max(1,Math.floor(H/10)),ph=r()*6.28,fr=5+r()*4,pathCells=[];
+  const road=(x,y)=>{if(x<1||y<1||x>=W-1||y>=H-1)return;const i=y*W+x;layers[0][i]=enc(G.sid,G.path);occ[i]=2;};
+  for(let x=1;x<W-1;x++){const y=cy+Math.round(A*Math.sin(x/fr+ph));for(let d=0;d<2;d++){road(x,y+d);pathCells.push([x,y+d]);}}
+  const bx=Math.floor(W*(.4+r()*.2));for(let y=1;y<H-1;y++)for(let d=0;d<2;d++)road(bx+d,y);
+  const pw=Math.min(8,Math.floor(W/4));for(let y=cy-Math.floor(pw/2);y<cy+Math.ceil(pw/2);y++)for(let x=bx-Math.floor(pw/2);x<bx+Math.ceil(pw/2);x++)road(x,y);
+  if(K.pond&&G.water!=null){for(let t=0;t<60;t++){const px=1+Math.floor(r()*(W-2)),py=1+Math.floor(r()*(H-2)),rx=3+Math.floor(r()*3),ry=2+Math.floor(r()*2);const cells=[];let bad=0;
+    for(let y=py-ry;y<=py+ry;y++)for(let x=px-rx;x<=px+rx;x++){if(((x-px)/rx)**2+((y-py)/ry)**2<=1){if(x<3||y<3||x>=W-3||y>=H-3||occ[y*W+x]){bad=1;}cells.push(y*W+x);}}
+    if(bad||cells.length<8)continue;for(const i of cells){layers[0][i]=enc(G.sid,G.water);blk[i]=1;occ[i]=3;}break;}}
+  const sx=3,sy=(pathCells[2]||[3,cy])[1];
+  const bb=(it,x,y)=>{let a=1e9,b=1e9,c=-1e9,d=-1e9;const P=(it.zp&&it.zp.length>2)?it.zp:[[it.zb[0],it.zb[1]],[it.zb[0]+it.zb[2],it.zb[1]+it.zb[3]]];
+    for(const q of P){const X=x+1+q[0],Y=y+1+q[1];a=Math.min(a,X);c=Math.max(c,X);b=Math.min(b,Y);d=Math.max(d,Y);}
+    const out=[];for(let yy=Math.floor(b+.001);yy<Math.ceil(d-.001);yy++)for(let xx=Math.floor(a+.001);xx<Math.ceil(c-.001);xx++)out.push([xx,yy]);return out;};
+  const ok=(cells,mg)=>{for(const [x,y] of cells){if(x<2||y<2||x>=W-2||y>=H-2||occ[y*W+x])return false;if(Math.abs(x-sx)<4&&Math.abs(y-sy)<3)return false;
+      for(let yy=y-mg;yy<=y+mg;yy++)for(let xx=x-mg;xx<=x+mg;xx++){const o=occ[yy*W+xx];if(o===1||o===3)return false;}}return true;};
+  let nid=0;
+  const put=(it,x,y,cells,name)=>{for(const [cx,cy2] of cells)occ[cy2*W+cx]=1;const e={id:'d'+(nid++),t:'deco',x,y,f:it.f,fx:it.fx,fy:it.fy,sc:it.sc,ox:it.ox,oy:it.oy,flat:false,name:name||it.name,tile:it.tile,zb:it.zb};if(it.zp)e.zp=it.zp;ents.push(e);};
+  const near=(cells,rad)=>cells.some(([x,y])=>pathCells.some(p=>Math.abs(p[0]-x)<rad&&Math.abs(p[1]-y)<rad));
+  const place=(list,n,tries,mg,nearPath,name,key)=>{if(!list.length)return;for(let i=0;i<n;i++){const it=list[Math.floor(r()*list.length)];
+      for(let t=0;t<tries;t++){const x=2+Math.floor(r()*(W-4)),y=2+Math.floor(r()*(H-4)),cells=bb(it,x,y);if(!cells.length||!ok(cells,mg))continue;if(nearPath&&!near(cells,7))continue;put(it,x,y,cells,name);info.placed[key]++;break;}}};
+  const rn=(a,b)=>a+Math.floor(r()*(b-a+1));
+  place(by('Nhà'),rn(K.houses[0],K.houses[1])||0,300,1,true,null,'house');
+  place(by('Vật'),rn(2,4),120,1,false,null,'prop');
+  place(by('Cây'),rn(K.trees[0],Math.min(K.trees[1],30)),100,0,false,'Cây','tree');
+  place(by('Bụi'),rn(6,12),100,0,false,'Bụi hoa','prop');
+  for(let x=0;x<W;x++){blk[x]=1;blk[(H-1)*W+x]=1;}for(let y=0;y<H;y++){blk[y*W]=1;blk[y*W+W-1]=1;}
+  ents.push({id:'s'+Date.now().toString(36),t:'start',x:sx,y:sy,name:'Xuất phát',tile:null});
+  if(opt.goal){const e=pathCells[pathCells.length-3]||[W-3,cy];ents.push({id:'g'+Date.now().toString(36),t:'goal',x:e[0],y:e[1],name:'Đích',tile:null});}
+  return {w:W,h:H,layers,blk,ents,newSheet:null,info,needSid:false,view:'iso',iso:true};}
+
 /* trả về {w,h,layers,blk,ents,newSheet:{canvas,tw}|null,info} — gọi bởi ed2d sau khi tạo sheet */
 export function build(ctx,opt){
+  if(ctx.catalog&&ctx.catalog.items&&(opt.view==='iso'||opt.view==='rpg'||!opt.view))return buildIso(ctx,opt,ctx.catalog);
+  if(opt.view==='iso')return {error:'Chưa có danh mục tài nguyên isometric. Hãy mở "Màn 1 có sẵn" trước rồi tạo lại (bộ tự sinh không đoán nền theo màu nữa).'};
   const {sheets,enc}=ctx;const K=KINDS[opt.kind]||KINDS.village,r=Math.random,W=opt.w,H=opt.h;
   const P=scanPools(ctx);const VW=opt.view||'rpg',SIDE=VW==='side',TOP=VW==='top',ISOV=VW==='iso'&&P.isoG.length>0;
   if(ISOV){P.ground=P.isoG;P.water=P.isoW;}

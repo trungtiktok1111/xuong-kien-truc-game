@@ -627,7 +627,7 @@ export function init2D(root,A){
   function copyJSON(){navigator.clipboard&&navigator.clipboard.writeText(JSON.stringify(proj())).then(()=>toast('Đã sao chép JSON'),()=>toast('Không sao chép được'));}
   async function importJSON(t){try{const o=JSON.parse(t);if(o.format!=='thk-map-1')throw 0;if(o.tags){TG=Object.assign({sheets:{},tiles:{},fav:[],recent:[]},o.tags);tgSave();}const smap=[0,1,2,3],ren={};for(let i=4;i<o.sheets.length;i++){const s=o.sheets[i];if(!s||!s.url){smap[i]=i<sheets.length?i:0;continue;}const ex=sheets.findIndex((q,k)=>k>=4&&q.name===s.name&&q.url===s.url);if(ex>=0){smap[i]=ex;continue;}let nm=s.name;if(sheets.some((q,k)=>k>=4&&q.name===nm)){let c=2;while(sheets.some((q,k)=>k>=4&&q.name===nm+'~'+c))c++;nm=nm+'~'+c;ren[s.name]=nm;}const ns={name:nm,url:s.url,tw:s.tw,margin:s.margin,iso:s.iso?1:0};await loadSheet(ns);sheets.push(ns);smap[i]=sheets.length-1;}
       const rm=v=>{if(!v)return 0;const d=dec(v),n=smap[d.sid];return n==null||n===d.sid?v:enc(n,d.idx,d.f);};
-      const lay=o.layers.map(a=>a.map(rm));const en=(o.ents||[]).map(e=>{if(e.tile&&smap[e.tile.sid]!=null)e.tile={sid:smap[e.tile.sid],idx:e.tile.idx};return e;});const cf=o.cfg||{};if(cf.hero&&smap[cf.hero.sid]!=null)cf.hero={sid:smap[cf.hero.sid],idx:cf.hero.idx};
+      const lay=o.layers.map(a=>a.map(rm));const en=(o.ents||[]).map(e=>{if(e.tile&&smap[e.tile.sid]!=null)e.tile={sid:smap[e.tile.sid],idx:e.tile.idx};return e;});const cf=o.cfg||{};if(cf.hero&&smap[cf.hero.sid]!=null)cf.hero={sid:smap[cf.hero.sid],idx:cf.hero.idx};if(cf.catalog){const q=cf.catalog;if(q.ground&&smap[q.ground.sid]!=null)q.ground.sid=smap[q.ground.sid];for(const it of q.items||[])if(it.tile&&smap[it.tile.sid]!=null)it.tile={sid:smap[it.tile.sid],idx:it.tile.idx};}
       if(Object.keys(ren).length&&cf.anims)for(const a of cf.anims)for(const st of Object.values(a.st||{}))if(st.src)st.src=st.src.map(n=>ren[n]||n);
       pushUndo();M=clone({w:o.w,h:o.h,layers:lay,blk:o.collision,ents:en,cfg:cf});selId=null;after();fit();toast('Đã nhập bản đồ');}catch(e){toast('Tệp không đúng định dạng');}}
   // khởi động
@@ -637,11 +637,11 @@ export function init2D(root,A){
   async function genRun(){const k=window.__gk||'village',z={s:[32,24],m:[48,36],l:[64,48]}[window.__gz||'m'];
     if(!await yes('Tạo bối cảnh mới thay cho màn "'+(M.name||'')+'"?\n(Ctrl+Z hoàn tác được bản đồ; tileset mới tạo sẽ còn lại.)'))return;
     toast('Đang tạo bối cảnh…');await new Promise(r=>setTimeout(r,30));
-    let R;try{R=build({sheets,eff,emptyMap,visSh,enc,newSid:sheets.length},{kind:k,w:z[0],h:z[1],goal:!!window.__gg,view:window.__gv||'rpg'});}catch(e){console.error(e);toast('Lỗi khi tạo: '+(e&&e.message||e));return;}
+    let R;try{R=build({sheets,eff,emptyMap,visSh,enc,newSid:sheets.length,catalog:(M.cfg&&M.cfg.catalog)||null},{kind:k,w:z[0],h:z[1],goal:!!window.__gg,view:window.__gv||'rpg'});}catch(e){console.error(e);toast('Lỗi khi tạo: '+(e&&e.message||e));return;}
     if(R.error){toast(R.error);return;}
     pushUndo();
     if(R.newSheet){const s={name:'Gen-'+Date.now().toString(36).slice(-4),url:R.newSheet.canvas.toDataURL('image/png'),tw:64,margin:0};await loadSheet(s);sheets.push(s);uniqNames(sheets);}
-    M={name:M.name,w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({},M.cfg,{view:R.view||'rpg'})};selId=null;after();fit();draw();
+    M={name:M.name,w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({},M.cfg,{view:R.view||'rpg'},R.iso?{zones:[]}:{})};selId=null;after();fit();draw();
     const i=R.info;toast('Đã tạo: '+i.placed.house+' nhà, '+i.placed.tree+' cây, '+i.placed.prop+' đồ'+((!i.house&&!i.tree)?' — chưa thấy tài nguyên gắn nhãn Cây/Nhà (xem tab 🔎 Tài nguyên)':''));}
   /* ===== NHIỀU MÀN ===== */
   let MAPS=[],curMap=0;

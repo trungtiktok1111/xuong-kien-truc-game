@@ -8,3 +8,4 @@
 6. Mỗi vật: đo từ chính hình (alpha đáy), không đoán; chụp đối chiếu vùng đỏ với hình trước khi giao.
 7. Dữ liệu: `zp` (1 đa giác) hoặc `zps` (nhiều đa giác) tính từ góc trước (x+1,y+1); engine: decoZones() -> free()/blocked(); builder: tools/levels/build_l1_iso.py.
 8. Màn 1 tải với `cache:'no-store'` để không dính dữ liệu cũ.
+9. Bộ "Tạo bối cảnh" (gen2d.js buildIso) dùng cfg.catalog (xuất từ build_l1_iso.py): chỉ dùng ô nền/nhà/cây có vai trò, vùng chặn zp/zb đã đo; KHÔNG đoán nền theo màu. Chưa có danh mục thì báo lỗi, yêu cầu mở Màn 1 trước.

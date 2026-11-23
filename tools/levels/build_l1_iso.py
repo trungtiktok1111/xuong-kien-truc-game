@@ -219,6 +219,7 @@ def deco(n,x,y,f,walk=False,flat=False,name=None):
     if n=='Cong_tran':e['zps']=GATEZ
     ents.append(e)
     for c in cells:occ.add(c)
+    return e
 wx=34+off(25)
 P=[ # (tên, x, y, f, walk, flat)
  ('Vo_duong',22,11,2),('Hanh_lang',18,12,3),('San_luyen',28,15,3,True,True),
@@ -249,6 +250,17 @@ for _ in range(60):
 for _ in range(40):
     x,y=random.randint(2,W-3),random.randint(2,H-3)
     if (x,y) in water and (x,y) not in occ and y not in (23,24,25,26) and random.random()<.15:deco('Sen',x,y,1,walk=True,name='Sen')
+
+# ---- danh mục tài nguyên cho bộ tự sinh (vai trò + nền + vùng chặn đã đo) ----
+ROLE={}
+for _n in ('Kho','Nha_mot_gian','Nha_ba_gian','Nha_co_hien','Nha_mat_pho','Quan_tra','Tiem_thuoc','Tuu_quan','Hanh_lang','Vo_duong','Chinh_dien','Nha_san','Choi_ven_nuoc','Choi_gac','Tram_nghi','Vong_lau'):ROLE[_n]='Nhà'
+for _n in ('Cay_dao','Cay_lieu'):ROLE[_n]='Cây'
+ROLE['Bui_hoa']='Bụi';ROLE['Sap_hang']='Vật';ROLE['Gieng']='Vật';ROLE['Tuong_bao']='Tường';ROLE['Sen']='Sen'
+_save=list(ents);_so=set(occ);items=[]
+for _n,_r in ROLE.items():
+    _e=deco(_n,0,0,1,name=_n);ents.pop();
+    _e.pop('id');_e.pop('x');_e.pop('y');_e['role']=_r;items.append(_e)
+ents[:]=_save;occ.clear();occ.update(_so)
 # nhân vật
 anims={a['name']:a['id'] for a in old['cfg']['anims']}
 def npc(i,n,x,y,anim,text):ents.append({'id':'n%d'%i,'t':'npc','x':x,'y':y,'name':n,'tile':None,'anim':anims[anim],'text':text})
@@ -267,6 +279,7 @@ sheets.append({'name':'Vat-canh-thon','tw':TW,'margin':0,'cols':COLS,'rows':ROWS
 cfg=json.loads(json.dumps(old['cfg']));cfg['view']='iso'
 for a in cfg['anims']:a['sc']=round(a['sc']*1.3,3)
 cfg['hero']={'sid':2,'idx':0}
+cfg['catalog']={'ground':{'sid':SID_SL,'grass':[0,1],'path':3,'water':2},'items':items}
 out={'tags':{'sheets':{},'tiles':{},'fav':[],'recent':[]},'format':'thk-map-1','cell':16,'w':W,'h':H,'layerNames':old['layerNames'],'layers':L,'collision':blk,'ents':ents,'cfg':cfg,'sheets':sheets,
  'note':'Màn 1 — Thôn Thanh Vân (isometric). Vật cảnh là thực thể "deco".'}
 print({n:FP[n] for n in FP})
