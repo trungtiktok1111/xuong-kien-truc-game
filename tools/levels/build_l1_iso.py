@@ -57,7 +57,84 @@ def foot(path,k):
     while lx-1>=0 and yc[lx-1] is not None and abs(yc[lx-1]-yc[lx])<=14 and yc[lx-1]<=tipy+14:lx-=1
     return (tipx-lx)*k/.75,(rx-tipx)*k/.75,tipx,tipy,w,h
 FPO={'Nha_san':(2,2),'Choi_ven_nuoc':(2,2)}
-names=list(OBJ);FP={};FPR={};OXY={}
+
+import math as _m
+def _hull(P):
+    P=sorted(set(P))
+    if len(P)<3:return P
+    def cr(o,a,b):return (a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0])
+    lo=[]
+    for q in P:
+        while len(lo)>=2 and cr(lo[-2],lo[-1],q)<=0:lo.pop()
+        lo.append(q)
+    up=[]
+    for q in reversed(P):
+        while len(up)>=2 and cr(up[-2],up[-1],q)<=0:up.pop()
+        up.append(q)
+    return lo[:-1]+up[:-1]
+def _clip(poly,x0,y0,x1,y1):
+    def cl(pl,inside,inter):
+        out=[]
+        for i in range(len(pl)):
+            a,b=pl[i-1],pl[i]
+            if inside(b):
+                if not inside(a):out.append(inter(a,b))
+                out.append(b)
+            elif inside(a):out.append(inter(a,b))
+        return out
+    def ix(c):return lambda a,b:(c,a[1]+(b[1]-a[1])*(c-a[0])/((b[0]-a[0]) or 1e-9))
+    def iy(c):return lambda a,b:(a[0]+(b[0]-a[0])*(c-a[1])/((b[1]-a[1]) or 1e-9),c)
+    for ins,it in ((lambda q:q[0]>=x0,ix(x0)),(lambda q:q[0]<=x1,ix(x1)),(lambda q:q[1]>=y0,iy(y0)),(lambda q:q[1]<=y1,iy(y1))):
+        if not poly:break
+        poly=cl(poly,ins,it)
+    return poly
+def _rdp(P,e):
+    if len(P)<4:return P
+    # đóng: tách theo điểm xa nhất
+    def d(q,a,b):
+        dx,dy=b[0]-a[0],b[1]-a[1];L=_m.hypot(dx,dy) or 1e-9
+        return abs(dx*(a[1]-q[1])-dy*(a[0]-q[0]))/L
+    def rec(S):
+        if len(S)<3:return S
+        i=max(range(1,len(S)-1),key=lambda j:d(S[j],S[0],S[-1]))
+        if d(S[i],S[0],S[-1])>e:return rec(S[:i+1])[:-1]+rec(S[i:])
+        return [S[0],S[-1]]
+    h=len(P)//2
+    return rec(P[:h+1])[:-1]+rec(P[h:]+[P[0]])[:-1]
+def circ(cx,cy,rx,ry,n=14):
+    return [(cx+rx*_m.cos(2*_m.pi*i/n),cy+ry*_m.sin(2*_m.pi*i/n)) for i in range(n)]
+def fpoly(path,k,fx,fy,tipx,tipy,kind):
+    """đa giác chân vật (toạ độ lưới, gốc = góc trước x+1,y+1) bám theo nền của hình"""
+    im=Image.open(path).convert('RGBA');im=im.crop(bbox(im));a=im.getchannel('A');w,h=im.size
+    hw=.75/k;hh=hw/2
+    def g(px,py):
+        u=(px-tipx)/hw;v=(py-tipy)/hh
+        return ((u+v)/2,(v-u)/2)
+    ch=[]
+    for x in range(w):
+        ys=[y for y in range(h) if a.getpixel((x,y))>40]
+        if ys:ch.append((x,ys[-1]))
+    if kind=='round':
+        # bề rộng gốc: các hàng đáy (4% chiều cao)
+        yb=max(c[1] for c in ch);rows=[]
+        for y in range(max(0,yb-int(h*.14)),yb+1):
+            xs=[x for x in range(w) if a.getpixel((x,y))>40]
+            if xs:rows.append(max(xs)-min(xs)+1)
+        rows.sort();wb=rows[int(len(rows)*.3)] if rows else 20
+        r=max(.14,min(.3,(wb/2)/(hw*_m.sqrt(2))));r=round(r,2)
+        return [(round(px,2),round(py,2)) for px,py in circ(-r/_m.sqrt(2),-r/_m.sqrt(2),r,r)]
+    pts=[g(x,y) for x,y in ch]
+    pl=min(pts,key=lambda q:q[0]-q[1]);pr=max(pts,key=lambda q:q[0]-q[1])
+    C=((pl[0]+pr[0])/2,(pl[1]+pr[1])/2)
+    allp=pts+[(2*C[0]-q[0],2*C[1]-q[1]) for q in pts]
+    H=_hull(allp)
+    H=_clip(H,-fx-.05,-fy-.05,.05,.05)
+    if len(H)<3:return None
+    H=_rdp(H,.07)
+    cx=sum(q[0] for q in H)/len(H);cy=sum(q[1] for q in H)/len(H)
+    H=[(cx+(q[0]-cx)*.95,cy+(q[1]-cy)*.95) for q in H]
+    return [(round(q[0],2),round(q[1],2)) for q in H]
+names=list(OBJ);FP={};FPR={};OXY={};FPZ={}
 COLS=6;ROWS=(len(names)+COLS-1)//COLS
 ob=Image.new('RGBA',(COLS*TW,ROWS*TW),(0,0,0,0));IDX={};SC={}
 for i,n in enumerate(names):
@@ -68,6 +145,7 @@ for i,n in enumerate(names):
     FP[n]=(1,1) if n in KOBJ or n in ('Gieng','Sen') else (max(1,__import__('math').ceil(fx_-.2)),max(1,__import__('math').ceil(fy_-.2)))
     if n in FPO:FP[n]=FPO[n]
     FPR[n]=(round(fx_,2),round(fy_,2))
+    FPZ[n]=fpoly(OBJ[n],k,fx_,fy_,tx_,ty_,'round' if (n in KOBJ or n in ('Gieng','Sen')) else 'box')
     ix=(TW-r.width)//2;iy=TW-2-r.height
     OXY[n]=(round(.5-(ix+tx_*kf)/TW,4),round(1-(iy+ty_*kf)/TW,4)) if n not in KOBJ and n not in ('Gieng','Sen') and n not in FPO else (0,0)
 # ---- bản đồ ----
@@ -104,7 +182,9 @@ def deco(n,x,y,f,walk=False,flat=False,name=None):
     elif n in FPO:zb=[-fx,-fy,fx,fy]
     else:
         rx,ry=FPR[n];rx=max(.4,rx-.06);ry=max(.4,ry-.06);zb=[-round(rx,2),-round(ry,2),round(rx,2),round(ry,2)]
+    zp=FPZ.get(n) if n not in FPO else None
     e={'id':'d%d'%len(ents),'t':'deco','x':x,'y':y,'f':max(fx,fy),'fx':fx,'fy':fy,'sc':SC[n],'ox':OXY[n][0],'oy':OXY[n][1],'flat':flat,'name':name or n,'tile':{'sid':SID_OB,'idx':IDX[n]},'zb':zb}
+    if zp:e['zp']=[list(q) for q in zp]
     if walk:e['walk']=True
     ents.append(e)
     for c in cells:occ.add(c)
