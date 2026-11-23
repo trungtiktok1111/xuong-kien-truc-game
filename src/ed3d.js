@@ -442,7 +442,7 @@ export function init3D(root){
     ov.append(box);document.body.append(ov);draw2();}
   function mdlTab(){const S=mq;
     body.append(el('div',{class:'row'},btn('📦 Nhập gói mô hình .zip…',pickZips),LIB.length?btn('🗑 Quản lý / xóa',mdlMgr):null,el('span',{class:'lbl'},LIB.length+' mô hình / '+new Set(LIB.map(m=>m.pack)).size+' gói')));
-    if(!LIB.length){body.append(el('div',{class:'hint'},'Chưa có mô hình. Bấm "Nhập gói mô hình" và chọn file .zip của Kenney (ví dụ kenney_fantasy-town-kit.zip — bên trong phải có thư mục "Models/GLB format"). Chọn được nhiều file một lúc. File .rar cần giải nén ra .zip trước.'));
+    if(!LIB.length){body.append(el('div',{class:'hint'},'Chưa có mô hình. Bấm "Nhập gói mô hình" và chọn file .zip mô hình của bạn (bên trong phải có thư mục "Models/GLB format"). Chọn được nhiều file một lúc. File .rar cần giải nén ra .zip trước.'));
       body.append(el('div',{class:'hint'},'Sau khi nhập: bấm một món trong thư viện, rồi chạm lên cảnh để đặt. Chạm "✋ Chọn" để chọn lại món đã đặt và xoay/phóng/dời.'));}
     else{
     const q=el('input',{placeholder:'🔎 Tìm mô hình…',style:'width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid #34485a;background:#16202b;color:#fff;font-size:14px;margin:4px 0'});q.value=S.q;q.addEventListener('input',()=>{S.q=q.value;S.lim=120;S.focus=true;clearTimeout(S.t);S.t=setTimeout(draw,250);});body.append(q);

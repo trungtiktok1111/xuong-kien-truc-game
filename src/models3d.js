@@ -9,7 +9,7 @@ export function parseGLB(u8,tex){return new Promise((res,rej)=>{const mg=new THR
   const L=new GLTFLoader(mg);L.register(pr=>{pr.textureLoader=new THREE.TextureLoader(mg);return {name:'THK_tex'};});L.parse(ab,'',g=>{g.scene.traverse(o=>{if(o.isMesh){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{if(m.map){m.map.magFilter=THREE.NearestFilter;m.map.minFilter=THREE.NearestFilter;}});}});res(g.scene);},rej);});}
 const MIME={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp'};
 async function thumbOf(u8){try{const bm=await createImageBitmap(new Blob([u8]));const k=Math.min(1,96/Math.max(bm.width,bm.height));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(bm.width*k));c.height=Math.max(1,Math.round(bm.height*k));c.getContext('2d').drawImage(bm,0,0,c.width,c.height);return c.toDataURL('image/webp',.8);}catch(e){return '';}}
-const packName=n=>n.replace(/^.*[\\/]/,'').replace(/\.zip$/i,'').replace(/^kenney_/i,'').replace(/_[\d.]+$/,'');
+const packName=n=>n.replace(/^.*[\\/]/,'').replace(/\.zip$/i,'').replace(/_[\d.]+$/,'');
 /* Quét 1 file zip (có thể chứa zip con) → [{pack, tex:{}, models:[{name,cat,thumb,glb:Uint8Array}]}] */
 export async function scanZip(u8,name,depth=0){
   const out=[];let files;

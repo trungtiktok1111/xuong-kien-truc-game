@@ -105,7 +105,7 @@ export const GATE1=[
   ['money','2. Mô hình tiền','Miễn phí / quảng cáo / bán / mua trong game (cấm ép trả tiền mới chơi tiếp)'],
   ['age','3. Độ tuổi nhắm tới + nhãn dự kiến','Ví dụ 13–18; nhãn dự kiến'],
   ['data','4. Dữ liệu','Tài khoản, tên, trò chuyện, bảng xếp hạng, mã quảng cáo: có hay không'],
-  ['lic','5. Giấy phép tài nguyên','Từng gói: nguồn, giấy phép, điều kiện (Kenney CC0 ...)'],
+  ['lic','5. Giấy phép tài nguyên','Từng gói: nguồn, giấy phép, điều kiện (CC0, CC-BY ...)'],
   ['chan','6. Kênh phát hành','itch.io / Google Play / App Store / Steam / "không phát hành"'],
   ['scope','7. Quy mô','Bắt buộc / nên có / để sau; số buổi dự kiến']];
 export const gateFilled=()=>{const g=lsGet('thk_gate1',{});return GATE1.filter(r=>g[r[0]]&&g[r[0]].trim()).length;};
