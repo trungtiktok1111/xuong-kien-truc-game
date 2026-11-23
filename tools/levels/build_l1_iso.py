@@ -116,13 +116,13 @@ def fpoly(path,k,fx,fy,tipx,tipy,kind):
         if ys:ch.append((x,ys[-1]))
     if kind=='round':
         # nền thật = phần đáy của hình (gốc + đá + rễ): bao lồi của dải đáy, quy về mặt đất iso
-        yb=max(c[1] for c in ch);band=max(5,int(h*.06));lo=[];hi=[]
+        yb=max(c[1] for c in ch);fr,fac=((.10,.75) if k>.004 else (.25,.85));band=max(5,int(h*fr));lo=[];hi=[]
         for y in range(yb-band,yb+1):
             xs=[x for x in range(w) if a.getpixel((x,y))>40]
             if xs:lo.append(min(xs));hi.append(max(xs))
-        x0=sorted(lo)[len(lo)//4];x1=sorted(hi)[(3*len(hi))//4]
+        x0=min(lo);x1=max(hi)
         W=x1-x0;cxp=(x0+x1)/2
-        r=round(max(.2,min(.8,(W/2)/(_m.sqrt(2)*hw)))*.7,2)
+        r=round(max(.2,min(.9,(W/2)*fac/(_m.sqrt(2)*hw))),2)
         cyp=yb-r*_m.sqrt(2)*hh
         u=(cxp-w/2)/hw;v=(cyp-h)/hh;cx,cy=(u+v)/2,(v-u)/2
         return [(round(px,2),round(py,2)) for px,py in circ(cx,cy,r,r,16)]
