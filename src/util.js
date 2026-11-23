@@ -106,7 +106,7 @@ export function zipBrowser(onPick,onMany){
     q.oninput=render;render();upd();
     const fb=(l,f)=>el('button',{class:'btn',style:btnCss,onclick:()=>{f();render();upd();}},l);
     const bar0=el('div',{style:'display:flex;gap:8px;flex-wrap:wrap;align-items:center'},el('span',{class:'lbl'},'Lọc theo dung lượng:'),fb('Tất cả',()=>{minKB=0;}),fb('≥ 20 KB',()=>{minKB=20;}),fb('≥ 100 KB',()=>{minKB=100;}),fb('≥ 300 KB',()=>{minKB=300;}),fb('⇅ Lớn nhất trước',()=>{big=!big;}));
-    const bar=onMany?el('div',{style:'display:flex;gap:8px;flex-wrap:wrap;align-items:center'},el('button',{class:'btn',style:btnCss,onclick:()=>{filtered().forEach(e=>picked.add(e.n));render();upd();}},'☑ Chọn tất cả'+'(đang lọc)'),el('button',{class:'btn',style:btnCss,onclick:()=>{picked.clear();render();upd();}},'☐ Bỏ chọn'),cnt):'';
+    const bar=onMany?el('div',{style:'display:flex;gap:8px;flex-wrap:wrap;align-items:center'},el('button',{class:'btn',style:btnCss,onclick:()=>{filtered().forEach(e=>picked.add(e.n));render();upd();}},'☑ Chọn tất cả'+'(đang lọc)'),el('button',{class:'btn',style:btnCss,onclick:()=>{picked.clear();render();upd();}},'☐ Bỏ chọn'),el('button',{class:'btn',style:btnCss,onclick:()=>{for(const e of filtered())if(/(^|\/)layers\/|-cover\.|-base\./i.test(e.n))picked.delete(e.n);render();upd();}},'✂ Bỏ ảnh tách lớp (layers/cover)'),cnt):'';
     ov.append(q,bar0,bar,box,pv,info,el('div',{style:'display:flex;gap:8px;flex-wrap:wrap'},many,use,cancel));document.body.append(ov);};
   inp.click();}
 
