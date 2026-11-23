@@ -697,21 +697,41 @@ export function init2D(root,A){
   const mauImg=url=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('Không đọc được ảnh'));i.src=url;});
   function mauFoot(img){const W=img.width,Hh=img.height,c=document.createElement('canvas');c.width=W;c.height=Hh;const g=c.getContext('2d');g.drawImage(img,0,0);const d=g.getImageData(0,0,W,Hh).data;let x0=W,x1=-1,y1=-1;
     for(let y=0;y<Hh;y++)for(let x=0;x<W;x++)if(d[(y*W+x)*4+3]>24){if(x<x0)x0=x;if(x>x1)x1=x;y1=y;}
-    if(x1<0)return{px:W/2,bot:Hh,n:1};const bot=y1+1,px=(x0+x1+1)/2;let n=1;
+    if(x1<0)return{px:W/2,bot:Hh,n:1,bw:W};const bot=y1+1,px=(x0+x1+1)/2,bw=x1-x0+1;let n=1;
     for(const k of [4,3,2]){const y=bot-48*k;let a=W,b=-1;for(let yy=Math.max(0,y-5);yy<Math.min(Hh,y+5);yy++)for(let x=0;x<W;x++)if(d[(yy*W+x)*4+3]>24){if(x<a)a=x;if(x>b)b=x;}if(b>=0&&(b-a+1)>=.78*192*k){n=k;break;}}
-    return{px,bot,n};}
-  const MAUROLE={'Nhà':'Nhà','Cây':'Cây','Vật':'Đồ vật'};
+    return{px,bot,n,bw};}
+  const MAUROLE={'Nhà':'Nhà','Cây':'Cây','Vật':'Đồ vật','Hạ tầng':'Khác','Phủ nền':'Trang trí'};
   async function mauMake(m){const name='Mau-'+String(m.no).padStart(3,'0');let sid=sheets.findIndex((q,i)=>i>=4&&q.name===name);
     const T=Math.ceil(Math.max(2*Math.max(m.px,m.w-m.px),m.bot)/32)*32;
     if(sid<0){const img=await mauImg(m.url),c=document.createElement('canvas');c.width=T;c.height=T;c.getContext('2d').drawImage(img,Math.round(T/2-m.px),T-m.bot);
       const sh={name,url:c.toDataURL('image/png'),tw:T,margin:0};await loadSheet(sh);sheets.push(sh);sid=sheets.length-1;}
     TG.tiles[name+'#0']={type:MAUROLE[m.role]||'Khác',layer:2,fn:'Chặn đường'};tgSave();
     return{role:m.role,name:'#'+m.no+' '+m.name,tile:{sid,idx:0},f:1,fx:m.fx,fy:m.fy,sc:T/128,ox:0,oy:0,zb:[-m.fx,-m.fy,m.fx,m.fy],_mau:m.no};}
+
+  /* tự phân loại theo tên file (+ hình dáng khi tên không rõ) */
+  const MAUASC=n=>n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/[-_.]+/g,' ').replace(/ ?\(?\d+\)?$/,'').trim();
+  const MAUOVR={'ho bang':'Phủ nền','san da tuyet':'Phủ nền','thap tuong':'Nhà','thap tuong thanh':'Nhà','hoang cung':'Nhà','vong lau goc':'Nhà','tuong thanh':'Hạ tầng','cong thoat nuoc':'Hạ tầng','quan tra':'Nhà','sap cho':'Nhà','bac ben thuyen':'Hạ tầng','chieu nghi':'Hạ tầng','mat di':'Hạ tầng','ve thang':'Hạ tầng'};
+  function mauClass(m){const a=MAUASC(m.name);if(MAUOVR[a])return MAUOVR[a];
+    const R=[['Phủ nền',/(^| )(la sen|cum sen|o sen|mat nuoc|nen lat|dat nen|dat co|hoa tiet|bac them|ruong|luong rau|bai co|rong rieu|bong nuoc|vet |dau chan|tham |co kho|tuyet)/],
+      ['Vật',/(gio trai|trai cay|ban tra|ghe |chum|thung|khay|toi thuoc|tu ngan|coc |den long|den da|den ngoc|cot den|co rong|co hac|rem |gia binh|de ren|lu huong|thuyen|mai cheo|dau ben|cuon day|kien hang|(^| )(bao|xe|bia|dong ho|bep|cui|than cui|binh|ban|giuong|gio)( |$))/],
+      ['Hạ tầng',/(stairs|bridge|road|path|ramp|slope|(^| )(cau|bac|loi van|ben go|dau ben|van len|ke bo|lan can|tuong|hanh lang|duong|ben thuyen|san ben|moi nuoc)( |$))/],
+      ['Cây',/(tree|bush|plant|flower|palm|pine|cactus|(^| )(cay|thong|co thu|da co thu|trung|bui|cum|duong xi|oc dao|trucs?|tre|lieu|dao|mai|hoa|sen|lua|ngo|rang)( |$))/],
+      ['Nhà',/(house|building|tower|hut|barn|shop|castle|temple|tent|(^| )(nha|dien|dinh|mieu|quan|thap|cong|phu de|tram|leu|chuong|kho|choi|hai dang|tiem|khach|te dan|chinh|gac|son mon|guong nuoc|tinh the|hang|thien|am|chua|tu vien|dai|lau|hien|sap|xuong)( |$))/]];
+    if(/(^| )den( |$)/.test(a)&&(m.bw||m.w)<=200)return 'Vật';
+    for(const [r,re] of R)if(re.test(a))return r;
+    return (m.bw||m.w)>=260||m.h>=300?'Nhà':((m.bw||m.w)<=120&&m.h>=150?'Cây':'Vật');}
+  const MAUROLES=['Nhà','Cây','Vật','Hạ tầng','Phủ nền'];
+  function mauApply(m,foot){m.role=mauClass(m);m.cls='auto';
+    if(foot){const n=Math.max(foot.n,Math.round((foot.bw||m.w)/192));m.fx=m.fy=(m.role==='Nhà'||m.role==='Hạ tầng')?Math.min(6,Math.max(1,n)):1;m.px=foot.px;m.bot=foot.bot;m.bw=foot.bw;}}
+  let mauBusy=false;
+  async function mauMigrate(){if(mauBusy)return;const todo=MAU.items.filter(m=>m.cls!=='auto'&&m.cls!=='manual');if(!todo.length)return;mauBusy=true;toast('Đang tự phân loại '+todo.length+' mẫu…');
+    let k=0;for(const m of todo){try{const img=await mauImg(m.url);mauApply(m,mauFoot(img));}catch(e){mauApply(m,null);}if(++k%15===0)await new Promise(r=>setTimeout(r,0));}
+    await mauSave();mauBusy=false;toast('Đã tự phân loại xong '+todo.length+' mẫu');if(tab==='mau')draw();}
   async function mauAdd(items){await mauLoad();let n=0;for(const it of items){try{const img=await mauImg(it.url),f=mauFoot(img);
-      MAU.items.push({no:MAU.next++,name:(it.name||'Mẫu').replace(/\.[^.]+$/,'').slice(0,40),url:it.url,w:img.width,h:img.height,role:'Nhà',fx:f.n,fy:f.n,px:f.px,bot:f.bot});n++;}catch(e){toast('Bỏ qua '+(it.name||'ảnh')+': '+e.message);}}
+      const m={no:MAU.next++,name:(it.name||'Mẫu').replace(/\.[^.]+$/,'').slice(0,40),url:it.url,w:img.width,h:img.height,role:'Nhà',fx:1,fy:1,px:f.px,bot:f.bot};mauApply(m,f);MAU.items.push(m);n++;}catch(e){toast('Bỏ qua '+(it.name||'ảnh')+': '+e.message);}}
     if(n){await mauSave();toast('Đã thêm '+n+' mẫu (số '+(MAU.next-n)+(n>1?'–'+(MAU.next-1):'')+'). Ảnh giữ nguyên bản gốc.');}draw();}
   let mauTok=0;
-  async function mauTab(){const tok=++mauTok;await mauLoad();if(tok!==mauTok||tab!=='mau')return;
+  async function mauTab(){const tok=++mauTok;await mauLoad();if(tok!==mauTok||tab!=='mau')return;mauMigrate();
     body.append(el('div',{class:'lbl'},'🏠 MẪU 2D — kho mẫu của bạn'),el('div',{class:'hint'},'Ảnh nạp vào được giữ nguyên 100% (không cắt, không đổi cỡ). Mỗi mẫu có số thứ tự cố định, số đã xoá không dùng lại. Xoá tài nguyên/tileset không làm mất mẫu — chỉ mất khi bạn xoá đúng mẫu đó.'));
     body.append(el('div',{class:'row'},btn('➕ Thêm mẫu từ ảnh…',()=>pickFiles('image/*',it=>mauAdd(it),false),'on'),btn('📦 Từ gói .zip…',()=>zipBrowser((u,n)=>mauAdd([{url:u,name:n}]),l=>mauAdd(l))),btn('🗑 Xoá mẫu theo số…',async()=>{
       const t=await askText('Nhập số mẫu cần xoá (vd: 3 hoặc 3,5,8):','');if(!t)return;const set=new Set(t.split(/[^0-9]+/).filter(Boolean).map(Number));const hit=MAU.items.filter(m=>set.has(m.no));
@@ -721,10 +741,15 @@ export function init2D(root,A){
     body.append(el('div',{class:'row'},btn('💾 Sao lưu tất cả mẫu (.json)',()=>saveFile('mau_2d.json',new Blob([JSON.stringify(MAU)],{type:'application/json'}))),btn('⬆ Nạp lại bản sao lưu',()=>pickFile('.json,application/json',async t=>{try{const o=JSON.parse(t);if(!o||!Array.isArray(o.items))throw 0;const have=new Set(MAU.items.map(m=>m.no));let n=0;for(const m of o.items){if(have.has(m.no))continue;MAU.items.push(m);n++;}MAU.next=Math.max(MAU.next,o.next||0,...MAU.items.map(m=>m.no+1));MAU.items.sort((a,b)=>a.no-b.no);await mauSave();toast('Đã nạp lại '+n+' mẫu');draw();}catch(e){toast('File sao lưu không hợp lệ');}}))));
     if(!MAU.items.length){body.append(el('div',{class:'hint'},'Chưa có mẫu nào. Bấm "Thêm mẫu từ ảnh…" và chọn nhiều ảnh nhà/công trình một lúc.'));return;}
     body.append(el('div',{class:'hint'},MAU.items.length+' mẫu · số lớn nhất #'+(MAU.next-1)+'. Chọn mẫu → chạm bản đồ để đặt (nằm sát nền theo ô "chân").'));
+    const fl=window.__mf||'Tất cả',q0=(window.__mq||'').toLowerCase();const cnt=r=>r==='Tất cả'?MAU.items.length:MAU.items.filter(m=>m.role===r).length;
+    body.append(el('div',{class:'row'},['Tất cả',...MAUROLES].map(r=>btn(r+' ('+cnt(r)+')',()=>{window.__mf=r;draw();},fl===r?'on':''))));
+    body.append(el('div',{class:'row'},el('input',{class:'num',placeholder:'🔎 Tìm theo tên hoặc số…',value:window.__mq||'',style:'flex:1;min-width:120px',onchange:e=>{window.__mq=e.target.value;draw();}}),btn('🪄 Tự phân loại lại tất cả',async()=>{if(!await yes('Phân loại lại TẤT CẢ mẫu theo tên và hình dáng?\n(Mẫu bạn đã chỉnh tay cũng bị phân loại lại.)'))return;MAU.items.forEach(m=>{m.cls=null;});await mauMigrate();})));
+    const shown=MAU.items.filter(m=>(fl==='Tất cả'||m.role===fl)&&(!q0||(m.name.toLowerCase().includes(q0)||('#'+m.no)===q0||String(m.no)===q0)));
+    body.append(el('div',{class:'hint'},'Đang hiện '+shown.length+' mẫu.'));
     const grid=el('div',{class:'libgrid'});
-    MAU.items.forEach(m=>{const c=el('img',{src:m.url,style:'max-width:100%;max-height:110px;object-fit:contain;image-rendering:auto;background:#2a3340;border-radius:6px'});
-      const roleSel=el('select',{class:'num',onchange:async e=>{m.role=e.target.value;await mauSave();}},['Nhà','Cây','Vật'].map(r=>{const o=el('option',{value:r},r);if(r===m.role)o.selected=true;return o;}));
-      const fp=(k)=>el('select',{class:'num',onchange:async e=>{m[k]=+e.target.value;await mauSave();const nm='Mau-'+String(m.no).padStart(3,'0');}},[1,2,3,4,5,6,8].map(v=>{const o=el('option',{value:v},v);if(v===m[k])o.selected=true;return o;}));
+    shown.forEach(m=>{const c=el('img',{loading:'lazy',src:m.url,style:'max-width:100%;max-height:110px;object-fit:contain;image-rendering:auto;background:#2a3340;border-radius:6px'});
+      const roleSel=el('select',{class:'num',onchange:async e=>{m.role=e.target.value;m.cls='manual';await mauSave();draw();}},MAUROLES.map(r=>{const o=el('option',{value:r},r);if(r===m.role)o.selected=true;return o;}));
+      const fp=(k)=>el('select',{class:'num',onchange:async e=>{m[k]=+e.target.value;m.cls='manual';await mauSave();const nm='Mau-'+String(m.no).padStart(3,'0');}},[1,2,3,4,5,6,8].map(v=>{const o=el('option',{value:v},v);if(v===m[k])o.selected=true;return o;}));
       grid.append(el('div',{class:'libitem'},el('div',{style:'font-weight:800;color:#ffd24a'},'#'+m.no),c,el('div',{},m.name+' ('+m.w+'×'+m.h+')'),
         el('div',{class:'row'},roleSel,el('span',{class:'lbl'},'chân'),fp('fx'),'×',fp('fy')),
         el('div',{class:'row'},btn('Đặt',async()=>{try{vatSel=await mauMake(m);objType='deco';tool='obj';draw();toast('Đã chọn mẫu #'+m.no+' — chạm bản đồ để đặt');}catch(e){toast('Lỗi: '+e.message);}},(vatSel&&vatSel._mau===m.no)?'on':''),btn('✏',async()=>{const n=await askText('Tên mẫu #'+m.no+':',m.name);if(n){m.name=n.slice(0,40);await mauSave();draw();}}))));});
