@@ -568,11 +568,34 @@ export function init2D(root,A){
     const rt=w/h,fill=tot/(w*h);if(mx<w*.9||rt<1.25||rt>3||fill<.4||fill>.9)return null;
     const t=wd[Math.floor(h*.06)],bt=wd[h-1-Math.floor(h*.06)];if(t>mx*.45||bt>mx*.45)return null;
     let sm=0,n=0;for(let y=0;y<h;y++)if(wd[y]>=mx*.97){sm+=y;n++;}if(!n)return null;const Ht=2*sm/n;if(Ht<w*.3||Ht>w*.85)return null;return {Ht};}
+  /* ===== TỰ PHÂN LOẠI file nạp vào: theo tên/thư mục + đặc điểm hình ===== */
+  function autoClass(path,f){const p='/'+normP(path||'').replace(/[_\s]+/g,'-')+'/',w=re=>re.test(p),B=(s)=>new RegExp('[\\/-]('+s+')([\\/.-]|$)');let type=null,layer=2,fn='Chặn đường',role=null;
+    if(w(B('bong|shadow'))){return {type:'Trang trí',layer:1,fn:'Chỉ trang trí',role:'Phủ nền'};}
+    if(w(B('lop-che|mai-che|overlay|roof|mai-nha|canopy|tan-che|lop-phu')))return {type:'Nhà',layer:3,fn:'Chỉ trang trí',role:'Mái/cửa'};
+    if(w(B('decal|hoa-tiet|nen-lat|vet|suong|fog|hieu-ung|effect|puddle|stain|crack|o-sen|la-sen|cum-sen|luong-rau|ruong|dat-co|dat-nen|mat-nuoc|co-kho|rong-lat-san')))return {type:'Trang trí',layer:1,fn:'Chỉ trang trí',role:'Phủ nền'};
+    if(w(B('nhan-vat|char|hero|npc|player')))return {type:'Nhân vật',layer:2,fn:'Chặn đường',role:'Nhân vật'};
+    if(w(B('quai|monster|enemy|boss|slime|skeleton')))return {type:'Quái',layer:2,fn:'Chặn đường',role:'Quái'};
+    if(w(B('cau|bridge|bac|bac-da|bac-thang|stairs|stair|ben-go|ben|dock|road|path|loi-van|lan-ranh|ramp|slope')))return {type:'Đường',layer:2,fn:'Đi được',role:'Hạ tầng'};
+    if(w(B('quan-tai|coffin|bia|mo-bia|grave|tomb')))type='Đồ vật';
+    else if(w(B('cay|tree|thong|bui|cum|trung|truc|lieu|dao-|palm|pine|bush|plant|flower|hoa|cactus|co-thu|oc-dao|rang')))type='Cây';
+    else if(w(B('nha|tram|chua|dinh|lau|tuu|mieu|dien|thap|kho|ren|leu|quan|phu-de|hoang-cung|tent|house|building|hut|barn|shop|castle|temple|tower|kien-truc|nha-cua|cong-thanh|cong-')))type='Nhà';
+    else if(w(B('nuoc|song|suoi|thac|ao|water|lake|river')))type='Nước';
+    else if(w(B('rao|tuong|cot|lan-can|fence|wall|column|pillar|door|gate')))type='Tường/hàng rào';
+    else if(w(B('ban|ghe|thung|hop|binh|chum|vat|den|bia|chest|barrel|crate|table|chair|prop|do-vat|coffin|quan-tai|grave|mo-bia|statue|tuong-da|lu|ruong-go|gia|de|khay|tu')))type='Đồ vật';
+    else if(w(B('da|nui|thach|doi|deco|trang-tri|canh-quan|rock|stone')))type='Trang trí';
+    if(!type&&f){const r=f.h/f.w;if(r<.28&&f.mean<.9){return {type:'Trang trí',layer:1,fn:'Chỉ trang trí',role:'Phủ nền'};}if(f.mean<.55)return {type:'Trang trí',layer:1,fn:'Chỉ trang trí',role:'Phủ nền'};type='Đồ vật';}
+    if(type==='Trang trí')fn='Đi được';
+    if(type==='Nước')fn='Chặn đường';
+    const out={type:type||'Đồ vật',layer,fn,role:role||(type==='Cây'?'Cây':type==='Nhà'?'Nhà':'Vật')};
+    if(f){const n=Math.max(1,Math.min(4,Math.round(f.w/220)));if(f.w>=100){out.fx=n;out.fy=n;}else{out.fx=1;out.fy=1;}}
+    return out;}
+  function featOf(g,b){const bw=b[2]-b[0],bh=b[3]-b[1];try{const d=g.getImageData(b[0],b[1],bw,bh).data,np=bw*bh;let op=0,sa=0;for(let q=0;q<np;q++){const a=d[q*4+3];if(a>24){op++;sa+=a;}}return {w:bw,h:bh,fill:op/np,mean:op?sa/op/255:0};}catch(x){return {w:bw,h:bh,fill:1,mean:1};}}
   async function addWhole(items){if(!items.length)return;const T=128,CAP=256,COLS=16;const HS=new Set(TG.hashes||[]);let dupI=0,dupO=0,dupW=0,dupX=0;const GR=[],ISOL=[];const fnv=(d,n)=>{let h=2166136261>>>0;for(let i=0;i<n;i++){h^=d[i];h=Math.imul(h,16777619)>>>0;}return h.toString(36);};const fnvS=t=>{let h=2166136261>>>0;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h.toString(36)+t.length.toString(36);};
     let pend=[];let sheetsMade=0,objs=0,cur=null,cnt=0,base=(items.length===1?items[0].name.replace(/\.\w+$/,''):'Hinh').slice(0,16);
-    const flush=async()=>{if(!cur||!cnt)return;const s={name:(base+'-'+(++sheetsMade)).slice(0,24),url:cur.c.toDataURL('image/png'),tw:T,margin:0};await loadSheet(s);sheets.push(s);uniqNames(sheets);for(const q of pend)TG.tiles[s.name+'#'+q.idx]={type:q.type,layer:q.layer,fn:q.fn};pend=[];cur=null;cnt=0;};
-    const put=(src,sx,sy,sw,sh,tg)=>{if(!cur||cnt>=CAP){return flush().then(()=>{const c=document.createElement('canvas');c.width=COLS*T;c.height=Math.ceil(CAP/COLS)*T;cur={c,g:c.getContext('2d')};cur.g.imageSmoothingQuality='high';return put(src,sx,sy,sw,sh,tg);});}
-      if(tg)pend.push({idx:cnt,type:tg.type,layer:tg.layer,fn:tg.fn});
+    const flush=async()=>{if(!cur||!cnt)return;const s={name:(base+'-'+(++sheetsMade)).slice(0,24),url:cur.c.toDataURL('image/png'),tw:cur.T,margin:0};await loadSheet(s);sheets.push(s);uniqNames(sheets);for(const q of pend)TG.tiles[s.name+'#'+q.idx]={type:q.type,layer:q.layer,fn:q.fn,role:q.role,fx:q.fx,fy:q.fy,sc:q.sc};pend=[];cur=null;cnt=0;};
+    const put=(src,sx,sy,sw,sh,tg)=>{const need=Math.max(128,Math.min(768,Math.ceil((Math.max(sw,sh)+4)/64)*64)),CO=need>256?6:16,CP=need>256?24:256;
+      if(!cur||cnt>=cur.CP||cur.T!==need){return flush().then(()=>{const c=document.createElement('canvas');c.width=CO*need;c.height=Math.ceil(CP/CO)*need;cur={c,g:c.getContext('2d'),T:need,CO,CP};cur.g.imageSmoothingQuality='high';return put(src,sx,sy,sw,sh,tg);});}
+      const T=cur.T,COLS=cur.CO;if(tg)pend.push({idx:cnt,type:tg.type,layer:tg.layer,fn:tg.fn,role:tg.role,fx:tg.fx==null?0:tg.fx,fy:tg.fy==null?0:tg.fy,sc:T/128});
       const k=Math.min(1,(T-4)/sw,(T-4)/sh),w=Math.max(1,Math.round(sw*k)),h=Math.max(1,Math.round(sh*k)),ox=(cnt%COLS)*T+Math.floor((T-w)/2),oy=Math.floor(cnt/COLS)*T+T-2-h;cur.g.drawImage(src,sx,sy,sw,sh,ox,oy,w,h);cnt++;objs++;};
     let i=0;for(const it of items){i++;if(i%10===1)toast('Đang xử lý ảnh '+i+'/'+items.length+'…');
       const ih='i'+fnvS(it.url);if(HS.has(ih)){dupI++;continue;}HS.add(ih);let bm;try{const im=new Image();await new Promise((ok,no)=>{im.onload=ok;im.onerror=no;im.src=it.url;});bm=im;}catch(e){continue;}
@@ -588,7 +611,7 @@ export function init2D(root,A){
             if(x1>=0)bb.push([x0*B,y0*B,Math.min(W,(x1+1)*B),Math.min(H,(y1+1)*B)]);}
           let ch=true;while(ch){ch=false;for(let a=0;a<bb.length&&!ch;a++)for(let b=a+1;b<bb.length;b++){const p=bb[a],q=bb[b];if(p[0]<q[2]&&q[0]<p[2]&&p[1]<q[3]&&q[1]<p[3]){bb[a]=[Math.min(p[0],q[0]),Math.min(p[1],q[1]),Math.max(p[2],q[2]),Math.max(p[3],q[3])];bb.splice(b,1);ch=true;break;}}}
           const ok=bb.filter(b=>(b[2]-b[0])>=8&&(b[3]-b[1])>=8);if(ok.length&&ok.length<=80)boxes=ok.sort((p,q)=>(p[1]-q[1])||(p[0]-q[0]));}}catch(e){}}
-      for(const b of boxes){const bw=b[2]-b[0],bh=b[3]-b[1];let oh='',isoHit=false;try{const dd=g.getImageData(b[0],b[1],bw,bh).data;{let wt=0,tt=0;const np=bw*bh;for(let q=0;q<np;q++){const a=dd[q*4+3];if(a<250)tt++;else if(dd[q*4]>=240&&dd[q*4+1]>=240&&dd[q*4+2]>=240)wt++;}if(wt>np*0.35&&tt<np*0.1){dupW++;continue;}}oh='o'+fnv(dd,dd.length)+'-'+bw+'x'+bh;if(!HS.has(oh)){const iso=isoSlab(dd,bw,bh);if(iso){HS.add(oh);ISOL.push({bm,b,iso});isoHit=true;}}}catch(e){}if(isoHit)continue;if(oh&&HS.has(oh)){dupO++;continue;}if(oh)HS.add(oh);await put(bm,b[0],b[1],bw,bh,guessObj(it.path||it.name));}}
+      for(const b of boxes){const bw=b[2]-b[0],bh=b[3]-b[1];let oh='',isoHit=false;try{const dd=g.getImageData(b[0],b[1],bw,bh).data;{let wt=0,tt=0;const np=bw*bh;for(let q=0;q<np;q++){const a=dd[q*4+3];if(a<250)tt++;else if(dd[q*4]>=240&&dd[q*4+1]>=240&&dd[q*4+2]>=240)wt++;}if(wt>np*0.35&&tt<np*0.1){dupW++;continue;}}oh='o'+fnv(dd,dd.length)+'-'+bw+'x'+bh;if(!HS.has(oh)){const iso=isoSlab(dd,bw,bh);if(iso){HS.add(oh);ISOL.push({bm,b,iso});isoHit=true;}}}catch(e){}if(isoHit)continue;if(oh&&HS.has(oh)){dupO++;continue;}if(oh)HS.add(oh);await put(bm,b[0],b[1],bw,bh,autoClass(it.path||it.name,featOf(g,b)));}}
     await flush();
     if(GR.length){const GT2=32,GC=16,cv=document.createElement('canvas');cv.width=GC*GT2;cv.height=Math.ceil(GR.length/GC)*GT2;const cg=cv.getContext('2d');cg.imageSmoothingQuality='high';GR.forEach((im,k)=>cg.drawImage(im,(k%GC)*GT2,Math.floor(k/GC)*GT2,GT2,GT2));
       const gs={name:('Nen-'+Date.now().toString(36).slice(-4)),url:cv.toDataURL('image/png'),tw:GT2,margin:0};await loadSheet(gs);sheets.push(gs);uniqNames(sheets);GR.forEach((_,k)=>{TG.tiles[gs.name+'#'+k]={type:'Đường',layer:0,fn:'Đi được'};});sheetsMade++;}
@@ -650,9 +673,11 @@ export function init2D(root,A){
     if(sid<0){const s={name,url:pk.atlas,tw:pk.tw,margin:0,iso:pk.iso===0?0:2,cy:pk.cy||0,wat};await loadSheet(s);sheets.push(s);sid=sheets.length-1;for(const [n,i] of Object.entries(pk.idx))TG.tiles[name+'#'+i]=nenTag(n);tgSave();}
     return {pk,sid};}
   let vatSel=null;const VROLE={'Nhà':'Nhà','Cây':'Cây','Vật':'Đồ vật','Hạ tầng':'Khác','Phủ nền':'Trang trí'};
-  async function ensureVat(id){const pk=await vatPack(id),name='Vat-'+id;let sid=sheets.findIndex((s,i)=>i>=4&&s.name===name);
+  function mineItems(){const out=[];for(const [k,t] of Object.entries(TG.tiles)){if(!t||t.fx==null||t.layer<1)continue;const h=k.lastIndexOf('#'),nm=k.slice(0,h),idx=+k.slice(h+1),sid=sheets.findIndex((s,i)=>i>=4&&s.name===nm);if(sid<0||/^(Nen|Vat)-/.test(nm))continue;
+      out.push({role:t.role||'Vật',name:nm+' · '+(idx+1),tile:{sid,idx},f:1,fx:t.fx,fy:t.fy,sc:t.sc||sheets[sid].tw/128,ox:0,oy:0,zb:[-t.fx,-t.fy,t.fx,t.fy]});}return out;}
+  async function ensureVat(id){if(id==='mine')return mineItems();const pk=await vatPack(id),name='Vat-'+id;let sid=sheets.findIndex((s,i)=>i>=4&&s.name===name);
     if(sid<0){const s={name,url:pk.atlas,tw:pk.T,margin:0};await loadSheet(s);sheets.push(s);sid=sheets.length-1;pk.items.forEach(it=>{TG.tiles[name+'#'+it.i]={type:VROLE[it.role]||'Khác',layer:2,fn:'Chặn đường'};});tgSave();}
-    return pk.items.map(it=>({role:it.role,name:it.name,tile:{sid,idx:it.i},f:1,fx:it.fx,fy:it.fy,sc:it.sc,ox:0,oy:0,zb:[-it.fx/2,-it.fy/2,it.fx,it.fy]}));}
+    return pk.items.map(it=>({role:it.role,name:it.name,tile:{sid,idx:it.i},f:1,fx:it.fx,fy:it.fy,sc:it.sc,ox:0,oy:0,zb:[-it.fx,-it.fy,it.fx,it.fy]}));}
   async function genRun(){const k=window.__gk||'village',z={s:[32,24],m:[48,36],l:[64,48]}[window.__gz||'m'];
     if(!await yes('Tạo bối cảnh mới thay cho màn "'+(M.name||'')+'"?\n(Ctrl+Z hoàn tác được bản đồ; tileset mới tạo sẽ còn lại.)'))return;
     toast('Đang tạo bối cảnh…');await new Promise(r=>setTimeout(r,30));
@@ -682,7 +707,7 @@ export function init2D(root,A){
     body.append(el('div',{class:'lbl',style:'margin-top:8px'},'ĐẶT LÊN BẢN ĐỒ (chạm ô để đặt, chạm lại để chọn/kéo)'),
       el('div',{class:'row'},['start','door','goal'].map(k=>btn(OT[k][0]+' '+OT[k][1],()=>{objType=k;tool='obj';draw();},(tool==='obj'&&objType===k)?'on':''))));
     {const vbox=el('div',{style:'border:1px solid #d9a066;border-radius:10px;padding:8px;margin-top:8px;background:#26201a'}),vl=el('div',{style:'display:flex;flex-wrap:wrap;gap:4px;margin-top:6px'}),sv=el('select',{class:'num',style:'max-width:100%',onchange:async e=>{vl.textContent='Đang nạp…';try{const it=await ensureVat(e.target.value);vl.textContent='';window.__gvs=e.target.value;it.forEach(q=>vl.append(btn(q.name+(q.role==='Hạ tầng'?' ⛓':''),()=>{vatSel=q;objType='deco';tool='obj';draw();},(vatSel&&vatSel.name===q.name&&vatSel.tile.sid===q.tile.sid)?'on':'')));}catch(x){vl.textContent='Lỗi nạp: '+x.message;}}},el('option',{value:''},'— chọn bộ vật thể —'));
-      vatIndex().then(L=>{for(const o of L){const op=el('option',{value:o.id},o.name+' ('+o.n+')');if(o.id===window.__gvs)op.selected=true;sv.append(op);}if(window.__gvs)sv.onchange({target:{value:window.__gvs}});});
+      vatIndex().then(L=>{sv.append(el('option',{value:'mine'},'📁 Của tôi (ảnh đã nạp, tự phân loại)'));for(const o of L){const op=el('option',{value:o.id},o.name+' ('+o.n+')');if(o.id===window.__gvs)op.selected=true;sv.append(op);}if(window.__gvs)sv.onchange({target:{value:window.__gvs}});});
       vbox.append(el('div',{class:'lbl',style:'color:#e8c08a'},'🏛 VẬT THỂ (lớp Vật thể) — chọn rồi chạm bản đồ để đặt'),sv,vl);body.append(vbox);}
     const GS={v:window.__gv||'rpg',k:window.__gk||'village',z:window.__gz||'m',g:!!window.__gg};
     const selK=el('select',{class:'num',onchange:e=>{window.__gk=e.target.value;const p=GEN_KIND_PACK[e.target.value];if(p){window.__gn=p;selN.value=p;const o=selN._L&&selN._L.find(x=>x.id===p);nenD.textContent=o?o.desc:'';}}},Object.entries(GEN_KINDS).map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.k)o.selected=true;return o;}));
@@ -692,11 +717,14 @@ export function init2D(root,A){
     const nenD=el('div',{class:'hint'},'');
     const selN=el('select',{class:'num',style:'width:100%;max-width:230px',onchange:e=>{window.__gn=e.target.value;const o=selN._L&&selN._L.find(x=>x.id===e.target.value);nenD.textContent=o?o.desc:'';}},el('option',{value:''},'Nền cũ (Màn 1)'));
     nenIndex().then(L=>{L=L.filter(o=>!o.pal);selN._L=L;for(const o of L){const op=el('option',{value:o.id},o.name+' ('+o.n+' ô)');if(o.id===window.__gn){op.selected=true;nenD.textContent=o.desc;}selN.append(op);}});
+    const selVat=el('select',{class:'num',style:'width:100%;max-width:230px',onchange:e=>{window.__gvat=e.target.value||null;}},el('option',{value:''},'Tự động theo kiểu'),el('option',{value:'mine'},'📁 Của tôi (ảnh đã nạp)'));
+    vatIndex().then(L=>{for(const o of L){const op=el('option',{value:o.id},o.name);if(o.id===window.__gvat)op.selected=true;selVat.append(op);}});
     const cbG=el('input',{type:'checkbox',onchange:e=>{window.__gg=e.target.checked;}});cbG.checked=GS.g;
     body.append(el('div',{style:'border:1px solid #5aa17a;border-radius:10px;padding:8px;margin-top:10px;background:#16261d'},
       el('div',{class:'lbl',style:'color:#9fe0b0'},'🎲 TỰ TẠO BỐI CẢNH TỪ TÀI NGUYÊN'),
       el('div',{class:'hint'},'App dùng các tài nguyên đã gắn nhãn (Cây, Nhà, Nước, Đồ vật, Trang trí…) để trải nền, vẽ đường, đặt hồ, nhà, cây. Thay bản đồ của màn đang mở (hoàn tác được bằng Ctrl+Z).'),
       el('div',{class:'row'},el('span',{class:'lbl'},'🧱 Bộ nền (theo khu)'),selN),nenD,
+      el('div',{class:'row'},el('span',{class:'lbl'},'🏛 Bộ vật thể'),selVat),
       el('div',{class:'row'},el('span',{class:'lbl'},'📷 Góc nhìn'),selV),
       el('div',{class:'row'},el('span',{class:'lbl'},'Kiểu'),selK,el('span',{class:'lbl'},'Cỡ'),selZ),
       el('div',{class:'row'},el('label',{style:'font-size:13px'},cbG,' Đặt 🏁 đích ở cuối đường')),

@@ -14,12 +14,12 @@ const KINDS={
   sect:{name:'Tông môn',pack:'son-mon',houses:[3,5],trees:[20,30],vat:[2,4],bush:[6,12],pond:0},
   immortal:{name:'Tiên môn',pack:'tien-cung',houses:[2,3],trees:[6,10],vat:[1,3],bush:[8,14],pond:0},
   cloud:{name:'Vân sơn (tuyết/mây)',pack:'van-son',houses:[1,3],trees:[10,18],vat:[2,4],bush:[2,5],pond:0},
-  tunnel:{name:'Địa đạo',pack:'dia-dao',houses:[0,1],trees:[0,0],vat:[3,6],bush:[0,0],pond:0},
-  dungeon:{name:'Địa cung',pack:'dia-cung',houses:[2,3],trees:[0,0],vat:[5,9],bush:[0,0],pond:0},
-  crypt:{name:'Hầm mộ',pack:'ham-mo',houses:[1,2],trees:[0,0],vat:[5,9],bush:[0,0],pond:0},
+  tunnel:{name:'Địa đạo',pack:'dia-dao',rooms:[2,3],houses:[0,1],trees:[0,0],vat:[10,18],bush:[0,0],pond:0},
+  dungeon:{name:'Địa cung',pack:'dia-cung',rooms:[3,5],houses:[0,1],trees:[0,0],vat:[14,24],bush:[0,0],pond:0},
+  crypt:{name:'Hầm mộ',pack:'ham-mo',rooms:[2,4],houses:[0,1],trees:[0,0],vat:[12,20],bush:[0,0],pond:0},
   tomb:{name:'Lăng tẩm',pack:'lang-tam',houses:[1,2],trees:[8,14],vat:[4,8],bush:[2,5],pond:0},
   battlefield:{name:'Chiến trường',pack:'thao-nguyen',houses:[0,0],trees:[2,5],vat:[18,30],bush:[0,2],pond:0},
-  lava:{name:'Dung nham',pack:'dung-nham',houses:[0,1],trees:[0,2],vat:[6,10],bush:[0,0],pond:1},
+  lava:{name:'Dung nham',pack:'dung-nham',houses:[0,1],trees:[0,2],vat:[10,16],bush:[0,0],pond:1},
   gem:{name:'Khe ngọc',pack:'khe-ngoc',houses:[1,2],trees:[0,3],vat:[6,12],bush:[0,2],pond:1},
   port:{name:'Bến sông',pack:'ben-song',houses:[3,6],trees:[4,8],vat:[6,10],bush:[2,5],pond:1},
   coast:{name:'Duyên hải',pack:'duyen-hai',houses:[2,4],trees:[5,10],vat:[3,6],bush:[2,5],pond:1},
@@ -28,7 +28,7 @@ const KINDS={
   outpost:{name:'Trạm dịch',pack:'tram-dich',houses:[2,4],trees:[2,5],vat:[6,10],bush:[0,2],pond:0},
   forest:{name:'Rừng',pack:'rung-truc',houses:[0,1],trees:[70,110],vat:[2,4],bush:[8,14],pond:1},
   wild:{name:'Đồng hoang',pack:'thao-nguyen',houses:[0,2],trees:[8,14],vat:[4,8],bush:[3,8],pond:0}};
-const VAT={village:['lang-nui','pho-cho'],mtvillage:['lang-nui'],town:['kinh-thanh','pho-cho'],market:['pho-cho'],capital:['kinh-thanh'],palace:['kinh-thanh'],imperial:['kinh-thanh'],sect:['son-mon','van-son'],immortal:['van-son','son-mon'],cloud:['van-son','son-mon'],tunnel:['khe-ngoc'],dungeon:['khe-ngoc'],crypt:['khe-ngoc'],tomb:['khe-ngoc'],battlefield:['thao-nguyen'],lava:['khe-ngoc'],gem:['khe-ngoc'],port:['ben-song'],coast:['duyen-hai'],lotus:['dam-sen'],farm:['dong-que'],outpost:['tram-dich','thao-nguyen'],forest:['rung-truc'],wild:['thao-nguyen','rung-truc']};
+const VAT={village:['lang-nui','cong-trinh','pho-cho'],mtvillage:['lang-nui'],town:['kinh-thanh','pho-cho','cong-trinh'],market:['pho-cho'],capital:['kinh-thanh','pho-cho'],palace:['kinh-thanh'],imperial:['kinh-thanh'],sect:['son-mon','van-son'],immortal:['van-son','son-mon'],cloud:['van-son','son-mon'],tunnel:['dia-cung'],dungeon:['dia-cung'],crypt:['dia-cung','khe-ngoc'],tomb:['khe-ngoc','dia-cung'],battlefield:['thao-nguyen'],lava:['dia-cung','khe-ngoc'],gem:['khe-ngoc'],port:['ben-song'],coast:['duyen-hai'],lotus:['dam-sen'],farm:['dong-que'],outpost:['tram-dich','thao-nguyen'],forest:['rung-truc'],wild:['thao-nguyen','rung-truc']};
 export const GEN_KIND_VAT=VAT;
 export const GEN_KIND_PACK=Object.fromEntries(Object.entries(KINDS).map(([k,v])=>[k,v.pack]));
 export const GEN_KINDS=Object.fromEntries(Object.entries(KINDS).map(([k,v])=>[k,v.name]));
@@ -106,6 +106,14 @@ function buildIso(ctx,opt,cat){
   const place=(list,n,tries,mg,nearPath,name,key)=>{if(!list.length)return;for(let i=0;i<n;i++){const it=list[Math.floor(r()*list.length)];
       for(let t=0;t<tries;t++){const x=2+Math.floor(r()*(W-4)),y=2+Math.floor(r()*(H-4)),cells=bb(it,x,y);if(!cells.length||!ok(cells,mg))continue;if(nearPath&&!near(cells,7))continue;put(it,x,y,cells,name);info.placed[key]++;break;}}};
   const rn=(a,b)=>a+Math.floor(r()*(b-a+1));
+  /* phòng + hành lang: tường dựng thành khung chữ nhật có cửa (kiểu địa cung / địa đạo / hầm mộ) */
+  if(K.rooms){const wl=nm=>IT.find(i=>i.name===nm),WS=wl('Stone wall (S)'),WE=wl('Stone wall (E)'),DS=wl('Stone wall door (S)')||WS,DE=wl('Stone wall door (E)')||WE,CO=IT.find(i=>/^Stone wall corner/.test(i.name));
+    if(WS&&WE){const nr=rn(K.rooms[0],K.rooms[1]),rects=[];
+      for(let t=0;t<60&&rects.length<nr;t++){const w=rn(8,13),h=rn(6,9),x=rn(3,W-w-4),y=rn(3,H-h-4);if(rects.some(q=>x<q[0]+q[2]+3&&q[0]<x+w+3&&y<q[1]+q[3]+3&&q[1]<y+h+3))continue;if(Math.abs(x+w/2-sx)<w/2+3&&Math.abs(y+h/2-sy)<h/2+3)continue;rects.push([x,y,w,h]);}
+      const wall=(it,x,y)=>{if(x<2||y<2||x>=W-2||y>=H-2)return;const cells=bb(it,x,y);if(cells.some(([a,b])=>occ[b*W+a]))return;put(it,x,y,cells,it.name.replace(/ \([SENW]\)/,''));info.placed.prop++;};
+      for(const [x,y,w,h] of rects){const gx=[x+rn(2,w-3),x+rn(2,w-3)],gy=[y+rn(2,h-3),y+rn(2,h-3)];
+        for(let i=0;i<=w;i++){for(const yy of [y,y+h]){const door=gx.includes(i)||gx.includes(i-1);if(!door)wall(WS,x+i,yy);}}
+        for(let j=0;j<=h;j++){for(const xx of [x,x+w]){const door=gy.includes(j)||gy.includes(j-1);if(!door)wall(WE,xx,y+j);}}}}}
   place(by('Nhà'),rn(K.houses[0],K.houses[1])||0,300,1,true,null,'house');
   place(by('Vật'),rn(...(K.vat||[2,4])),160,1,false,null,'prop');
   place(by('Cây'),rn(K.trees[0],Math.min(K.trees[1],30)),100,0,false,'Cây','tree');
