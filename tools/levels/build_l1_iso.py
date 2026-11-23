@@ -115,17 +115,17 @@ def fpoly(path,k,fx,fy,tipx,tipy,kind):
         ys=[y for y in range(h) if a.getpixel((x,y))>40]
         if ys:ch.append((x,ys[-1]))
     if kind=='round':
-        # tâm + bán kính gốc đo từ các hàng đáy hẹp nhất (thân/gốc), tâm lấy theo gốc thật chứ không theo giữa hình
-        yb=max(c[1] for c in ch);rows=[]
-        for y in range(max(0,yb-int(h*.14)),yb+1):
+        # nền thật = phần đáy của hình (gốc + đá + rễ): bao lồi của dải đáy, quy về mặt đất iso
+        yb=max(c[1] for c in ch);band=max(5,int(h*.06));lo=[];hi=[]
+        for y in range(yb-band,yb+1):
             xs=[x for x in range(w) if a.getpixel((x,y))>40]
-            if xs:rows.append((max(xs)-min(xs)+1,(max(xs)+min(xs))/2,y))
-        rows.sort();sel=rows[:max(1,int(len(rows)*.35))]
-        wb=sel[-1][0];cxp=sum(q[1] for q in sel)/len(sel)
-        r=max(.14,min(.3,(wb/2)/(hw*_m.sqrt(2))));r=round(r,2)
-        cyp=yb-r*hh*1.2
+            if xs:lo.append(min(xs));hi.append(max(xs))
+        x0=sorted(lo)[len(lo)//4];x1=sorted(hi)[(3*len(hi))//4]
+        W=x1-x0;cxp=(x0+x1)/2
+        r=round(max(.2,min(.8,(W/2)/(_m.sqrt(2)*hw)))*.7,2)
+        cyp=yb-r*_m.sqrt(2)*hh
         u=(cxp-w/2)/hw;v=(cyp-h)/hh;cx,cy=(u+v)/2,(v-u)/2
-        return [(round(px,2),round(py,2)) for px,py in circ(cx,cy,r,r)]
+        return [(round(px,2),round(py,2)) for px,py in circ(cx,cy,r,r,16)]
     pts=[g(x,y) for x,y in ch]
     pl=min(pts,key=lambda q:q[0]-q[1]);pr=max(pts,key=lambda q:q[0]-q[1])
     C=((pl[0]+pr[0])/2,(pl[1]+pr[1])/2)
@@ -245,7 +245,7 @@ while nt<46 and tries<4000:
     if free(x,y):deco(random.choice(['Cay_dao','Cay_lieu']),x,y,1,name='Cây');nt+=1
 for _ in range(60):
     x,y=random.randint(2,W-3),random.randint(2,H-3)
-    if free(x,y) and random.random()<.5:deco('Bui_hoa',x,y,1,walk=True,name='Bụi hoa')
+    if free(x,y) and random.random()<.5:deco('Bui_hoa',x,y,1,name='Bụi hoa')
 for _ in range(40):
     x,y=random.randint(2,W-3),random.randint(2,H-3)
     if (x,y) in water and (x,y) not in occ and y not in (23,24,25,26) and random.random()<.15:deco('Sen',x,y,1,walk=True,name='Sen')
