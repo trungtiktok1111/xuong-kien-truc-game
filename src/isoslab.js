@@ -29,4 +29,14 @@ export function shore(cx,cells,pos,S){
   cx.restore();}
 
 /* ô 192x96 (atlas ô vuông tw, đỉnh ô ở y=cy0): vẽ nguyên ô, không lật */
-export function tile192(cx,img,sx,sy,tw,cy0,px,py,S){const k=2*S/tw;cx.drawImage(img,sx,sy,tw,tw,px-S,py-cy0*k,2*S+.6,tw*k+.6);}
+export const mirF=(x,y)=>(x&1)|((y&1)<<1);
+/* f: bit1 = lật theo trục u, bit2 = lật theo trục v (lật gương xen kẽ => mép các ô nước khớp nhau, ra mặt nước liền) */
+export function tile192(cx,img,sx,sy,tw,cy0,px,py,S,f){const k=2*S/tw;
+  if(!f){cx.drawImage(img,sx,sy,tw,tw,px-S,py-cy0*k,2*S+.6,tw*k+.6);return;}
+  const su=f&1,sv=f&2;const P=(u,v)=>[(u-v)*S,(u+v)*S/2];
+  const F=(u,v)=>P(su?1-u:u,sv?1-v:v);
+  const T=[tw/2,cy0],e1=[tw/2,tw/4],e2=[-tw/2,tw/4],D0=F(0,0),D1=F(1,0),D2=F(0,1);
+  const d1=[D1[0]-D0[0],D1[1]-D0[1]],d2=[D2[0]-D0[0],D2[1]-D0[1]],det=e1[0]*e2[1]-e1[1]*e2[0];
+  const a=(d1[0]*e2[1]-d2[0]*e1[1])/det,c=(-d1[0]*e2[0]+d2[0]*e1[0])/det,b=(d1[1]*e2[1]-d2[1]*e1[1])/det,d=(-d1[1]*e2[0]+d2[1]*e1[0])/det;
+  cx.save();{const k2=(2*S+1.2)/(2*S);cx.translate(px,py+S/2);cx.scale(k2,k2);cx.translate(-px,-(py+S/2));}cx.transform(a,b,c,d,px+D0[0]-(a*T[0]+c*T[1]),py+D0[1]-(b*T[0]+d*T[1]));
+  cx.drawImage(img,sx,sy,tw,tw,0,0,tw,tw);cx.restore();}
