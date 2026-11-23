@@ -27,3 +27,6 @@ export function shore(cx,cells,pos,S){
   const pass=(w,col)=>{cx.lineWidth=w;cx.strokeStyle=col;cx.beginPath();for(const [a,b] of seg){cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}cx.stroke();};
   pass(S*.26,'rgba(58,46,24,.32)');pass(S*.14,'rgba(70,56,30,.45)');pass(S*.05,'rgba(205,235,228,.55)');
   cx.restore();}
+
+/* ô 192x96 (atlas ô vuông tw, đỉnh ô ở y=cy0): vẽ nguyên ô, không lật */
+export function tile192(cx,img,sx,sy,tw,cy0,px,py,S){const k=2*S/tw;cx.drawImage(img,sx,sy,tw,tw,px-S,py-cy0*k,2*S+.6,tw*k+.6);}

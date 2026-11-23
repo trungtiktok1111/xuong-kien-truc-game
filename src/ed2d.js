@@ -6,7 +6,8 @@ const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
 import {build,GEN_KINDS,GEN_VIEWS} from './gen2d.js';
-import {slab,shore} from './isoslab.js';
+import {slab,shore,tile192} from './isoslab.js';
+import {nenIndex,nenPack,nenTag} from './nen.js';
 import {decoZones,ZK,isBox,isPts,mkBox,mkPts,zHit,zPts,zBounds,zCenter,zMove,zScale,zRotate,zClone,zHandles,zDragHandle,zPath,toLocal} from './zones.js';
 export function init2D(root,A){
   const sheets=A.sheets.map(s=>Object.assign({},s));let curSheet=0,shZ='fit',shQ='';let HID=new Set([0,1,2,3,...lsGet('thk_hide2d',[])]);const visSh=()=>sheets.map((s,i)=>i).filter(i=>!HID.has(i));
@@ -23,7 +24,7 @@ export function init2D(root,A){
   function doRedo(){if(!redo.length)return;undo.push(clone(M));M=redo.pop();after();}
   let saveT;function after(){dirty=true;clearTimeout(saveT);saveT=setTimeout(save,700);}
   let warned=0,saveInfo='';
-  async function save(){const custom=sheets.slice(4).map(s=>({name:s.name,url:s.url,tw:s.tw,margin:s.margin,iso:s.iso?1:0}));syncCur();const base={w:M.w,h:M.h,layers:M.layers,blk:M.blk,ents:M.ents,cfg:M.cfg,name:M.name,maps:MAPS,cur:curMap};
+  async function save(){const custom=sheets.slice(4).map(s=>({name:s.name,url:s.url,tw:s.tw,margin:s.margin,iso:s.iso||0,cy:s.cy||0}));syncCur();const base={w:M.w,h:M.h,layers:M.layers,blk:M.blk,ents:M.ents,cfg:M.cfg,name:M.name,maps:MAPS,cur:curMap};
     const okI=custom.length?await idbSet('thk_sheets2d',custom):await idbSet('thk_sheets2d',[]);
     const okL=lsSet('thk_proj2d',Object.assign({},base,{custom:okI?[]:custom}));
     saveInfo=(custom.length?(okI?'✔ ảnh đã tải được lưu bền (IndexedDB)':'✖ ảnh đã tải CHƯA lưu được'):'')+(okL?'':' · ✖ bản đồ chưa lưu tự động được');
@@ -69,7 +70,7 @@ export function init2D(root,A){
   function tileG(v,gx,gy){if(!v)return;const S=CELL*view.z,p=g2s(gx,gy);
     if(!ISOQ()){drawTile(cx,v,p[0],p[1],S);return;}
     const d=dec(v),sh=sheets[d.sid];if(!sh||!sh.img)return;
-    if(sh.iso){const sx=(d.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(d.idx/sh.cols)*(sh.tw+sh.margin);slab(cx,sh.img,sx,sy,sh.tw,p[0],p[1],S,d.f||0);return;}
+    if(sh.iso){const sx=(d.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(d.idx/sh.cols)*(sh.tw+sh.margin);if(sh.iso===2)tile192(cx,sh.img,sx,sy,sh.tw,sh.cy||0,p[0],p[1],S);else slab(cx,sh.img,sx,sy,sh.tw,p[0],p[1],S,d.f||0);return;}
     cx.save();cx.transform(S,S/2,-S,S/2,p[0],p[1]);drawTile(cx,v,0,0,1);cx.restore();}
   function isoBuild(){const W=M.w,H=M.h,nl=sheets.filter(s=>s&&s.img).length;let h=0;
     for(let l=0;l<4;l++){const a=M.layers[l];for(let i=0;i<a.length;i++)h=(h*31+a[i]+i)|0;}
@@ -621,13 +622,13 @@ export function init2D(root,A){
   function addZip(){zipBrowser((u,n)=>addWhole([{url:u,name:n}]),addWhole);}
   function addGridZip(){zipBrowser(addSheetUrl,addMany);}
   function exportPNG(k){const c=document.createElement('canvas');c.width=M.w*CELL*k;c.height=M.h*CELL*k;const g=c.getContext('2d');g.imageSmoothingEnabled=false;const sv=vis.slice();rebuild();g.drawImage(mc,0,0,c.width,c.height);c.toBlob(b=>saveFile('ban_do_2d.png',b));}
-  function proj(){return {tags:TG,format:'thk-map-1',cell:CELL,w:M.w,h:M.h,layerNames:LAYN,layers:M.layers,collision:M.blk,ents:M.ents,cfg:M.cfg,sheets:sheets.map(s=>({name:s.name,tw:s.tw,margin:s.margin,iso:s.iso?1:0,cols:s.cols,rows:s.rows,url:s.url})),note:'Giá trị ô v>0: n=v-1; flip=n&7 (1=ngang,2=dọc,4=chéo); t=n>>3; sheet=t>>12; tile=t&4095; tile (col,row)=(tile%cols, floor(tile/cols)); nguồn ảnh: sx=col*(tw+margin), sy=row*(tw+margin)'};}
+  function proj(){return {tags:TG,format:'thk-map-1',cell:CELL,w:M.w,h:M.h,layerNames:LAYN,layers:M.layers,collision:M.blk,ents:M.ents,cfg:M.cfg,sheets:sheets.map(s=>({name:s.name,tw:s.tw,margin:s.margin,iso:s.iso||0,cy:s.cy||0,cols:s.cols,rows:s.rows,url:s.url})),note:'Giá trị ô v>0: n=v-1; flip=n&7 (1=ngang,2=dọc,4=chéo); t=n>>3; sheet=t>>12; tile=t&4095; tile (col,row)=(tile%cols, floor(tile/cols)); nguồn ảnh: sx=col*(tw+margin), sy=row*(tw+margin)'};}
   window.__TG=()=>TG;window.__guess=p=>guessObj(p);window.__proj=()=>proj();window.__loadProj=t=>importJSON(t);
   async function openLevel1(){if(!(await yes('Mở Màn 1? Bản đồ đang làm sẽ bị thay (có thể hoàn tác). App sẽ nạp luôn nhân vật và tileset của màn.')))return;toast('Đang tải Màn 1 (~12 MB)…');
     try{const r=await fetch('man1.json?v='+Date.now(),{cache:'no-store'});if(!r.ok)throw 0;const t=await r.text();await importJSON(t);}catch(e){toast('Không tải được Màn 1 — thử tải lại trang');}}
   function exportJSON(){saveFile('ban_do_2d.json',new Blob([JSON.stringify(proj())],{type:'application/json'}));}
   function copyJSON(){navigator.clipboard&&navigator.clipboard.writeText(JSON.stringify(proj())).then(()=>toast('Đã sao chép JSON'),()=>toast('Không sao chép được'));}
-  async function importJSON(t){try{const o=JSON.parse(t);if(o.format!=='thk-map-1')throw 0;if(o.tags){TG=Object.assign({sheets:{},tiles:{},fav:[],recent:[]},o.tags);tgSave();}const smap=[0,1,2,3],ren={};for(let i=4;i<o.sheets.length;i++){const s=o.sheets[i];if(!s||!s.url){smap[i]=i<sheets.length?i:0;continue;}const ex=sheets.findIndex((q,k)=>k>=4&&q.name===s.name&&q.url===s.url);if(ex>=0){smap[i]=ex;continue;}let nm=s.name;if(sheets.some((q,k)=>k>=4&&q.name===nm)){let c=2;while(sheets.some((q,k)=>k>=4&&q.name===nm+'~'+c))c++;nm=nm+'~'+c;ren[s.name]=nm;}const ns={name:nm,url:s.url,tw:s.tw,margin:s.margin,iso:s.iso?1:0};await loadSheet(ns);sheets.push(ns);smap[i]=sheets.length-1;}
+  async function importJSON(t){try{const o=JSON.parse(t);if(o.format!=='thk-map-1')throw 0;if(o.tags){TG=Object.assign({sheets:{},tiles:{},fav:[],recent:[]},o.tags);tgSave();}const smap=[0,1,2,3],ren={};for(let i=4;i<o.sheets.length;i++){const s=o.sheets[i];if(!s||!s.url){smap[i]=i<sheets.length?i:0;continue;}const ex=sheets.findIndex((q,k)=>k>=4&&q.name===s.name&&q.url===s.url);if(ex>=0){smap[i]=ex;continue;}let nm=s.name;if(sheets.some((q,k)=>k>=4&&q.name===nm)){let c=2;while(sheets.some((q,k)=>k>=4&&q.name===nm+'~'+c))c++;nm=nm+'~'+c;ren[s.name]=nm;}const ns={name:nm,url:s.url,tw:s.tw,margin:s.margin,iso:s.iso||0,cy:s.cy||0};await loadSheet(ns);sheets.push(ns);smap[i]=sheets.length-1;}
       const rm=v=>{if(!v)return 0;const d=dec(v),n=smap[d.sid];return n==null||n===d.sid?v:enc(n,d.idx,d.f);};
       const lay=o.layers.map(a=>a.map(rm));const en=(o.ents||[]).map(e=>{if(e.tile&&smap[e.tile.sid]!=null)e.tile={sid:smap[e.tile.sid],idx:e.tile.idx};return e;});const cf=o.cfg||{};if(cf.hero&&smap[cf.hero.sid]!=null)cf.hero={sid:smap[cf.hero.sid],idx:cf.hero.idx};if(cf.catalog){const q=cf.catalog;if(q.ground&&smap[q.ground.sid]!=null)q.ground.sid=smap[q.ground.sid];for(const it of q.items||[])if(it.tile&&smap[it.tile.sid]!=null)it.tile={sid:smap[it.tile.sid],idx:it.tile.idx};}
       if(Object.keys(ren).length&&cf.anims)for(const a of cf.anims)for(const st of Object.values(a.st||{}))if(st.src)st.src=st.src.map(n=>ren[n]||n);
@@ -636,14 +637,18 @@ export function init2D(root,A){
   (async()=>{await Promise.all(sheets.map(loadSheet));const sv=lsGet('thk_proj2d',null);const idbC=await idbGet('thk_sheets2d');
     if(sv&&sv.layers){for(const s of ((idbC&&idbC.length)?idbC:(sv.custom||[]))){const ns=Object.assign({},s);await loadSheet(ns);sheets.push(ns);}MAPS=Array.isArray(sv.maps)&&sv.maps.length?sv.maps:[];curMap=Math.min(sv.cur||0,Math.max(0,MAPS.length-1));M=clone(MAPS.length?MAPS[curMap]:sv);if(!MAPS.length){M.name=M.name||'Màn 1';MAPS=[clone(M)];}}else{M=fromVillage();M.name='Màn 1';MAPS=[clone(M)];}
     stamp={w:1,h:1,multi:false,tiles:[enc(0,5)]};draw();setTimeout(fit,50);})();
+  async function ensureNen(id){const pk=await nenPack(id),name='Nen-'+id;let sid=sheets.findIndex((s,i)=>i>=4&&s.name===name);
+    if(sid<0){const s={name,url:pk.atlas,tw:pk.tw,margin:0,iso:2,cy:pk.cy};await loadSheet(s);sheets.push(s);sid=sheets.length-1;for(const [n,i] of Object.entries(pk.idx))TG.tiles[name+'#'+i]=nenTag(n);tgSave();}
+    return {pk,sid};}
   async function genRun(){const k=window.__gk||'village',z={s:[32,24],m:[48,36],l:[64,48]}[window.__gz||'m'];
     if(!await yes('Tạo bối cảnh mới thay cho màn "'+(M.name||'')+'"?\n(Ctrl+Z hoàn tác được bản đồ; tileset mới tạo sẽ còn lại.)'))return;
     toast('Đang tạo bối cảnh…');await new Promise(r=>setTimeout(r,30));
-    let R;try{R=build({sheets,eff,emptyMap,visSh,enc,newSid:sheets.length,catalog:(M.cfg&&M.cfg.catalog)||null},{kind:k,w:z[0],h:z[1],goal:!!window.__gg,view:window.__gv||'rpg'});}catch(e){console.error(e);toast('Lỗi khi tạo: '+(e&&e.message||e));return;}
+    let nen=null;if(window.__gn){try{nen=await ensureNen(window.__gn);}catch(e){toast('Lỗi nạp bộ nền: '+(e&&e.message||e));return;}}
+    let R;try{R=build({sheets,eff,emptyMap,visSh,enc,nen,newSid:sheets.length,catalog:(M.cfg&&M.cfg.catalog)||null},{kind:k,w:z[0],h:z[1],goal:!!window.__gg,view:window.__gv||'rpg'});}catch(e){console.error(e);toast('Lỗi khi tạo: '+(e&&e.message||e));return;}
     if(R.error){toast(R.error);return;}
     pushUndo();
     if(R.newSheet){const s={name:'Gen-'+Date.now().toString(36).slice(-4),url:R.newSheet.canvas.toDataURL('image/png'),tw:64,margin:0};await loadSheet(s);sheets.push(s);uniqNames(sheets);}
-    M={name:M.name,w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({},M.cfg,{view:R.view||'rpg'},R.iso?{zones:[]}:{})};selId=null;after();fit();draw();
+    M={name:M.name,w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({},M.cfg,{view:R.view||'rpg'},R.iso?{zones:R.zones||[]}:{})};selId=null;after();fit();draw();
     const i=R.info;toast('Đã tạo: '+i.placed.house+' nhà, '+i.placed.tree+' cây, '+i.placed.prop+' đồ'+((!i.house&&!i.tree)?' — chưa thấy tài nguyên gắn nhãn Cây/Nhà (xem tab 🔎 Tài nguyên)':''));}
   /* ===== NHIỀU MÀN ===== */
   let MAPS=[],curMap=0;
@@ -666,10 +671,15 @@ export function init2D(root,A){
     const selK=el('select',{class:'num',onchange:e=>{window.__gk=e.target.value;}},Object.entries(GEN_KINDS).map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.k)o.selected=true;return o;}));
     const selZ=el('select',{class:'num',onchange:e=>{window.__gz=e.target.value;}},[['s','Nhỏ 32×24'],['m','Vừa 48×36'],['l','Lớn 64×48']].map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.z)o.selected=true;return o;}));
     const selV=el('select',{class:'num',onchange:e=>{window.__gv=e.target.value;}},Object.entries(GEN_VIEWS).map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.v)o.selected=true;return o;}));
+    if(window.__gn==null)window.__gn='lang-nui-pho-kenh';
+    const nenD=el('div',{class:'hint'},'');
+    const selN=el('select',{class:'num',style:'width:100%;max-width:230px',onchange:e=>{window.__gn=e.target.value;const o=selN._L&&selN._L.find(x=>x.id===e.target.value);nenD.textContent=o?o.desc:'';}},el('option',{value:''},'Nền cũ (Màn 1)'));
+    nenIndex().then(L=>{selN._L=L;for(const o of L){const op=el('option',{value:o.id},o.name+' ('+o.n+' ô)');if(o.id===window.__gn){op.selected=true;nenD.textContent=o.desc;}selN.append(op);}});
     const cbG=el('input',{type:'checkbox',onchange:e=>{window.__gg=e.target.checked;}});cbG.checked=GS.g;
     body.append(el('div',{style:'border:1px solid #5aa17a;border-radius:10px;padding:8px;margin-top:10px;background:#16261d'},
       el('div',{class:'lbl',style:'color:#9fe0b0'},'🎲 TỰ TẠO BỐI CẢNH TỪ TÀI NGUYÊN'),
       el('div',{class:'hint'},'App dùng các tài nguyên đã gắn nhãn (Cây, Nhà, Nước, Đồ vật, Trang trí…) để trải nền, vẽ đường, đặt hồ, nhà, cây. Thay bản đồ của màn đang mở (hoàn tác được bằng Ctrl+Z).'),
+      el('div',{class:'row'},el('span',{class:'lbl'},'🧱 Bộ nền (theo khu)'),selN),nenD,
       el('div',{class:'row'},el('span',{class:'lbl'},'📷 Góc nhìn'),selV),
       el('div',{class:'row'},el('span',{class:'lbl'},'Kiểu'),selK,el('span',{class:'lbl'},'Cỡ'),selZ),
       el('div',{class:'row'},el('label',{style:'font-size:13px'},cbG,' Đặt 🏁 đích ở cuối đường')),
@@ -688,6 +698,6 @@ export function init2D(root,A){
           btn('🗑',()=>{pushUndo();M.ents=M.ents.filter(q=>q.id!==e.id);selId=null;after();draw();}))));}
   }
   const gameData=()=>{syncCur();const G=MAPS[0].cfg||{};const mapsOut=MAPS.map((m,i)=>{const c=Object.assign({},m.cfg);if(i>0){c.anims=G.anims;c.heroAnim=G.heroAnim;c.hero=G.hero;}return {name:m.name||('Màn '+(i+1)),w:m.w,h:m.h,layers:m.layers.map(l=>l.slice()),blk:m.blk.slice(),ents:JSON.parse(JSON.stringify(m.ents)),cfg:c};});return Object.assign(gameData1(),{maps:mapsOut.length>1?mapsOut:undefined,gid:(lsGet('thk_gid',null)||(()=>{const g='g'+Date.now().toString(36);lsSet('thk_gid',g);return g;})())});};
-  const gameData1=()=>({kind:'2d',w:M.w,h:M.h,layers:M.layers.map(l=>l.slice()),blk:M.blk.slice(),ents:JSON.parse(JSON.stringify(M.ents)),cfg:M.cfg,custom:sheets.slice(4).map(s=>({name:s.name,url:s.url,tw:s.tw,margin:s.margin,iso:s.iso?1:0}))});
+  const gameData1=()=>({kind:'2d',w:M.w,h:M.h,layers:M.layers.map(l=>l.slice()),blk:M.blk.slice(),ents:JSON.parse(JSON.stringify(M.ents)),cfg:M.cfg,custom:sheets.slice(4).map(s=>({name:s.name,url:s.url,tw:s.tw,margin:s.margin,iso:s.iso||0,cy:s.cy||0}))});
   return {fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
 }

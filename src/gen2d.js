@@ -1,5 +1,6 @@
 /* Tự tạo bối cảnh 2D từ tài nguyên đã gắn nhãn (Cây / Nhà / Nước / Đường / Đồ vật / Trang trí).
    Vật lớn (ô >= 48px) được cắt thành khối 64px để phủ nhiều ô bản đồ; phần dưới chặn đường, phần trên che nhân vật. */
+import {genTerrain} from './terrain.js';
 const B=64;
 const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d');
 const KINDS={
@@ -46,13 +47,15 @@ const ri=(r,a,b)=>a+Math.floor(r()*(b-a+1));
 
 /* ===== Tự sinh isometric theo DANH MỤC tài nguyên (cfg.catalog): chỉ dùng ô nền đã gắn vai trò, vật cảnh có sẵn vùng chặn đo từ nền hình ===== */
 function buildIso(ctx,opt,cat){
-  const {enc}=ctx,r=Math.random,W=opt.w,H=opt.h,K=KINDS[opt.kind]||KINDS.village,G=cat.ground,IT=cat.items||[];
+  cat=cat||{items:[]};const NEN=ctx.nen,{enc}=ctx,r=Math.random,W=opt.w,H=opt.h,K=KINDS[opt.kind]||KINDS.village,G=cat.ground,IT=cat.items||[];let zonesOut=[];
   const layers=[0,1,2,3].map(()=>new Array(W*H).fill(0)),blk=new Array(W*H).fill(0),occ=new Uint8Array(W*H),ents=[];
   const by=ro=>IT.filter(i=>i.role===ro);
-  const info={ground:G.grass.length,water:1,tree:by('Cây').length,house:by('Nhà').length,prop:by('Vật').length+by('Bụi').length,placed:{house:0,tree:0,prop:0}};
-  if(!by('Nhà').length&&!by('Cây').length)return {error:'Danh mục tài nguyên trống. Hãy mở "Màn 1 có sẵn" trước (nó nạp bộ tài nguyên + danh mục) rồi tạo lại.'};
+  const info={ground:G?G.grass.length:1,water:1,tree:by('Cây').length,house:by('Nhà').length,prop:by('Vật').length+by('Bụi').length,placed:{house:0,tree:0,prop:0}};
+  if(!NEN&&!by('Nhà').length&&!by('Cây').length)return {error:'Danh mục tài nguyên trống. Hãy mở "Màn 1 có sẵn" trước (nó nạp bộ tài nguyên + danh mục) rồi tạo lại.'};
+  let cy=Math.floor(H/2),A=Math.max(1,Math.floor(H/10)),ph=r()*6.28,fr=5+r()*4;const pathCells=[];
+  if(NEN){const TT=genTerrain({pk:NEN.pk,sid:NEN.sid,enc,W,H,r,opt});for(let i=0;i<W*H;i++){layers[0][i]=TT.L0[i];blk[i]=TT.blk[i];occ[i]=TT.occ[i];}TT.pathCells.forEach(q=>pathCells.push(q));cy=TT.cy;zonesOut=TT.zones;info.terrain=TT.info;}
+  else{
   for(let i=0;i<W*H;i++)layers[0][i]=enc(G.sid,r()<.13?G.grass[1]:G.grass[0]);
-  const cy=Math.floor(H/2),A=Math.max(1,Math.floor(H/10)),ph=r()*6.28,fr=5+r()*4,pathCells=[];
   const road=(x,y)=>{if(x<1||y<1||x>=W-1||y>=H-1)return;const i=y*W+x;layers[0][i]=enc(G.sid,G.path);occ[i]=2;};
   for(let x=1;x<W-1;x++){const y=cy+Math.round(A*Math.sin(x/fr+ph));for(let d=0;d<2;d++){road(x,y+d);pathCells.push([x,y+d]);}}
   const bx=Math.floor(W*(.4+r()*.2));for(let y=1;y<H-1;y++)for(let d=0;d<2;d++)road(bx+d,y);
@@ -66,7 +69,8 @@ function buildIso(ctx,opt,cat){
         if(((x-pcx)/rx)**2+((y-pcy)/ry)**2<=rr*rr*.9)wat(x,y);}
       const ye=qy?H-2:1,dir=qy?1:-1,xr=qx?x1:x0,amp=2+r()*2,fr2=3+r()*2,ph2=r()*6.28;
       for(let y=pcy;qy?y<=ye:y>=ye;y+=dir){const t=Math.abs(y-pcy),cxr=Math.round(pcx+(Math.sin(t/fr2+ph2)*amp)*Math.min(1,t/3));for(let dx=-1;dx<=1;dx++)wat(cxr+dx,y);}}}
-  const sx=3,sy=(pathCells[2]||[3,cy])[1];
+  }
+  const sp=pathCells[NEN?3:2]||[3,cy],sx=NEN?sp[0]:3,sy=sp[1];
   const bb=(it,x,y)=>{let a=1e9,b=1e9,c=-1e9,d=-1e9;const P=(it.zp&&it.zp.length>2)?it.zp:[[it.zb[0],it.zb[1]],[it.zb[0]+it.zb[2],it.zb[1]+it.zb[3]]];
     for(const q of P){const X=x+1+q[0],Y=y+1+q[1];a=Math.min(a,X);c=Math.max(c,X);b=Math.min(b,Y);d=Math.max(d,Y);}
     const out=[];for(let yy=Math.floor(b+.001);yy<Math.ceil(d-.001);yy++)for(let xx=Math.floor(a+.001);xx<Math.ceil(c-.001);xx++)out.push([xx,yy]);return out;};
@@ -85,10 +89,11 @@ function buildIso(ctx,opt,cat){
   for(let x=0;x<W;x++){blk[x]=1;blk[(H-1)*W+x]=1;}for(let y=0;y<H;y++){blk[y*W]=1;blk[y*W+W-1]=1;}
   ents.push({id:'s'+Date.now().toString(36),t:'start',x:sx,y:sy,name:'Xuất phát',tile:null});
   if(opt.goal){const e=pathCells[pathCells.length-3]||[W-3,cy];ents.push({id:'g'+Date.now().toString(36),t:'goal',x:e[0],y:e[1],name:'Đích',tile:null});}
-  return {w:W,h:H,layers,blk,ents,newSheet:null,info,needSid:false,view:'iso',iso:true};}
+  return {w:W,h:H,layers,blk,ents,newSheet:null,info,needSid:false,view:'iso',iso:true,zones:zonesOut};}
 
 /* trả về {w,h,layers,blk,ents,newSheet:{canvas,tw}|null,info} — gọi bởi ed2d sau khi tạo sheet */
 export function build(ctx,opt){
+  if(ctx.nen)return buildIso(ctx,opt,ctx.catalog||null);
   if(ctx.catalog&&ctx.catalog.items&&(opt.view==='iso'||opt.view==='rpg'||!opt.view))return buildIso(ctx,opt,ctx.catalog);
   if(opt.view==='iso')return {error:'Chưa có danh mục tài nguyên isometric. Hãy mở "Màn 1 có sẵn" trước rồi tạo lại (bộ tự sinh không đoán nền theo màu nữa).'};
   const {sheets,enc}=ctx;const K=KINDS[opt.kind]||KINDS.village,r=Math.random,W=opt.w,H=opt.h;

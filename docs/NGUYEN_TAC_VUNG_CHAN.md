@@ -10,3 +10,10 @@
 8. Màn 1 tải với `cache:'no-store'` để không dính dữ liệu cũ.
 9. Bộ "Tạo bối cảnh" (gen2d.js buildIso) dùng cfg.catalog (xuất từ build_l1_iso.py): chỉ dùng ô nền/nhà/cây có vai trò, vùng chặn zp/zb đã đo; KHÔNG đoán nền theo màu. Chưa có danh mục thì báo lỗi, yêu cầu mở Màn 1 trước.
 10. Mặt nước phải LIỀN MẠCH: ô nước iso đặt cờ f&4 (cắt viền) + lật gương xen kẽ theo chẵn/lẻ (f&1, f&2) để mép khớp; vẽ bờ (shore) dọc mép giáp đất (src/isoslab.js). Ao hình tự nhiên, suối chảy vào ao, không cắt đường; không dùng khối vuông/ô rời.
+
+## Nguyên tắc ghép nền (bộ nền theo khu)
+- Mỗi màn dùng MỘT bộ nền (nen/<id>.json), không trộn bộ.
+- Đường 1 ô, nối 4 hướng; tile đường/bờ chọn theo mặt nạ autotile (N1 E2 S4 W8, góc theo lưới đỉnh).
+- Dải chuyển tiếp chỉ theo chuỗi vật liệu hợp lệ: tuyết–cỏ–đất–(cát | đá–nước); tile `tiep-A-B-hướng`.
+- Nước/kênh/mương chặn đường; bờ có polygon va chạm từ walk_grid_16.
+- Ruộng: viền đi được, lòng ruộng chặn.

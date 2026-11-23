@@ -2,7 +2,7 @@ import {createLogic} from './logic.js';
 import {el} from './util.js';
 import {zonesHit,zRaster,zPath,decoZones} from './zones.js';
 import {makeAnims} from './anim.js';
-import {slab,shore} from './isoslab.js';
+import {slab,shore,tile192} from './isoslab.js';
 const HERO=88,FOES=[108,109,120,121,122,111,110],TD=2;
 export function play2D(o){
   const M=o.M,W=M.w,H=M.h,sheets=o.sheets;const CF=Object.assign({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:TD,idx:HERO},win:'auto'},M.cfg||{});const EN=M.ents||[],legacy=!EN.length;const VW=CF.view||'rpg',SIDE=VW==='side',ISO=VW==='iso',DCL=EN.filter(e=>e.t==='deco');
@@ -116,7 +116,7 @@ export function play2D(o){
     let pX=()=>0,pY=()=>0;
     if(ISO){const hw=s*.75,hh=s*.375,ox0=w/2-(P.x-P.y)*hw,oy0=h/2-(P.x+P.y)*hh;pX=(x,y)=>ox0+(x-y)*hw;pY=(x,y)=>oy0+(x+y)*hh;cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);
       cx.save();cx.transform(hw/CQ,hh/CQ,-hw/CQ,hh/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();
-      for(const q of SL){const X=pX(q.x,q.y)-hw,Y=pY(q.x,q.y);if(X>w||X<-2*hw||Y>h||Y<-2*hw)continue;const sh=sheets[q.sid],sx=(q.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(q.idx/sh.cols)*(sh.tw+sh.margin);slab(cx,sh.img,sx,sy,sh.tw,X+hw,Y,hw,q.f);}
+      for(const q of SL){const X=pX(q.x,q.y)-hw,Y=pY(q.x,q.y);if(X>w||X<-2*hw||Y>h||Y<-2*hw)continue;const sh=sheets[q.sid],sx=(q.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(q.idx/sh.cols)*(sh.tw+sh.margin);if(sh.iso===2)tile192(cx,sh.img,sx,sy,sh.tw,sh.cy||0,X+hw,Y,hw);else slab(cx,sh.img,sx,sy,sh.tw,X+hw,Y,hw,q.f);}
       {const wc=SL.filter(q=>q.f&4);if(wc.length)shore(cx,wc,(x,y)=>[pX(x,y),pY(x,y)],hw);}}
     else{if(SIDE){const gr=cx.createLinearGradient(0,oy,0,oy+H*s);gr.addColorStop(0,'#5fa8dd');gr.addColorStop(1,'#d6edf8');cx.fillStyle=gr;cx.fillRect(ox,oy,W*s,H*s);}cx.drawImage(base,ox,oy,W*s,H*s);}
     cx.font=(s*.6)+'px serif';cx.textAlign='center';for(const it of items)ico('heart',ISO?pX(it.x,it.y):ox+it.x*s,(ISO?pY(it.x,it.y):oy+it.y*s),s*.8);
