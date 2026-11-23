@@ -100,10 +100,14 @@ ents=[];occ=set()
 def deco(n,x,y,f,walk=False,flat=False,name=None):
     fx,fy=FP[n]
     cells=[(x-a,y-b) for a in range(fx) for b in range(fy)]
-    ents.append({'id':'d%d'%len(ents),'t':'deco','x':x,'y':y,'f':max(fx,fy),'fx':fx,'fy':fy,'sc':SC[n],'ox':OXY[n][0],'oy':OXY[n][1],'flat':flat,'name':name or n,'tile':{'sid':SID_OB,'idx':IDX[n]}})
-    for c in cells:
-        occ.add(c)
-        if not walk and 0<=c[0]<W and 0<=c[1]<H:blk[c[1]*W+c[0]]=1
+    if n in KOBJ or n in ('Gieng','Sen'):zb=[-.3,-.3,.6,.6]
+    elif n in FPO:zb=[-fx,-fy,fx,fy]
+    else:
+        rx,ry=FPR[n];rx=max(.4,rx-.06);ry=max(.4,ry-.06);zb=[-round(rx,2),-round(ry,2),round(rx,2),round(ry,2)]
+    e={'id':'d%d'%len(ents),'t':'deco','x':x,'y':y,'f':max(fx,fy),'fx':fx,'fy':fy,'sc':SC[n],'ox':OXY[n][0],'oy':OXY[n][1],'flat':flat,'name':name or n,'tile':{'sid':SID_OB,'idx':IDX[n]},'zb':zb}
+    if walk:e['walk']=True
+    ents.append(e)
+    for c in cells:occ.add(c)
 wx=34+off(25)
 P=[ # (tên, x, y, f, walk, flat)
  ('Vo_duong',22,11,2),('Hanh_lang',18,12,3),('San_luyen',28,15,3,True,True),

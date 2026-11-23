@@ -1,4 +1,4 @@
-import {zRaster} from './zones.js';
+import {zRaster,decoZones} from './zones.js';
 // Kiểm tra game theo luật của skill html5-game-studio (kiem-thu.md mục 7, cong-kiem.md, SKILL.md luật 7/9/10)
 // Trạng thái: pass | missing | broken | not_assessed  (không có "đạt giả")
 import {el,lsGet,lsSet,toast} from './util.js';
@@ -11,7 +11,7 @@ const R=(id,st,txt,why)=>({id,st,txt,why:why||''});
 function bfs2(d,sx,sy){const W=d.w,H=d.h,seen=new Uint8Array(W*H);if(sx<0||sy<0||sx>=W||sy>=H)return seen;const q=[[sx,sy]];seen[sy*W+sx]=1;
   while(q.length){const [x,y]=q.pop();for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+a,ny=y+b;if(nx<0||ny<0||nx>=W||ny>=H)continue;const i=ny*W+nx;if(seen[i]||d.blk[i])continue;seen[i]=1;q.push([nx,ny]);}}return seen;}
 export function check2D(d0){
-  const zr=d0.cfg&&d0.cfg.zones&&d0.cfg.zones.length?zRaster(d0.cfg.zones,d0.w,d0.h):null;const d=zr?Object.assign({},d0,{blk:Array.from(d0.blk,(v,i)=>v||zr[i]?1:0)}):d0;
+  const zz=[...((d0.cfg&&d0.cfg.zones)||[]),...decoZones(d0.ents)],zr=zz.length?zRaster(zz,d0.w,d0.h):null;const d=zr?Object.assign({},d0,{blk:Array.from(d0.blk,(v,i)=>v||zr[i]?1:0)}):d0;
   const out=[],E=d.ents||[],cf=d.cfg||{},W=d.w,H=d.h;
   const st=E.find(e=>e.t==='start'),goals=E.filter(e=>e.t==='goal'),en=E.filter(e=>e.t==='enemy');
   const cell=e=>Math.floor(e.y)*W+Math.floor(e.x);

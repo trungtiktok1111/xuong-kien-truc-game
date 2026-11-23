@@ -1,6 +1,6 @@
 import {createLogic} from './logic.js';
 import {el} from './util.js';
-import {zonesHit,zRaster,zPath} from './zones.js';
+import {zonesHit,zRaster,zPath,decoZones} from './zones.js';
 import {makeAnims} from './anim.js';
 const HERO=88,FOES=[108,109,120,121,122,111,110],TD=2;
 export function play2D(o){
@@ -21,7 +21,7 @@ export function play2D(o){
   if(o.onExit)ov.append(el('div',{style:'position:absolute;right:10px;top:calc(env(safe-area-inset-top) + 10px);padding:8px 14px;border-radius:16px;background:#263342cc;color:#fff;font:600 14px system-ui',onclick:()=>stop()},'✕ Thoát'));
   document.body.append(ov);if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
   const AN=makeAnims(CF,sheets);
-  const ZS=(M.cfg&&M.cfg.zones)||[],ZR=zRaster(ZS,W,H);
+  const ZS=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(M.ents)],ZR=zRaster(ZS,W,H);
   const blocked=(x,y)=>x<0||y<0||x>=W||y>=H||!!M.blk[y*W+x]||!!ZR[y*W+x];
   let CQ=16;for(const sh of sheets)if(sh&&sh.img&&sh.tw>CQ)CQ=Math.min(48,sh.tw);
   while(W*H*CQ*CQ>2.2e7&&CQ>16)CQ-=8;
@@ -78,7 +78,8 @@ export function play2D(o){
     winMode=CF.win==='auto'?(hasGoal?(hasEn&&!legacy?'both':'goal'):'kill'):CF.win;
     if(winMode!=='kill'&&!hasGoal)winMode='kill';
     L.fire('start');}
-  function free(x,y,r){return !(ZS.length&&zonesHit(ZS,x,y,r))&&!(blocked(Math.floor(x-r),Math.floor(y-r))||blocked(Math.floor(x+r),Math.floor(y-r))||blocked(Math.floor(x-r),Math.floor(y+r))||blocked(Math.floor(x+r),Math.floor(y+r)));}
+  const cblk=(x,y)=>x<0||y<0||x>=W||y>=H||!!M.blk[y*W+x];
+  function free(x,y,r){return !(ZS.length&&zonesHit(ZS,x,y,r))&&!(cblk(Math.floor(x-r),Math.floor(y-r))||cblk(Math.floor(x+r),Math.floor(y-r))||cblk(Math.floor(x-r),Math.floor(y+r))||cblk(Math.floor(x+r),Math.floor(y+r)));}
   function move(e,dx,dy,r){if(!free(e.x,e.y,r)){e.x+=dx;e.y+=dy;return;}if(free(e.x+dx,e.y,r))e.x+=dx;if(free(e.x,e.y+dy,r))e.y+=dy;}
   function end(win){over=1;msg.textContent='';msg.append(el('div',{},win?'🏆 Chiến thắng!':'💀 Thất bại'),el('div',{style:'padding:12px 22px;border-radius:20px;background:#e0b050;color:#2a1a08;font-size:18px',onclick:start},'Chơi lại'));msg.style.display='flex';}
   function attack(){if(over||atkCD>0||L.dlgOpen)return;for(const n of NP){if(Math.hypot(n.x-P.x,n.y-P.y)<1.3){atkCD=.3;if(!L.talk(n))said={n,t:4};L.fire('talk',n.id);return;}}slash=.18;{const as=CF.heroAnim&&AN.get(CF.heroAnim);let K=0;if(as)for(let i=1;i<=6;i++){const kk=i>1?'atk'+i:'atk';if(as.st[kk]&&as.st[kk].src&&as.st[kk].src.length)K=i;else break;}

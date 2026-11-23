@@ -6,7 +6,7 @@ const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
 import {build,GEN_KINDS,GEN_VIEWS} from './gen2d.js';
-import {ZK,isBox,isPts,mkBox,mkPts,zHit,zPts,zBounds,zCenter,zMove,zScale,zRotate,zClone,zHandles,zDragHandle,zPath,toLocal} from './zones.js';
+import {decoZones,ZK,isBox,isPts,mkBox,mkPts,zHit,zPts,zBounds,zCenter,zMove,zScale,zRotate,zClone,zHandles,zDragHandle,zPath,toLocal} from './zones.js';
 export function init2D(root,A){
   const sheets=A.sheets.map(s=>Object.assign({},s));let curSheet=0,shZ='fit',shQ='';let HID=new Set([0,1,2,3,...lsGet('thk_hide2d',[])]);const visSh=()=>sheets.map((s,i)=>i).filter(i=>!HID.has(i));
   const loadSheet=s=>new Promise(r=>{const i=new Image();i.onload=()=>{s.img=i;s.cols=Math.floor((i.width+s.margin)/(s.tw+s.margin));s.rows=Math.floor((i.height+s.margin)/(s.tw+s.margin));r();};i.onerror=r;i.src=s.url;});
@@ -99,9 +99,9 @@ export function init2D(root,A){
       if(e.t==='deco'){const ws=(e.sc||3)*sc,sh=e.tile&&sheets[e.tile.sid],p=g2s(e.x+1,e.y+1);
         const rx=p[0]-ws/2+(e.ox||0)*ws,ry=p[1]-ws+(e.oy||0)*ws;
         if(sh&&sh.img){const sx=(e.tile.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(e.tile.idx/sh.cols)*(sh.tw+sh.margin);cx.imageSmoothingEnabled=true;cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,rx,ry,ws,ws);cx.imageSmoothingEnabled=false;}
-        const fx=e.fx||1,fy=e.fy||1;
-        if(sel||(cur&&view.z>=.8)){cx.lineWidth=sel?2.5:1;cx.strokeStyle=sel?'#ffd24a':'rgba(217,160,102,.7)';pathQ(e.x+1-fx,e.y+1-fy,fx,fy);cx.stroke();if(sel){cx.setLineDash([5,3]);cx.strokeRect(rx+ws*.2,ry+ws*.15,ws*.6,ws*.85);cx.setLineDash([]);}}
-        isoHB.push({e,r:[rx+ws*.25,ry+ws*.3,rx+ws*.75,ry+ws],f:[e.x+1-fx,e.y+1-fy,e.x+1,e.y+1]});continue;}
+        const zb=e.zb||[-(e.fx||1),-(e.fy||1),e.fx||1,e.fy||1],fx=-zb[0],fy=-zb[1];
+        if(sel||(cur&&view.z>=.8)){cx.lineWidth=sel?2.5:1;cx.strokeStyle=sel?'#ffd24a':'rgba(217,160,102,.7)';pathQ(e.x+1+zb[0],e.y+1+zb[1],zb[2],zb[3]);cx.stroke();if(sel){cx.setLineDash([5,3]);cx.strokeRect(rx+ws*.2,ry+ws*.15,ws*.6,ws*.85);cx.setLineDash([]);}}
+        isoHB.push({e,r:[rx+ws*.25,ry+ws*.3,rx+ws*.75,ry+ws],f:[e.x+1+zb[0],e.y+1+zb[1],e.x+1+zb[0]+zb[2],e.y+1+zb[1]+zb[3]]});continue;}
       const p=g2s(e.x+.5,e.y+.5),col=OT[e.t][2],sz=S*1.5;
       cx.lineWidth=sel?3:1.5;cx.strokeStyle=col;pathQ(e.x,e.y,1,1);cx.stroke();
       if(e.tile){tileG0(enc(e.tile.sid,e.tile.idx),p[0]-sz/2,p[1]-sz*.85,sz);}
@@ -121,6 +121,7 @@ export function init2D(root,A){
     const z=view.z,IS=ISOQ();
     if(IS){drawIso();cx.strokeStyle='#ffffff55';cx.lineWidth=1;pathQ(0,0,M.w,M.h);cx.stroke();}else{rebuild();cx.drawImage(mc,view.x,view.y,M.w*CELL*z,M.h*CELL*z);cx.strokeStyle='#ffffff55';cx.lineWidth=1;cx.strokeRect(view.x-.5,view.y-.5,M.w*CELL*z+1,M.h*CELL*z+1);}
     if(vis[4]||colMode){const walk=colMode===2;for(let i=0;i<M.blk.length;i++){const b=M.blk[i];if(!b&&!walk)continue;cx.fillStyle=b?'rgba(255,40,40,.45)':'rgba(40,220,90,.14)';if(IS){pathQ(i%M.w,Math.floor(i/M.w),1,1);cx.fill();}else cx.fillRect(view.x+(i%M.w)*CELL*z,view.y+Math.floor(i/M.w)*CELL*z,CELL*z,CELL*z);}}
+    if(vis[4]||colMode){cx.fillStyle='rgba(255,40,40,.5)';cx.strokeStyle='rgba(255,120,120,.9)';cx.lineWidth=1;for(const q of decoZones(M.ents)){zPath(cx,q,g2s);cx.fill();cx.stroke();}}
     drawZ();
     if(grid&&z>=(IS?1.1:2.5)){cx.strokeStyle='rgba(255,255,255,.13)';cx.beginPath();if(IS){for(let x=0;x<=M.w;x++){const a=g2s(x,0),b=g2s(x,M.h);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}for(let y=0;y<=M.h;y++){const a=g2s(0,y),b=g2s(M.w,y);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}}else{for(let x=0;x<=M.w;x++){const X=Math.round(view.x+x*CELL*z)+.5;cx.moveTo(X,view.y);cx.lineTo(X,view.y+M.h*CELL*z);}for(let y=0;y<=M.h;y++){const Y=Math.round(view.y+y*CELL*z)+.5;cx.moveTo(view.x,Y);cx.lineTo(view.x+M.w*CELL*z,Y);}}cx.stroke();}
     if(hov&&(tool==='draw'||tool==='rect'||tool==='fill')&&act<4){cx.globalAlpha=.65;for(let j=0;j<stamp.h;j++)for(let i=0;i<stamp.w;i++){const v=stamp.multi?(stamp.layers.find(l=>l&&l[j*stamp.w+i])||[])[j*stamp.w+i]||0:stamp.tiles[j*stamp.w+i];const vv=tool==='draw'?v:stamp.tiles[0]||v;if(IS)tileG(vv,hov.x+i,hov.y+j);else drawTile(cx,vv,view.x+(hov.x+i)*CELL*z,view.y+(hov.y+j)*CELL*z,CELL*z);if(tool!=='draw')break;}cx.globalAlpha=1;}
@@ -210,7 +211,7 @@ export function init2D(root,A){
     if(!drag)return;
     if(drag.pan){view.x=drag.vx+p.x-drag.x;view.y=drag.vy+p.y-drag.y;dirty=true;return;}
     if(drag.rect){drag.rect.x1=c.x;drag.rect.y1=c.y;dirty=true;return;}
-    if(drag.ent){const q=selEnt(),nx=c.x-(drag.dx||0),ny=c.y-(drag.dy||0);if(q&&inb(nx,ny)&&(q.x!==nx||q.y!==ny)){if(q.t==='deco'&&q.fx){const fx=q.fx,fy=q.fy||1,cl=[];for(let a=0;a<fx;a++)for(let b=0;b<fy;b++)cl.push([a,b]);const had=cl.filter(([a,b])=>inb(q.x-a,q.y-b)&&M.blk[(q.y-b)*M.w+q.x-a]);for(const [a,b] of had)M.blk[(q.y-b)*M.w+q.x-a]=0;if(had.length)for(const [a,b] of had)if(inb(nx-a,ny-b))M.blk[(ny-b)*M.w+nx-a]=1;}q.x=nx;q.y=ny;dirty=true;}return;}
+    if(drag.ent){const q=selEnt(),nx=c.x-(drag.dx||0),ny=c.y-(drag.dy||0);if(q&&inb(nx,ny)&&(q.x!==nx||q.y!==ny)){q.x=nx;q.y=ny;dirty=true;}return;}
     if(e.shiftKey&&tool==='draw'&&drag.sx!=null&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;const dx=c.x-drag.sx,dy=c.y-drag.sy,hz=Math.abs(dx)>=Math.abs(dy),sw=Math.max(1,stamp.w),sh=Math.max(1,stamp.h);const n=hz?Math.floor(Math.abs(dx)/sw):Math.floor(Math.abs(dy)/sh);for(let q=0;q<=n;q++)paste(drag.sx+(hz?Math.sign(dx||1)*q*sw:0),drag.sy+(hz?0:Math.sign(dy||1)*q*sh));after();return;}
     if(drag.last&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;if(tool==='draw'){if(stamp.w===1&&stamp.h===1||((c.x-drag.sx)%stamp.w===0&&(c.y-drag.sy)%stamp.h===0))paste(c.x,c.y);}else if(tool==='erase')erase(c.x,c.y);after();}});
   const end=e=>{P.delete(e.pointerId);if(P.size<2)gest=null;if(zd){zUp();dirty=true;return;}if(!drag)return;
