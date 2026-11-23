@@ -74,8 +74,8 @@ export function init2D(root,A){
     cx.save();cx.transform(S,S/2,-S,S/2,p[0],p[1]);drawTile(cx,v,0,0,1);cx.restore();}
   function isoBuild(){const W=M.w,H=M.h,nl=sheets.filter(s=>s&&s.img).length;let h=0;
     for(let l=0;l<4;l++){const a=M.layers[l];for(let i=0;i<a.length;i++)h=(h*31+a[i]+i)|0;}
-    const key=W+'x'+H+'|'+vis.slice(0,4).join('')+'|'+nl+'|'+h;if(isoC&&isoK===key)return isoC;
-    let CQ=32;while(W*H*CQ*CQ>2.2e7&&CQ>8)CQ-=8;
+    const want=CELL*view.z*(window.devicePixelRatio||1)*1.1;let CQ=[32,48,64,96,128].find(t=>t>=want)||128;while(W*H*CQ*CQ>3e7&&CQ>8)CQ-=8;
+    const key=W+'x'+H+'|'+vis.slice(0,4).join('')+'|'+nl+'|'+h+'|'+CQ;if(isoC&&isoK===key)return isoC;
     const gnd=document.createElement('canvas');gnd.width=W*CQ;gnd.height=H*CQ;const g=gnd.getContext('2d');g.imageSmoothingEnabled=true;
     const SL=[];
     for(const l of [0,1]){if(!vis[l])continue;const a=M.layers[l];for(let i=0;i<a.length;i++){const v=a[i];if(!v)continue;const d=dec(v),sh=sheets[d.sid];if(!sh||!sh.img)continue;
