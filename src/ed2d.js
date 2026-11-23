@@ -183,7 +183,8 @@ export function init2D(root,A){
     for(const e of clip.ents){const nx=x0+e.dx,ny=y0+e.dy;if(!inb(nx,ny))continue;const c=JSON.parse(JSON.stringify(e));delete c.dx;delete c.dy;c.id=newId();c.x=nx;c.y=ny;M.ents.push(c);n++;}
     return n;}
   function clearSel(all){if(!sel)return;pushUndo();const x0=Math.min(sel.x0,sel.x1),y0=Math.min(sel.y0,sel.y1),x1=Math.max(sel.x0,sel.x1),y1=Math.max(sel.y0,sel.y1);
-    for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){if(all)for(let l=0;l<5;l++)put(x,y,0,l);else put(x,y,0);}after();}
+    for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){if(all)for(let l=0;l<5;l++)put(x,y,0,l);else put(x,y,0);}
+    if(all||act===2){M.ents=M.ents.filter(e=>e.t==='start'||e.x<x0||e.x>x1+1||e.y<y0||e.y>y1+1);selId=null;}after();}
   // ===== thao tác nhanh trên vùng đang chọn (như bên 3D) =====
   function grabR(r){const g=l=>{const a=[];for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)a.push(get(r.x0+i,r.y0+j,l));return a;};return {L:[0,1,2,3,4].map(g),E:M.ents.filter(e=>e.t!=='start'&&e.x>=r.x0&&e.x<=r.x1&&e.y>=r.y0&&e.y<=r.y1)};}
   function clearR(r){for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)for(let l=0;l<5;l++)put(r.x0+i,r.y0+j,0,l);}
@@ -324,7 +325,7 @@ export function init2D(root,A){
     else if(m&&k==='x'&&sel){copyArea(true);e.preventDefault();}
     else if(m&&k==='v'&&clip){tool='paste';draw();e.preventDefault();}
     else if(m&&k==='a'){sel={x0:0,y0:0,x1:M.w-1,y1:M.h-1};tool='select';draw();dirty=true;e.preventDefault();}
-    else if((k==='delete'||k==='backspace')&&sel&&tool==='select'){clearSel(true);e.preventDefault();}
+    else if((k==='delete'||k==='backspace')&&sel&&tool==='select'){clearSel(!simple);e.preventDefault();}
     else if(k==='escape'){if(tool==='paste'){tool='select';draw();}else if(sel){sel=null;dirty=true;draw();}}};
   document.addEventListener('keydown',window.__kb2d);
   // ===== giao diện =====
@@ -342,14 +343,14 @@ export function init2D(root,A){
    setInterval(()=>{
      const r=sel&&selRect();let k='';
      if(tool==='select')k=r?'sel:'+r.w+'x'+r.h:'pick';else if(tool==='paste')k='paste:'+(clip?clip.w+'x'+clip.h:'none');
-     k+=(simple?'S':'F');
+     k+=(simple?'S':'F')+act;
      if(k===lk)return;lk=k;ft.textContent='';
      if(!k.startsWith('sel')&&!k.startsWith('pick')&&!k.startsWith('paste')){ft.style.display='none';return;}
      ft.style.display='flex';
      const lab=t=>{const d=document.createElement('span');d.textContent=t;d.style.fontWeight='600';ft.append(d);};
      if(k.startsWith('pick'))lab('⬚ Kéo trên bản đồ để chọn một vùng');
      else if(k.startsWith('sel')){lab('Đã chọn '+r.w+'×'+r.h+' ô');
-       ft.append(fb('📋 Sao chép',()=>copyArea(false),'#2f6b46'),fb('✂ Cắt',()=>copyArea(true)),fb('🗑 Xóa',()=>clearSel(true),'#7a3434'),fb('✖ Bỏ chọn',()=>{sel=null;dirty=true;lk='';draw();}));}
+       ft.append(fb('📋 Sao chép',()=>copyArea(false),'#2f6b46'),fb('✂ Cắt',()=>copyArea(true)),fb('🗑 Xóa lớp '+(['Nền','Phủ nền','Vật thể','Mái/cửa','Vùng chặn'][act]||''),()=>clearSel(false),'#7a3434'),fb('✖ Bỏ chọn',()=>{sel=null;dirty=true;lk='';draw();}));}
      else if(k.startsWith('paste')){lab(clip?'Bấm lên bản đồ để dán ('+clip.w+'×'+clip.h+' ô)':'Chưa có gì để dán — hãy Chọn vùng rồi Sao chép');
        ft.append(fb('✔ Xong',()=>{tool='select';draw();dirty=true;},'#2f6b46'));}
    },150);}
