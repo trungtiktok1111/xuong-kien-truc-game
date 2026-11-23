@@ -134,7 +134,27 @@ def fpoly(path,k,fx,fy,tipx,tipy,kind):
     cx=sum(q[0] for q in H)/len(H);cy=sum(q[1] for q in H)/len(H)
     H=[(cx+(q[0]-cx)*.95,cy+(q[1]-cy)*.95) for q in H]
     return [(round(q[0],2),round(q[1],2)) for q in H]
-names=list(OBJ);FP={};FPR={};OXY={};FPZ={}
+
+BASEQ={}
+for _n in ('Nha_mot_gian','Choi_gac','Kho'):BASEQ[_n]=((134,278),(240,200),(28,222))
+for _n in ('Nha_ba_gian','Tuu_quan','Hanh_lang'):BASEQ[_n]=((329,350),(430,280),(30,236))
+for _n in ('Vo_duong','Tiem_thuoc','Quan_tra','Nha_co_hien','Nha_mat_pho'):BASEQ[_n]=((232,316),(332,235),(31,226))
+BASEQ['Chinh_dien']=((326,349),(429,286),(30,251))
+BASEQ['Nha_san']=((232,350),(324,288),(44,277))
+BASEQ['Choi_ven_nuoc']=((140,327),(227,255),(36,271))
+BASEQ['Tram_nghi']=((229,302),(325,238),(29,231))
+BASEQ['Tuong_bao']=((170,191),(188,182),(2,127))
+BASEQ['Vong_lau']=((126,343),(204,300),(20,315))
+BASEQ['Sap_hang']=((94,145),(129,129),(31,120))
+def fquad(n,k,ref):
+    """4 góc nền đo trên hình (pixel) -> toạ độ lưới so với góc trước x+1,y+1"""
+    hw=.75/k;hh=hw/2;Fp,Rp,Lp=BASEQ[n]
+    Bp=(Lp[0]+Rp[0]-Fp[0],Lp[1]+Rp[1]-Fp[1])
+    def g(p):
+        u=(p[0]-ref[0])/hw;v=(p[1]-ref[1])/hh
+        return (round((u+v)/2,2),round((v-u)/2,2))
+    return [g(Fp),g(Rp),g(Bp),g(Lp)]
+names=list(OBJ);FP={};FPR={};OXY={};FPZ={};DBGF={}
 COLS=6;ROWS=(len(names)+COLS-1)//COLS
 ob=Image.new('RGBA',(COLS*TW,ROWS*TW),(0,0,0,0));IDX={};SC={}
 for i,n in enumerate(names):
@@ -146,6 +166,11 @@ for i,n in enumerate(names):
     if n in FPO:FP[n]=FPO[n]
     FPR[n]=(round(fx_,2),round(fy_,2))
     FPZ[n]=fpoly(OBJ[n],k,fx_,fy_,tx_,ty_,'round' if (n in KOBJ or n in ('Gieng','Sen')) else 'box')
+    if n in BASEQ:
+        _im=Image.open(OBJ[n]).convert('RGBA');_im=_im.crop(bbox(_im));_ref=(_im.width/2,_im.height) if n in FPO else (tx_,ty_)
+        FPZ[n]=fquad(n,k,_ref);tx_r,ty_r=_ref
+    else:tx_r,ty_r=tx_,ty_
+    DBGF[n]=(OBJ[n],k,tx_r,ty_r,FPZ[n])
     ix=(TW-r.width)//2;iy=TW-2-r.height
     OXY[n]=(round(.5-(ix+tx_*kf)/TW,4),round(1-(iy+ty_*kf)/TW,4)) if n not in KOBJ and n not in ('Gieng','Sen') and n not in FPO else (0,0)
 # ---- bản đồ ----
@@ -182,7 +207,7 @@ def deco(n,x,y,f,walk=False,flat=False,name=None):
     elif n in FPO:zb=[-fx,-fy,fx,fy]
     else:
         rx,ry=FPR[n];rx=max(.4,rx-.06);ry=max(.4,ry-.06);zb=[-round(rx,2),-round(ry,2),round(rx,2),round(ry,2)]
-    zp=FPZ.get(n) if n not in FPO else None
+    zp=FPZ.get(n)
     e={'id':'d%d'%len(ents),'t':'deco','x':x,'y':y,'f':max(fx,fy),'fx':fx,'fy':fy,'sc':SC[n],'ox':OXY[n][0],'oy':OXY[n][1],'flat':flat,'name':name or n,'tile':{'sid':SID_OB,'idx':IDX[n]},'zb':zb}
     if zp:e['zp']=[list(q) for q in zp]
     if walk:e['walk']=True
@@ -241,3 +266,5 @@ out={'tags':{'sheets':{},'tiles':{},'fav':[],'recent':[]},'format':'thk-map-1','
 print({n:FP[n] for n in FP})
 json.dump(out,open('/home/claude/ed/man1.json','w'),ensure_ascii=False)
 print('ok',os.path.getsize('/home/claude/ed/man1.json')//1024,'KB',len(ents),'ents',len(names),'objs')
+
+import json as _j;_j.dump({k:list(v) for k,v in DBGF.items()},open('/tmp/fp_dbg.json','w'))
