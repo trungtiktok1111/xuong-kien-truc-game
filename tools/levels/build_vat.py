@@ -29,7 +29,8 @@ def src(folder,sub,dmfile=None,anchor=None,pref=''):
         nm,pv=names.get(b,(None,None));pv=pv or anc.get(b)
         k=b[:-4].replace('-',' ').replace('_',' ');L.append((f,nm or VN.get(k,k.capitalize()),pv))
     return L
-VN={'quan tra':'Quán trà','sap cho':'Sạp chợ','tiem thuoc':'Tiệm thuốc','tuu quan':'Tửu quán','cong thanh':'Cổng thành','hoang cung':'Hoàng cung','tuong thanh':'Tường thành','vong lau goc':'Vọng lâu góc','cau da vom':'Cầu đá vòm','ke bo kenh':'Kè bờ kênh','cong thoat nuoc':'Cống thoát nước','bac ben thuyen':'Bậc bến thuyền','nen lat da':'Nền lát đá','dat nen':'Đất nền','dat co':'Đất cỏ','mat nuoc kenh':'Mặt nước kênh','cay dao':'Cây đào','cay lieu':'Cây liễu','cum bui hoa co':'Cụm bụi hoa cỏ','cum sen':'Cụm sen','lan can mau roi':'Lan can mẫu rời','lan can phai':'Lan can phải','lan can trai':'Lan can trái','mat di':'Mặt đi','tong hop':'Tổng hợp','chieu nghi':'Chiếu nghỉ','ve thang':'Vế thang','nha ba gian':'Nhà ba gian','nha mot gian':'Nhà một gian','nha co hien':'Nhà có hiên','kho':'Kho','gieng':'Giếng',
+VN={'ben go u':'Bến gỗ (U)','ben go v':'Bến gỗ (V)','cau go u':'Cầu gỗ (U)','cau go v':'Cầu gỗ (V)','mang':'Măng','nam':'Nấm','duoc thao':'Dược thảo','go chan':'Gỗ chặn','bia luu':'Bia lưu','hang da rieng':'Hang đá riêng','hang dong':'Hang động','mang sau':'Măng (mặt sau)','nam sau':'Nấm (mặt sau)','duoc thao sau':'Dược thảo (mặt sau)','go chan sau':'Gỗ chặn (mặt sau)','bia luu sau':'Bia lưu (mặt sau)','hang da rieng sau':'Hang đá riêng (mặt sau)','hang dong sau':'Hang động (mặt sau)',
+ 'dinh thien':'Đỉnh thiên','son mon':'Sơn môn','quan tra':'Quán trà','sap cho':'Sạp chợ','tiem thuoc':'Tiệm thuốc','tuu quan':'Tửu quán','cong thanh':'Cổng thành','hoang cung':'Hoàng cung','tuong thanh':'Tường thành','vong lau goc':'Vọng lâu góc','cau da vom':'Cầu đá vòm','ke bo kenh':'Kè bờ kênh','cong thoat nuoc':'Cống thoát nước','bac ben thuyen':'Bậc bến thuyền','nen lat da':'Nền lát đá','dat nen':'Đất nền','dat co':'Đất cỏ','mat nuoc kenh':'Mặt nước kênh','cay dao':'Cây đào','cay lieu':'Cây liễu','cum bui hoa co':'Cụm bụi hoa cỏ','cum sen':'Cụm sen','lan can mau roi':'Lan can mẫu rời','lan can phai':'Lan can phải','lan can trai':'Lan can trái','mat di':'Mặt đi','tong hop':'Tổng hợp','chieu nghi':'Chiếu nghỉ','ve thang':'Vế thang','nha ba gian':'Nhà ba gian','nha mot gian':'Nhà một gian','nha co hien':'Nhà có hiên','kho':'Kho','gieng':'Giếng',
  'cong thanh u':'Cổng thành (hướng U)','cong thanh v':'Cổng thành (hướng V)','cua cung':'Cửa cung','dien chau':'Điện châu','hanh lang':'Hành lang','lan can u':'Lan can (U)','lan can v':'Lan can (V)','nha pho':'Nhà phố','phu de':'Phủ đệ','thap tuong':'Tháp tường','tuong goc':'Tường góc','tuong u':'Tường (U)','tuong v':'Tường (V)','bac da lan can':'Bậc đá lan can',
  'cau da u':'Cầu đá (U)','cau da v':'Cầu đá (V)','chinh dien':'Chính điện','den da':'Đèn đá','dinh thien':'Đỉnh thiên','duoc thao':'Dược thảo','gac chuong':'Gác chuông','lu huong':'Lư hương','mom da':'Mỏm đá','son mon':'Sơn môn','thap da':'Tháp đá','thong nui':'Thông núi','vach da day leo':'Vách đá dây leo','bac da co tu':'Bậc đá cổ tự','bac da co tu huong nguoc':'Bậc đá cổ tự (ngược)',
  'bac da co':'Bậc đá cổ','bac da co huong nguoc':'Bậc đá cổ (ngược)','co thu':'Cổ thụ','cong do':'Cổng độ','da khac vo':'Đá khắc vỏ','den da co':'Đền đá cổ','dien do':'Điện độ','duong xi':'Dương xỉ','gieng can':'Giếng cạn','ruong da':'Ruộng đá','te dan':'Tế đàn','tinh the':'Tĩnh thể','tru da nut':'Trụ đá nứt',
@@ -96,6 +97,23 @@ def folder(path,scale=1.0,filt=None,nm=None):
         if filt and not filt(b):continue
         out.append((f,(nm(b) if nm else (lambda k:VN.get(k.lower(),k.capitalize()))(camel(b.replace('-',' ')))),None,scale))
     return out
+
+BASEX=('-than','-nen','-base');COVX=('-lan-can','-lop-che','-che','-cover')
+def pairs(d,scale=1.0):
+    out=[]
+    for f in sorted(glob.glob(d+'/*.png')):
+        st=os.path.basename(f)[:-4]
+        bx=[x for x in BASEX if st.endswith(x)]
+        if not bx:continue
+        root=st[:-len(bx[0])];cf=None
+        for c in COVX:
+            q=d+'/'+root+c+'.png'
+            if os.path.exists(q):cf=q;break
+        if not cf:continue
+        if Image.open(cf).convert('RGBA').getchannel('A').point(lambda v:255 if v>24 else 0).getbbox() is None:continue
+        k=root.replace('-',' ')
+        out.append((f,VN.get(k,k.capitalize()),None,scale,cf))
+    return out
 # --- Phố chợ bổ sung + sơn môn luyện võ + công trình lắp sẵn / mô-đun kiến trúc
 ex=jsrc(EXT+'069c26ab-Pho-Cho-Ben-Kenh-2D-Bo-Sung/Danh-muc.json',EXT+'069c26ab-Pho-Cho-Ben-Kenh-2D-Bo-Sung/')
 add('pho-cho','Phố chợ','',ex)
@@ -127,25 +145,43 @@ for k,n in [('landscape','cảnh quan'),('buildings','nhà cửa'),('city','ph�
         if re.search(r'(_[NESW]|_[0-9]+)$',b) is None:pass
         fs.append((f,camel(b),None,1.45))
     add('kenney-'+k,'Kenney · '+n+' (iso cổ điển)','từ gói rar',fs[:140])
+PR=R+'Rung-Truc-Co-Thu-2D-Isometric-Mo-Rong/'
+add('rung-truc','Rừng trúc','',pairs(PR+'layers'))
+add('rung-truc','Rừng trúc','',folder(PR+'tuong-tac/*.png'))
+add('van-son','Vân sơn','',pairs(R+'Khu-12-13-Van-Son-Khe-Ngoc-2D-Isometric/12-Van-Son-Co-Tu/lop-che'))
+add('khe-ngoc','Khe ngọc','',pairs(R+'Khu-12-13-Van-Son-Khe-Ngoc-2D-Isometric/13-Khe-Ngoc-Phe-Tich/lop-che'))
+add('kinh-thanh','Kinh thành','',pairs(R+'Kinh-Thanh-Hoang-Thanh-2D-Isometric/sprites'))
+add('ben-song','Bến sông','',pairs(R+'Ben-Song-Thuy-Tran-2D-Isometric-Mo-Rong/mo-dun'))
+add('duyen-hai','Duyên hải','',pairs(R+'Duyen-Hai-Cang-Bien-2D-Isometric-Mo-Rong/mo-dun'))
+add('thao-nguyen','Thảo nguyên','',pairs(R+'Thao-Nguyen-Bien-Ai-2D-Isometric-Mo-Rong/mo-dun'))
 def build():
     os.makedirs(OUT,exist_ok=True);idx=[]
     for pid,P in PACKS.items():
-        seen=set();ims=[]
+        seen=set();ims=[];pn={it[1] for it in P['items'] if len(it)>4}
         for it in P['items']:
-            f,nm,pv=it[:3];sc=it[3] if len(it)>3 else 1.0
+            f,nm,pv=it[:3];sc=it[3] if len(it)>3 else 1.0;cf=it[4] if len(it)>4 else None
+            if not cf and nm in pn:continue
             im0=Image.open(f).convert('RGBA');h=hashlib.md5(im0.tobytes()).hexdigest()
             if h in seen:continue
-            seen.add(h);im,px,py,fx,fy=prep(im0,sc)
+            seen.add(h)
+            if cf:
+                ic=Image.open(cf).convert('RGBA')
+                if sc!=1.0:ic=ic.resize((max(1,round(ic.width*sc)),max(1,round(ic.height*sc))),Image.LANCZOS)
+                imb,px,py,fx,fy=prep(im0,sc)
+                comp=Image.new('RGBA',imb.size,(0,0,0,0));comp.alpha_composite(imb);
+                if ic.size==imb.size:comp.alpha_composite(ic)
+                _,px,py,fx,fy=prep(comp);ims.append((nm,imb,px,py,fx,fy,len(ims)+1));ims.append((nm+' · mái che',ic,px,py,0,0,-1));continue
+            im,px,py,fx,fy=prep(im0,sc)
             if im.getchannel('A').getbbox() is None:continue
-            ims.append((nm,im,px,py,fx,fy))
+            ims.append((nm,im,px,py,fx,fy,0))
         if not ims:continue
         T=0
-        for nm,im,px,py,fx,fy in ims:T=max(T,2*max(px,im.width-px),py)
+        for nm,im,px,py,fx,fy,cv in ims:T=max(T,2*max(px,im.width-px),py)
         T=int(-(-T//32)*32);n=len(ims);cols=min(n,6 if T<400 else 4)or 1;rows=-(-n//cols)
         at=Image.new('RGBA',(cols*T,rows*T),(0,0,0,0));items=[]
-        for i,(nm,im,px,py,fx,fy) in enumerate(ims):
+        for i,(nm,im,px,py,fx,fy,cv) in enumerate(ims):
             cx,cy=(i%cols)*T,(i//cols)*T;at.alpha_composite(im,(int(round(cx+T/2-px)),int(round(cy+T-py))))
-            items.append({'name':nm,'role':FORCE.get(pid) or role(nm),'i':i,'fx':fx,'fy':fy,'sc':round(T/128,3),'w':im.size[0],'h':im.size[1]})
+            items.append({'name':nm,'role':('Mái/cửa' if cv<0 else (FORCE.get(pid) or role(nm))),'cv':(cv if cv>0 else None),'i':i,'fx':fx,'fy':fy,'sc':round(T/128,3),'w':im.size[0],'h':im.size[1]})
         q=at.quantize(256,method=Image.Quantize.FASTOCTREE,dither=Image.Dither.NONE)
         b=io.BytesIO();q.save(b,'PNG',optimize=True);url='data:image/png;base64,'+base64.b64encode(b.getvalue()).decode()
         json.dump({'id':pid,'name':P['name'],'desc':P['desc'],'T':T,'cols':cols,'items':items,'atlas':url},open(OUT+pid+'.json','w'),ensure_ascii=False,separators=(',',':'))

@@ -101,7 +101,7 @@ function buildIso(ctx,opt,cat){
   const ok=(cells,mg)=>{for(const [x,y] of cells){if(x<2||y<2||x>=W-2||y>=H-2||occ[y*W+x])return false;if(Math.abs(x-sx)<4&&Math.abs(y-sy)<3)return false;
       for(let yy=y-mg;yy<=y+mg;yy++)for(let xx=x-mg;xx<=x+mg;xx++){const o=occ[yy*W+xx];if(o===1||o===3)return false;}}return true;};
   let nid=0;
-  const put=(it,x,y,cells,name)=>{for(const [cx,cy2] of cells)occ[cy2*W+cx]=1;const e={id:'d'+(nid++),t:'deco',x,y,f:it.f,fx:it.fx,fy:it.fy,sc:it.sc,ox:it.ox,oy:it.oy,flat:false,name:name||it.name,tile:it.tile,zb:it.zb};if(it.zp)e.zp=it.zp;ents.push(e);};
+  const put=(it,x,y,cells,name)=>{for(const [cx,cy2] of cells)occ[cy2*W+cx]=1;const e={id:'d'+(nid++),t:'deco',x,y,f:it.f,fx:it.fx,fy:it.fy,sc:it.sc,ox:it.ox,oy:it.oy,flat:false,name:name||it.name,tile:it.tile,zb:it.zb};if(it.zp)e.zp=it.zp;if(it.cv)e.cv=it.cv;ents.push(e);};
   const near=(cells,rad)=>cells.some(([x,y])=>pathCells.some(p=>Math.abs(p[0]-x)<rad&&Math.abs(p[1]-y)<rad));
   const place=(list,n,tries,mg,nearPath,name,key)=>{if(!list.length)return;for(let i=0;i<n;i++){const it=list[Math.floor(r()*list.length)];
       for(let t=0;t<tries;t++){const x=2+Math.floor(r()*(W-4)),y=2+Math.floor(r()*(H-4)),cells=bb(it,x,y);if(!cells.length||!ok(cells,mg))continue;if(nearPath&&!near(cells,7))continue;put(it,x,y,cells,name);info.placed[key]++;break;}}};
