@@ -14,13 +14,13 @@ const KINDS={
   sect:{name:'Tông môn',pack:'son-mon',houses:[3,5],trees:[20,30],vat:[2,4],bush:[6,12],pond:0},
   immortal:{name:'Tiên môn',pack:'tien-cung',houses:[2,3],trees:[6,10],vat:[1,3],bush:[8,14],pond:0},
   cloud:{name:'Vân sơn (tuyết/mây)',pack:'van-son',houses:[1,3],trees:[10,18],vat:[2,4],bush:[2,5],pond:0},
-  tunnel:{name:'Địa đạo',pack:'dia-dao',houses:[0,0],trees:[0,0],vat:[0,2],bush:[0,0],pond:0},
-  dungeon:{name:'Địa cung',pack:'dia-cung',houses:[0,0],trees:[0,0],vat:[0,3],bush:[0,0],pond:0},
-  crypt:{name:'Hầm mộ',pack:'ham-mo',houses:[0,0],trees:[0,0],vat:[1,4],bush:[0,0],pond:0},
+  tunnel:{name:'Địa đạo',pack:'dia-dao',houses:[0,1],trees:[0,0],vat:[3,6],bush:[0,0],pond:0},
+  dungeon:{name:'Địa cung',pack:'dia-cung',houses:[2,3],trees:[0,0],vat:[5,9],bush:[0,0],pond:0},
+  crypt:{name:'Hầm mộ',pack:'ham-mo',houses:[1,2],trees:[0,0],vat:[5,9],bush:[0,0],pond:0},
   tomb:{name:'Lăng tẩm',pack:'lang-tam',houses:[1,2],trees:[8,14],vat:[4,8],bush:[2,5],pond:0},
   battlefield:{name:'Chiến trường',pack:'thao-nguyen',houses:[0,0],trees:[2,5],vat:[18,30],bush:[0,2],pond:0},
-  lava:{name:'Dung nham',pack:'dung-nham',houses:[0,0],trees:[0,2],vat:[6,12],bush:[0,0],pond:1},
-  gem:{name:'Khe ngọc',pack:'khe-ngoc',houses:[0,1],trees:[0,3],vat:[6,12],bush:[0,2],pond:1},
+  lava:{name:'Dung nham',pack:'dung-nham',houses:[0,1],trees:[0,2],vat:[6,10],bush:[0,0],pond:1},
+  gem:{name:'Khe ngọc',pack:'khe-ngoc',houses:[1,2],trees:[0,3],vat:[6,12],bush:[0,2],pond:1},
   port:{name:'Bến sông',pack:'ben-song',houses:[3,6],trees:[4,8],vat:[6,10],bush:[2,5],pond:1},
   coast:{name:'Duyên hải',pack:'duyen-hai',houses:[2,4],trees:[5,10],vat:[3,6],bush:[2,5],pond:1},
   lotus:{name:'Đầm sen',pack:'dam-sen',houses:[1,3],trees:[8,14],vat:[2,4],bush:[6,10],pond:1},
@@ -28,6 +28,8 @@ const KINDS={
   outpost:{name:'Trạm dịch',pack:'tram-dich',houses:[2,4],trees:[2,5],vat:[6,10],bush:[0,2],pond:0},
   forest:{name:'Rừng',pack:'rung-truc',houses:[0,1],trees:[70,110],vat:[2,4],bush:[8,14],pond:1},
   wild:{name:'Đồng hoang',pack:'thao-nguyen',houses:[0,2],trees:[8,14],vat:[4,8],bush:[3,8],pond:0}};
+const VAT={village:['lang-nui','pho-cho'],mtvillage:['lang-nui'],town:['kinh-thanh','pho-cho'],market:['pho-cho'],capital:['kinh-thanh'],palace:['kinh-thanh'],imperial:['kinh-thanh'],sect:['son-mon','van-son'],immortal:['van-son','son-mon'],cloud:['van-son','son-mon'],tunnel:['khe-ngoc'],dungeon:['khe-ngoc'],crypt:['khe-ngoc'],tomb:['khe-ngoc'],battlefield:['thao-nguyen'],lava:['khe-ngoc'],gem:['khe-ngoc'],port:['ben-song'],coast:['duyen-hai'],lotus:['dam-sen'],farm:['dong-que'],outpost:['tram-dich','thao-nguyen'],forest:['rung-truc'],wild:['thao-nguyen','rung-truc']};
+export const GEN_KIND_VAT=VAT;
 export const GEN_KIND_PACK=Object.fromEntries(Object.entries(KINDS).map(([k,v])=>[k,v.pack]));
 export const GEN_KINDS=Object.fromEntries(Object.entries(KINDS).map(([k,v])=>[k,v.name]));
 
@@ -69,7 +71,7 @@ const ri=(r,a,b)=>a+Math.floor(r()*(b-a+1));
 
 /* ===== Tự sinh isometric theo DANH MỤC tài nguyên (cfg.catalog): chỉ dùng ô nền đã gắn vai trò, vật cảnh có sẵn vùng chặn đo từ nền hình ===== */
 function buildIso(ctx,opt,cat){
-  cat=cat||{items:[]};const NEN=ctx.nen,{enc}=ctx,r=Math.random,W=opt.w,H=opt.h,K=KINDS[opt.kind]||KINDS.village,G=cat.ground,IT=cat.items||[];let zonesOut=[];
+  cat=cat||{items:[]};if(ctx.vat&&ctx.vat.length)cat={...cat,items:ctx.vat};const NEN=ctx.nen,{enc}=ctx,r=Math.random,W=opt.w,H=opt.h,K=KINDS[opt.kind]||KINDS.village,G=cat.ground,IT=cat.items||[];let zonesOut=[];
   const layers=[0,1,2,3].map(()=>new Array(W*H).fill(0)),blk=new Array(W*H).fill(0),occ=new Uint8Array(W*H),ents=[];
   const by=ro=>IT.filter(i=>i.role===ro);
   const info={ground:G?G.grass.length:1,water:1,tree:by('Cây').length,house:by('Nhà').length,prop:by('Vật').length+by('Bụi').length,placed:{house:0,tree:0,prop:0}};
