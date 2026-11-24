@@ -1,3 +1,4 @@
+import {DA_XOAY_LEVEL} from './outlineLevels.js';
 import {mapCollision,rasterOutline} from './mapCollision.js';
 import {outline2D,clipOutline,stoneBackdrop,stoneWall,drawFloorCollision} from './outline2d.js';
 import {validOutline,OUTLINE_STONE,MAX_MAP_SIDE} from './outlineEditor.js';
@@ -203,9 +204,9 @@ export function init2D(root,A){
   const inb=(x,y)=>x>=0&&y>=0&&x<M.w&&y<M.h;
   function put(x,y,v,l=act){if(!inb(x,y))return;(l===4?M.blk:M.layers[l])[y*M.w+x]=v;}
   function get(x,y,l=act){return inb(x,y)?(l===4?M.blk:M.layers[l])[y*M.w+x]:0;}
-  function stonePhase(value,layer){
+  function stonePhase(value,layer,palette=sheets){
     if(!value||layer!==0)return null;
-    const tile=dec(value),asset=sheets[tile.sid];
+    const tile=dec(value),asset=palette[tile.sid];
     if(tile.idx>=16||!asset||(asset.phaseBrush!=='da-xoay-stone-2x2'&&asset.url!==LEGACY_STONE_ATLAS))return null;
     return tile.sid;
   }
@@ -1188,7 +1189,7 @@ export function init2D(root,A){
   (async()=>{await Promise.all(sheets.map(loadSheet));let sv=lsGet('thk_proj2d',null);if(!sv||sv.large)sv=await idbGet('thk_proj2d_large');const idbC=await idbGet('thk_sheets2d');
     if(sv&&sv.layers){for(const s of ((idbC&&idbC.length)?idbC:(sv.custom||[]))){const ns=Object.assign({},s);await loadSheet(ns);sheets.push(ns);}MAPS=Array.isArray(sv.maps)&&sv.maps.length?sv.maps:[];curMap=Math.min(sv.cur||0,Math.max(0,MAPS.length-1));M=clone(MAPS.length?MAPS[curMap]:sv);if(!MAPS.length){M.name=M.name||'Màn 1';MAPS=[clone(M)];}}else{M=fromVillage();M.name='Màn 1';MAPS=[clone(M)];
       const sample=document.getElementById('da-xoay-sample');
-      if(sample){await importJSON(sample.textContent);M.name='Hầm ngục Đá Xoáy';syncCur();grid=false;}
+      if(sample){await importJSON(sample.textContent);M.name='Hầm ngục Đá Xoáy';M.cfg.outlineTemplate=DA_XOAY_LEVEL;syncCur();grid=false;}
     }
     try{const pk=await idbGet('xuong_packs');if(Array.isArray(pk))for(const p of pk)registerPack({nen:p.nen,vat:p.vat,nGround:p.nen?Object.keys(p.nen.idx).length:0,thumb:''});}catch(e){}
     try{await refreshProfiles();draw();}catch(e){}
@@ -1316,10 +1317,40 @@ export function init2D(root,A){
     undo=[];redo=[];sel=null;clip=null;selId=null;isoK='';
     setProjectMeta(p.meta);await save();fit();draw();
   }
+  function builtinOutlineSample(){
+    const node=document.getElementById('da-xoay-sample');
+    return node?JSON.parse(node.textContent):null;
+  }
   async function startSample(meta){
-    const sample=JSON.parse(document.getElementById('da-xoay-sample').textContent);
-    const map={name:meta.title,w:sample.w,h:sample.h,layers:sample.layers,blk:sample.collision,ents:sample.ents,cfg:sample.cfg};
+    const sample=builtinOutlineSample();
+    const map={name:meta.title,w:sample.w,h:sample.h,layers:sample.layers,blk:sample.collision,ents:sample.ents,cfg:{...sample.cfg,outlineTemplate:DA_XOAY_LEVEL}};
     await restoreProject({format:'xuong-project-1',meta,cur:0,maps:[map],sheets:sample.sheets.slice(4),tags:sample.tags});
+  }
+  async function loadBuiltinSheet(source,target){
+    const match=sh=>sh.img&&sh.url===source.url&&sh.tw===source.tw&&sh.margin===source.margin;
+    let sid=target.findIndex(match);
+    if(sid>=0)return sid;
+    const sh={...source};await loadSheet(sh);
+    if(!sh.img)throw Error('Không nạp được bộ hình '+source.name+'.');
+    sid=target.findIndex(match);
+    return sid>=0?sid:target.push(sh)-1;
+  }
+  async function buildBuiltinOutline(level,outline,w,h,target,stamps){
+    const sample=level.sample,ids=[0,1,2,3];
+    for(const sh of sample.sheets.slice(4))ids.push(await loadBuiltinSheet(sh,target));
+    const remap=tile=>({...tile,sid:ids[tile.sid]});
+    const preset=clone({name:level.name,w:sample.w,h:sample.h,layers:sample.layers,
+      blk:sample.collision,cfg:sample.cfg,ents:sample.ents});
+    preset.cfg.outlineTemplate=level.id;
+    if(preset.cfg.hero)preset.cfg.hero=remap(preset.cfg.hero);
+    for(const e of preset.ents)if(e.tile)e.tile=remap(e.tile);
+    preset.layers=preset.layers.map(layer=>layer.map(v=>{
+      if(!v)return 0;
+      const {sid,idx,f}=dec(v);return enc(ids[sid],idx,f);
+    }));
+    const same=w===sample.w&&h===sample.h&&JSON.stringify(outline.loops)===JSON.stringify(sample.cfg.outline.loops);
+    if(same&&!stamps.length){preset.cfg.outline={...outline,floorCollision:true};return preset;}
+    return buildOutlineMap(outline,w,h,{...level,sample:null,goal:null},target,stamps,false,preset);
   }
   function validateMapOutline(outline,w,h){
     if(!validOutline(outline.loops,w,h)||![outline.front,outline.rear].every(n=>Number.isFinite(n)&&n>=0&&n<=4))
@@ -1335,10 +1366,10 @@ export function init2D(root,A){
     }
     return enc(sid,0);
   }
-  function paintOutline(m,outline,mask,fill,updateCollision,oldMask,stamps=[],source=null){
+  function paintOutline(m,outline,mask,fill,updateCollision,oldMask,stamps=[],source=null,palette=sheets){
     const {w,h}=m;
     const groundCover=(x,y,i)=>mask[i]||x>0&&mask[i-1]||x+1<w&&mask[i+1]||y>0&&mask[i-w]||y+1<h&&mask[i+w];
-    const phase=(v,x,y)=>{const sid=stonePhase(v,0);return sid===null?v:phaseTile(sid,x,y);};
+    const phase=(v,x,y)=>{const sid=stonePhase(v,0,palette);return sid===null?v:phaseTile(sid,x,y);};
     if(source){
       for(let y=0;y<Math.min(h,source.h);y++)for(let x=0;x<Math.min(w,source.w);x++){
         const dest=y*w+x,i=y*source.w+x;
@@ -1381,8 +1412,9 @@ export function init2D(root,A){
   function outlineFill(source,stamps){
     return source?.layers[0].find(Boolean)||stamps.flatMap(stamp=>stamp).find(cell=>cell.tiles[0])?.tiles[0];
   }
-  async function buildOutlineMap(outline,w,h,level,target,stamps,useSource=true){
+  async function buildOutlineMap(outline,w,h,level,target,stamps,useSource=true,sourcePreset=null){
     validateDimensions(w,h);validateMapOutline(outline,w,h);
+    if(level?.sample)return buildBuiltinOutline(level,outline,w,h,target,stamps);
     const mask=rasterOutline(outline.loops,w,h);
     const index=p=>p&&p[0]>=0&&p[0]<w&&p[1]>=0&&p[1]<h?p[1]*w+p[0]:-1;
     const proposed=index(level?.start),goal=index(level?.goal);
@@ -1411,8 +1443,22 @@ export function init2D(root,A){
       const i=index(p);
       if(visited[i]&&i!==start&&i!==end)fresh.ents.push({id:'chest-'+i,t:'chest',...place(i),name:'Rương',tile:null});
     }
-    const source=level||!useSource?null:M;
-    paintOutline(fresh,outline,mask,outlineFill(source,stamps)||await stoneTile(target),true,null,stamps,source);
+    if(sourcePreset){
+      c.hero=sourcePreset.cfg.hero;c.smooth=sourcePreset.cfg.smooth;
+      fresh.ents.push(...sourcePreset.ents.filter(e=>e.t==='deco'&&mask[index([e.x,e.y])]));
+    }
+    const source=sourcePreset||(level||!useSource?null:M);
+    let fill=outlineFill(source,stamps);
+    if(level?.theme&&!sourcePreset){
+      const style=builtinOutlineSample();
+      if(style){
+        c.smooth=false;
+        const hero=style.cfg.hero;
+        c.hero={...hero,sid:await loadBuiltinSheet(style.sheets[hero.sid],target)};
+        if(!fill)fill=enc(await loadBuiltinSheet(style.sheets[4],target),0);
+      }
+    }
+    paintOutline(fresh,outline,mask,fill||await stoneTile(target),true,null,stamps,source,target);
     return fresh;
   }
   async function previewOutlineMap(outline,w,h,level,stamps=[]){
@@ -1434,5 +1480,5 @@ export function init2D(root,A){
     toast('Đã tạo '+fresh.name);
   }
   function clearOutline(){pushUndo();delete M.cfg.outline;after();fit();draw();}
-  return {applyOutline,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  return {applyOutline,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
 }

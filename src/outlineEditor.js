@@ -1,5 +1,5 @@
 import {captureOutlineTiles,placeOutlineTiles} from './outlineMaterials.js';
-import {outlineLevels} from './outlineLevels.js';
+import {levelLibrary} from './outlineLevels.js';
 import {play2D} from './play2d.js';
 import {combineOutline,ellipseLoop,fitShape,outlineShapes,rectangleLoop,cropOutline,moveOutline,corridorLoop,relatedLoops} from './outlineShapes.js';
 import {guideBox,appGuides} from './editorHelp.js';
@@ -16,13 +16,15 @@ export function validOutline(loops,w,h){
 let outlineClipboard=null;
 export function openOutlineEditor(editor,initialTab='shapes'){
  const map=editor.map();
+ const outlineLevels=levelLibrary(editor.builtinOutlineSample());
  let W=map.w,H=map.h;
  const copy=loops=>JSON.parse(JSON.stringify(loops));
  const original=copy(map.cfg.outline?.loops||[]);
  let loops=copy(original),stamps=[],pending=[],mode='select',picked=-1,drag=null;
  const undo=[],redo=[];
  let placement=null,previewAt=null,selection=null,levelDraft=null,activeTab=initialTab;
- const originLevel=outlineLevels.find(level=>level.id===map.cfg.outlineTemplate);
+ const originLevel=outlineLevels.find(level=>level.id===map.cfg.outlineTemplate)||
+  outlineLevels.find(level=>level.sample&&level.w===map.w&&level.h===map.h&&JSON.stringify(level.loops)===JSON.stringify(original));
  const levelTiles=new Map();
  let applyButton,restoreLevelButton,createLabel,tryLabel,commitBusy=false;
  const ov=el('section',{class:'outline-overlay',style:'position:fixed;inset:0;z-index:180;background:#101820f5;overflow:auto;display:grid;place-items:center;padding:16px;touch-action:pan-y'});
@@ -434,7 +436,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  function loadLevel(level){
   if(!level||commitBusy)return;
   record();levelDraft=level;loops=copy(level.loops);stamps=[];W=level.w;H=level.h;
-  front.value=.375;rear.value=1.1;collision.checked=true;
+  front.value=level.sample?.cfg.outline.front??.375;rear.value=level.sample?.cfg.outline.rear??1.1;collision.checked=true;
   resetGridView();picked=-1;select('select');
  }
  const levelHint=el('p',{class:'hint'},'Bấm một màn để xem bố cục, chơi thử hoặc tạo bản sao.');
@@ -451,13 +453,13 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const project=([a,b])=>[x+a*z,y+b*z];
   ctx.beginPath();
   for(const loop of level.loops){ctx.moveTo(...project(loop[0]));for(const pt of loop.slice(1))ctx.lineTo(...project(pt));ctx.closePath();}
-  const colors={'Hầm ngục':'#7f9aa7','Sân và thành':'#8baa8f','Cầu và lối đi':'#b69978'};
+  const colors={'Hầm ngục':'#7f9aa7','Sân và thành':'#8baa8f','Cầu và lối đi':'#b69978','Bố cục phức tạp':'#85b2a7'};
   ctx.fillStyle=colors[level.group];ctx.fill('evenodd');ctx.strokeStyle='#d4dedc';ctx.stroke();
   for(const [p,color] of [[level.start,'#b0f2bc'],[level.goal,'#ffcc7b']]){
    ctx.beginPath();ctx.arc(...project(p),2.3,0,2*Math.PI);ctx.fillStyle=color;ctx.fill();
   }
   const card=el('button',{type:'button',class:'outline-template','data-level':level.id,onclick:()=>loadLevel(level)},
-   icon,el('strong',{},level.name),el('small',{},level.w+' × '+level.h+' ô'));
+   icon,el('strong',{},level.name),el('small',{},level.w+' × '+level.h+' ô'+(level.sample?' · Mẫu gốc':'')));
   levelTiles.set(level.id,card);levelCards.append(card);
  }
  restoreLevelButton=B('Nạp lại mẫu gốc',()=>loadLevel(levelDraft||originLevel));

@@ -1,10 +1,10 @@
 {
   "name": "ed",
-  "version": "14.0.0",
+  "version": "15.0.0",
   "description": "Xưởng Kiến Trúc Game",
   "main": "index.js",
   "scripts": {
-    "test": "esbuild tests/map-collision.test.js tests/outline-materials.test.js --bundle --platform=node --format=cjs --outdir=dist/tests --out-extension:.js=.cjs && node --test dist/tests/*.test.cjs",
+    "test": "esbuild tests/*.test.js --bundle --platform=node --format=cjs --outdir=dist/tests --out-extension:.js=.cjs && node --test dist/tests/*.test.cjs",
     "build": "bash build.sh"
   },
   "keywords": [],

@@ -3,6 +3,7 @@
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
 ## V15
+- **Màn mẫu** có 23 bố cục, gồm bản Đá Xoáy gốc và 10 màn mới trong nhóm **Bố cục phức tạp**.
 - **Điện thoại:** thanh công cụ 2D nằm dưới vùng vẽ, không che bản đồ. Trình sửa **Đường bao** xếp lại: vùng vẽ dính phía trên, các nhóm nút vuốt ngang; xoay ngang thì vùng vẽ bên trái, công cụ bên phải.
 - **Xoay góc tùy chọn** (Đường bao → Chỉnh hình đã chọn): xoay hình đã chọn hoặc cả bản đồ theo số độ bất kỳ.
 - Tường được cắt thành đoạn ngắn khi sắp độ sâu, nên không còn đè lên nhân vật đứng ở đầu cạnh tường dài.
