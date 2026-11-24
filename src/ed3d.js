@@ -1,3 +1,4 @@
+import {guideFor} from './editorHelp.js';
 import * as THREE from 'three';
 import {GLTFExporter} from 'three/examples/jsm/exporters/GLTFExporter.js';
 import {mergeGeometries} from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -671,6 +672,7 @@ export function init3D(root){
     else if(sz&&k.startsWith('arrow')&&!m){zpush();const n=(e.shiftKey?5:1)*(zsnap||.25);zMove(sz,k==='arrowleft'?-n:k==='arrowright'?n:0,k==='arrowup'?-n:k==='arrowdown'?n:0);zRebuild();changed();}
     else h=false;if(h){e.preventDefault();e.stopImmediatePropagation();}},true);
   function draw(){zRebuild();if(mode!=='sel'&&selV.size){selV.clear();updSelV();}if(mode!=='area'&&ar){ar=null;arStep=0;updAr();}if(mode!=='area'&&mode!=='stamp'&&pgH)pgH.visible=false;if(typeof hbDraw==='function')hbDraw();[...tabs.children].forEach(b=>b.classList.toggle('on',b.dataset.t===tab));body.innerHTML='';
+    const guide=guideFor('3d',tab==='build'?mode:tab);if(guide)body.append(guide);
     if(tab==='build'){
       body.append(el('div',{class:'row'},[['sel','✋ Chọn'],['area','▭ Vùng'],['build','🧱 Đặt'],['erase','🧽 Xóa'],['paint','🎨 Tô'],['pick','💧 Hút'],['zone','🚧 Chặn']].map(([k,n])=>btn(n,()=>{mode=k;draw();},mode===k?'on':'')),btn('↶',doUndo),btn('↷',doRedo),el('span',{id:'cnt3',class:'lbl'},V.size+' khối')));
       if(mode==='zone')body.append(zoneUI());

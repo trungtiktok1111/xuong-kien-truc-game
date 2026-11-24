@@ -1,0 +1,468 @@
+import {outlineLevels} from './outlineLevels.js';
+import {play2D} from './play2d.js';
+import {combineOutline,ellipseLoop,fitShape,outlineShapes,rectangleLoop,cropOutline,moveOutline,corridorLoop,relatedLoops} from './outlineShapes.js';
+import {guideBox,appGuides} from './editorHelp.js';
+import {el,toast,yes} from './util.js';
+
+export const MAX_MAP_SIDE=600;
+export const OUTLINE_STONE={name:'Đường bao · nền đá',tw:16,margin:0,
+ url:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANUlEQVR4nGPsrEz5z0ABYGFgYGB48Pw9WZpv3X7AwESJ7QwMDKMGjBowagAUsDAwQHIVuQAAEyYKaVD5omkAAAAASUVORK5CYII='};
+export {rasterOutline} from './mapCollision.js';
+export function validOutline(loops,w,h){
+ return Array.isArray(loops)&&loops.length<=128&&loops.reduce((n,loop)=>n+(loop?.length||0),0)<=12000&&loops.every(loop=>Array.isArray(loop)&&loop.length>=3&&loop.length<=1500&&loop.every(p=>
+  Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)&&p[0]>=0&&p[0]<=w&&p[1]>=0&&p[1]<=h));
+}
+let outlineClipboard=null;
+export function openOutlineEditor(editor,initialTab='shapes'){
+ const map=editor.map();
+ let W=map.w,H=map.h;
+ const copy=loops=>JSON.parse(JSON.stringify(loops));
+ const original=copy(map.cfg.outline?.loops||[]);
+ let loops=copy(original),pending=[],mode='select',picked=-1,drag=null;
+ const undo=[],redo=[];
+ let placement=null,previewAt=null,selection=null,levelDraft=null,activeTab=initialTab;
+ const originLevel=outlineLevels.find(level=>level.id===map.cfg.outlineTemplate);
+ const levelTiles=new Map();
+ let applyButton,restoreLevelButton,createLabel,tryLabel,commitBusy=false;
+ const ov=el('section',{style:'position:fixed;inset:0;z-index:180;background:#101820f5;overflow:auto;display:grid;place-items:center;padding:16px;touch-action:pan-y'});
+ const box=el('div',{class:'outline-workspace'});
+ const canvas=el('canvas',{width:'760',height:'465',style:'display:block;width:100%;height:auto;background:#141d24;border:1px solid #50606a;touch-action:none'});
+ const c=canvas.getContext('2d'),status=el('p',{class:'hint'}),toolbar=el('div',{class:'row'}),footer=el('div',{class:'row',style:'margin-top:10px'});
+ let s,ox,oy,pan=null;
+ const fitScale=()=>Math.min(720/W,425/H);
+ function fitGrid(){s=fitScale();ox=(760-W*s)/2;oy=(465-H*s)/2;}
+ fitGrid();
+ const xp=x=>ox+x*s,yp=y=>oy+y*s,round=v=>Math.round(v*100)/100;
+ const B=(t,f)=>el('button',{class:'b',type:'button',onclick:f},t);
+ const clamp=(x,y)=>[round(Math.max(0,Math.min(W,x))),round(Math.max(0,Math.min(H,y)))];
+ const operation=el('select',{'aria-label':'Cách đặt hình'},
+  el('option',{value:'add'},'Thêm sàn'),el('option',{value:'cut'},'Khoét lỗ'),el('option',{value:'replace'},'Thay bản nháp'));
+ const snap=el('input',{type:'checkbox'});
+ const scale=el('select',{'aria-label':'Kích thước mẫu'},el('option',{value:'0.9'},'Lớn'),
+  el('option',{value:'0.65'},'Vừa'),el('option',{value:'0.4'},'Nhỏ'),
+  ...[8,16,32,64,128,256,512].map(n=>el('option',{value:''+n},n+' ô')));
+ scale.value='0.9';
+ const angle=el('input',{type:'number',value:0,step:1,'aria-label':'Góc xoay mẫu',class:'outline-num'});
+ const gridWidth=el('input',{type:'number',min:4,max:MAX_MAP_SIDE,value:W,'aria-label':'Rộng bản đồ',class:'outline-num'});
+ const gridHeight=el('input',{type:'number',min:4,max:MAX_MAP_SIDE,value:H,'aria-label':'Cao bản đồ',class:'outline-num'});
+ const sizeLabel=el('span',{class:'hint','aria-live':'polite'});
+ const viewLabel=el('span',{class:'hint'});
+ const gridNote=el('p',{class:'hint outline-grid-note','aria-live':'polite'});
+ const templateTiles=new Map();
+ const angleValue=()=>Number.isFinite(+angle.value)?+angle.value%360:0;
+ function refreshPreview(){if(placement&&!previewAt)previewAt=[W/2,H/2];draw();}
+ function rotateBy(degrees){angle.value=(angleValue()+degrees+360)%360;refreshPreview();}
+ angle.oninput=scale.onchange=refreshPreview;
+ function resizeDraft(w,h){
+  if(!Number.isInteger(w)||!Number.isInteger(h)||w<4||h<4||w>MAX_MAP_SIDE||h>MAX_MAP_SIDE){
+   gridNote.textContent='Nhập số nguyên từ 4 đến 600 cho mỗi chiều.';return false;
+  }
+  if(w===W&&h===H){gridNote.textContent='';return true;}
+  if(!validOutline(loops,w,h)){
+   gridNote.textContent='Khung mới cắt qua đường bao. Hãy dời hình vào trong hoặc chọn số ô lớn hơn.';return false;
+  }
+  record();W=w;H=h;resetGridView();picked=-1;select('select');return true;
+ }
+ function resetGridView(){gridWidth.value=W;gridHeight.value=H;gridNote.textContent='';fitGrid();previewAt=null;}
+ const readGrid=()=>resizeDraft(+gridWidth.value,+gridHeight.value);
+ function zoom(factor,x=380,y=232.5){
+  const next=Math.max(fitScale(),Math.min(Math.max(64,fitScale()),s*factor));
+  if(next===fitScale()){fitGrid();return;}
+  ox=x-(x-ox)*next/s;oy=y-(y-oy)*next/s;s=next;boundView();
+ }
+ function boundView(){
+  ox=Math.max(24-W*s,Math.min(736,ox));oy=Math.max(24-H*s,Math.min(441,oy));
+ }
+ const screen=e=>{const r=canvas.getBoundingClientRect();return [760*(e.clientX-r.left)/r.width,465*(e.clientY-r.top)/r.height];};
+ const width=el('input',{type:'number',min:'1',max:'32',step:'.5',value:'3','aria-label':'Bề rộng hành lang',style:'width:65px'});
+ const corridorWidth=el('label',{},'Rộng ',width,' ô');
+ const modeButtons=new Map();
+ let undoButton,redoButton,copyButton,pasteButton,centerButton;
+ const point=e=>{const [a,b]=screen(e),x=(a-ox)/s,y=(b-oy)/s;return snap.checked||e.shiftKey?clamp(Math.round(x),Math.round(y)):clamp(x,y);};
+ const points=loop=>{c.moveTo(xp(loop[0][0]),yp(loop[0][1]));for(const p of loop.slice(1))c.lineTo(xp(p[0]),yp(p[1]));};
+ function draw(){
+  c.clearRect(0,0,760,465);c.fillStyle='#17212b';c.fillRect(0,0,760,465);
+  c.strokeStyle='#364956';c.lineWidth=1;c.beginPath();
+  const stride=Math.max(1,Math.ceil(10/s));
+  for(let x=Math.max(0,Math.floor(-ox/s/stride)*stride);x<=Math.min(W,(760-ox)/s);x+=stride){
+   c.moveTo(xp(x),yp(0));c.lineTo(xp(x),yp(H));
+  }
+  for(let y=Math.max(0,Math.floor(-oy/s/stride)*stride);y<=Math.min(H,(465-oy)/s);y+=stride){
+   c.moveTo(xp(0),yp(y));c.lineTo(xp(W),yp(y));
+  }
+  c.stroke();c.strokeRect(ox,oy,W*s,H*s);
+  sizeLabel.textContent=W+' × '+H+' ô';
+  viewLabel.textContent=Math.round(s/fitScale()*100)+'%';
+  for(const [id,tile] of levelTiles)tile.setAttribute('aria-pressed',String(id===levelDraft?.id));
+  if(applyButton)applyButton.disabled=commitBusy||!!levelDraft;
+  if(restoreLevelButton)restoreLevelButton.hidden=!(levelDraft||originLevel);
+  levelActions.hidden=!levelDraft;
+  if(createLabel){createLabel.hidden=tryLabel.hidden=!!levelDraft&&activeTab==='levels';}
+  if(levelDraft)levelHint.textContent=levelDraft.description;
+  else levelHint.textContent='Bấm một màn để xem bố cục, chơi thử hoặc tạo bản sao.';
+  for(const [id,tile] of templateTiles)tile.setAttribute('aria-pressed',String(id===placement?.template?.id));
+  c.beginPath();
+  for(const loop of loops){points(loop);c.closePath();}
+  c.fillStyle='#607c75';c.fill('evenodd');
+  for(let i=0;i<loops.length;i++){
+   c.beginPath();points(loops[i]);c.closePath();c.strokeStyle=i===picked?'#f5c86e':'#b7d3c5';c.lineWidth=i===picked?2:1;c.stroke();
+   if(i===picked)for(const [x,y] of loops[i]){c.fillStyle='#ffda91';c.fillRect(xp(x)-1.5,yp(y)-1.5,3,3);}
+  }
+  if(levelDraft){
+   for(const [p,label,color] of [[levelDraft.start,'A','#a9ecbf'],[levelDraft.goal,'B','#f5c36d']]){
+    const x=xp(p[0]+.5),y=yp(p[1]+.5);
+    c.beginPath();c.arc(x,y,9,0,Math.PI*2);c.fillStyle=color;c.fill();
+    c.fillStyle='#18252b';c.font='bold 11px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText(label,x,y);
+   }
+  }
+  function ghost(shape,tint='#8abbaa55'){
+   c.beginPath();for(const loop of shape){if(loop.length){points(loop);c.closePath();}}
+   c.fillStyle=tint;c.fill('evenodd');c.strokeStyle='#e9b865';c.stroke();
+  }
+  if(selection){
+   c.save();c.setLineDash([5,3]);ghost([rectangleLoop(...selection)],'#6cb2de25');c.restore();
+  }
+  const preview=placement&&atPosition(previewAt||[W/2,H/2]);
+  if(previewAt&&preview?.length)ghost(preview);
+  if(pending.length){
+   if(mode==='polygon'){
+    c.beginPath();points(pending);c.strokeStyle='#e9b865';c.stroke();
+    for(const [x,y] of pending){c.fillStyle='#e9b865';c.fillRect(xp(x)-2,yp(y)-2,4,4);}
+   }else if(pending.length===2){
+    const preview=dragLoop(pending[0],pending[1]);
+    if(preview.length)ghost([preview],operation.value==='cut'&&mode!=='corridor'?'#ed8f8166':'#8abbaa66');
+   }
+  }
+  const op=operation.selectedOptions[0].textContent;
+  status.textContent=placement?(placement.name+' · '+angleValue()+'° · '+
+   (preview.length?'Bấm để đặt. Q/E xoay 15°. Esc để thoát.':'Hình vượt lưới. Hãy chọn cỡ khác, đổi góc hoặc mở rộng lưới.')) :
+   mode==='scan'?'Kéo quét phần sàn muốn lấy rồi bấm Sao chép hoặc Ctrl+C.':
+   mode==='corridor'?'Kéo từ bên trong phòng này tới bên trong phòng kia để nối.':
+   mode==='polygon'?op+' · Bấm từng đỉnh, nhấn Enter hoặc bấm Khép đường.':
+   mode==='ellipse'||mode==='rect'?op+' · Kéo từ một góc sang góc đối diện, rồi nhả chuột.':
+   mode==='move'?'Kéo mép để di chuyển cả hình và các lỗ bên trong.':
+   levelDraft?levelDraft.name+' · A xuất phát · B đích · Tạo màn mới để đưa vào dự án.':
+   'Kéo mẫu từ bên phải vào mặt bằng, hoặc bấm mẫu rồi bấm vị trí đặt.';
+  corridorWidth.hidden=mode!=='corridor';
+  if(copyButton)copyButton.disabled=!selection;
+  if(pasteButton)pasteButton.disabled=!outlineClipboard;
+  if(centerButton){centerButton.hidden=!placement;centerButton.disabled=!!placement&&!preview.length;}
+  for(const [name,button] of modeButtons)button.setAttribute('aria-pressed',String(name===mode));
+  if(undoButton)undoButton.disabled=!undo.length;
+  if(redoButton)redoButton.disabled=!redo.length;
+ }
+ function dragLoop(a,b){
+  if(mode==='corridor')return corridorLoop(a,b,Math.max(1,Math.min(32,Number(width.value)||3))/2);
+  const rx=Math.abs(b[0]-a[0])/2,ry=Math.abs(b[1]-a[1])/2;
+  if(rx<.25||ry<.25)return [];
+  if(mode==='rect')return [a,[b[0],a[1]],b,[a[0],b[1]]];
+  return ellipseLoop((a[0]+b[0])/2,(a[1]+b[1])/2,rx,ry);
+ }
+ function select(next){pending=[];placement=null;previewAt=null;selection=null;mode=next;draw();}
+ function draft(previous=loops){return {loops:copy(previous),w:W,h:H,level:levelDraft,front:front.value,rear:rear.value,collision:collision.checked};}
+ function record(previous=loops){undo.push(draft(previous));if(undo.length>40)undo.shift();redo.length=0;}
+ function travel(from,to){
+  if(!from.length)return;
+  to.push(draft());const next=from.pop();
+  const resized=next.w!==W||next.h!==H;
+  loops=next.loops;W=next.w;H=next.h;levelDraft=next.level;front.value=next.front;rear.value=next.rear;collision.checked=next.collision;
+  if(resized)resetGridView();
+  picked=-1;select('select');
+ }
+ function add(shape,choice=operation.value,keep=false){
+  try{
+   const next=(choice==='replace'?shape:combineOutline(loops,shape,choice))
+    .map(loop=>loop.map(([x,y])=>clamp(x,y)));
+   if(!validOutline(next,W,H))throw Error('Hình quá phức tạp hoặc vượt khung.');
+   if(JSON.stringify(loops)===JSON.stringify(next)){toast('Hình nằm ngoài vùng cần sửa hoặc sàn đã phủ khu này.');select('select');return;}
+   record();loops=next;picked=-1;if(keep)draw();else select('select');
+  }catch(e){toast(e.message||'Không ghép được hình.');}
+ }
+ function armTemplate(shape){
+  select('select');placement={name:shape.name,template:shape};refreshPreview();
+ }
+ function atPosition(p){
+  const m=placement;
+  if(!m)return [];
+  const origin=m.template?[0,0]:m.origin;
+  const d=angleValue()*Math.PI/180,c=Math.cos(d),s=Math.sin(d);
+  const size=Number(scale.value);
+  let shape=m.template?fitShape(m.template,size>=1?size:Math.min(W,48)*size,size>=1?size:Math.min(H,48)*size):m.loops;
+  if(m.template){
+   const pts=shape.flat(),xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+   const x=(Math.min(...xs)+Math.max(...xs))/2,y=(Math.min(...ys)+Math.max(...ys))/2;
+   const extent=Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys));
+   const unit=size>=1?size/extent:1;
+   shape=shape.map(loop=>loop.map(([a,b])=>[(a-x)*unit,(b-y)*unit]));
+  }
+  shape=shape.map(loop=>loop.map(([x,y])=>[
+   origin[0]+c*(x-origin[0])-s*(y-origin[1]),origin[1]+s*(x-origin[0])+c*(y-origin[1])]));
+  const pts=shape.flat(),xs=pts.map(v=>v[0]),ys=pts.map(v=>v[1]);
+  const ratio=Math.min(W/(Math.max(...xs)-Math.min(...xs)),H/(Math.max(...ys)-Math.min(...ys)));
+  if(ratio<1){
+   if(!m.template||size>=1)return [];
+   shape=shape.map(loop=>loop.map(([x,y])=>[x*ratio,y*ratio]));
+  }
+  return moveOutline(shape,p[0]-origin[0],p[1]-origin[1],W,H);
+ }
+ function commitPlacement(p){
+  const shape=atPosition(p);if(!shape.length){toast('Hình vượt lưới ở góc này. Hãy đổi góc, đổi cỡ hoặc mở rộng lưới.');return;}
+  add(shape,placement.template?operation.value:'add',!placement.template);
+ }
+ function copyScan(){
+  if(!selection)return;
+  const [a,b]=selection,part=cropOutline(loops,a,b);
+  if(!part.length){toast('Vùng quét chưa có sàn để sao chép.');return;}
+  outlineClipboard={name:'Vùng đã sao chép',loops:part,origin:[(a[0]+b[0])/2,(a[1]+b[1])/2]};
+  draw();toast('Đã sao chép vùng. Bấm Dán hoặc Ctrl+V rồi chọn vị trí.');
+ }
+ function armClipboard(){
+  if(!outlineClipboard)return;
+  select('select');placement=outlineClipboard;draw();
+ }
+ function transformPicked(factor,angle){
+  const group=relatedLoops(loops,picked);if(!group.length){toast('Bấm mép để chọn hình trước.');return;}
+  const pts=loops[picked],xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+  const x=(Math.min(...xs)+Math.max(...xs))/2,y=(Math.min(...ys)+Math.max(...ys))/2;
+  const c=Math.cos(angle)*factor,s=Math.sin(angle)*factor;
+  const next=copy(loops);
+  for(const i of group)next[i]=loops[i].map(([a,b])=>[round(x+c*(a-x)-s*(b-y)),round(y+s*(a-x)+c*(b-y))]);
+  if(!validOutline(next,W,H)){toast('Hình vượt khung. Hãy dời hình vào trong trước.');return;}
+  record();loops=next;draw();
+ }
+ function finish(){if(pending.length<3){toast('Cần ít nhất ba đỉnh.');return;}add([pending.slice()]);}
+ function nearest(p){
+  let best=null,dist=10/s;
+  for(let i=0;i<loops.length;i++)for(let j=0;j<loops[i].length;j++){
+   const a=loops[i][j],b=loops[i][(j+1)%loops[i].length],dx=b[0]-a[0],dy=b[1]-a[1],length=dx*dx+dy*dy;
+   const t=length?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/length)):0;
+   const d=Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);
+   if(d<dist){dist=d;best=[i,t>.5?(j+1)%loops[i].length:j];}
+  }
+  return best;
+ }
+ canvas.onpointerdown=e=>{
+  if(e.button===1){
+   e.preventDefault();pan=screen(e);canvas.setPointerCapture?.(e.pointerId);return;
+  }
+  if(e.button!=null&&e.button!==0)return;
+  box.focus({preventScroll:true});
+  const p=point(e);
+  if(placement){commitPlacement(p);return;}
+  if(mode==='polygon'){pending.push(p);draw();return;}
+  if(mode==='scan'){drag={start:p,scan:true};selection=[p,p];}
+  else if(['ellipse','rect','corridor'].includes(mode)){drag={start:p};pending=[p,p];}
+  else{
+   const q=nearest(p);picked=q?q[0]:-1;
+   drag=q?{index:q,start:p,old:copy(loops),move:mode==='move'}:null;
+  }
+  if(drag)canvas.setPointerCapture?.(e.pointerId);
+  draw();
+ };
+ canvas.onpointermove=e=>{
+  if(pan){
+   const next=screen(e);ox+=next[0]-pan[0];oy+=next[1]-pan[1];pan=next;boundView();draw();return;
+  }
+  const p=point(e);
+  if(placement){previewAt=p;draw();return;}
+  if(!drag)return;
+  if(drag.scan){selection=[drag.start,p];draw();return;}
+  if(drag.index){
+   const [i,j]=drag.index;
+   if(drag.move){
+    const group=relatedLoops(drag.old,i),moved=moveOutline(group.map(k=>drag.old[k]),
+      p[0]-drag.start[0],p[1]-drag.start[1],W,H);
+    for(let j=0;j<group.length;j++)loops[group[j]]=moved[j].map(pt=>clamp(...pt));
+   }else loops[i][j]=p;
+  }else pending=[drag.start,p];
+  draw();
+ };
+ canvas.onpointerup=e=>{
+  if(pan){pan=null;return;}
+  const p=point(e),d=drag;drag=null;
+  if(!d)return;
+  if(d.scan){selection=[d.start,p];draw();return;}
+  if(d.index){
+   if(JSON.stringify(d.old)!==JSON.stringify(loops))record(d.old);
+   draw();return;
+  }
+  pending=[];const loop=dragLoop(d.start,p);
+  if(loop.length)add(mode==='corridor'?cropOutline([loop],[0,0],[W,H]):[loop],mode==='corridor'?'add':operation.value);else draw();
+ };
+ canvas.onpointerleave=()=>{if(placement){previewAt=null;draw();}};
+ canvas.onwheel=e=>{e.preventDefault();zoom(e.deltaY<0?1.25:.8,...screen(e));if(placement)previewAt=point(e);draw();};
+ canvas.onpointercancel=()=>{pan=null;if(drag?.old)loops=drag.old;drag=null;pending=[];draw();};
+ box.onkeydown=e=>{
+   if(e.target?.matches('input,select,textarea'))return;
+   if(e.key==='Enter'&&mode==='polygon'&&e.target.tagName!=='BUTTON'){e.preventDefault();finish();}
+   else if(placement&&!e.ctrlKey&&!e.metaKey&&['q','e'].includes(e.key.toLowerCase())){
+    e.preventDefault();rotateBy(e.key.toLowerCase()==='q'?-15:15);
+   }
+   else if(e.key==='Escape'&&placement){e.preventDefault();select('select');}
+   else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'&&selection){e.preventDefault();copyScan();}
+   else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'&&outlineClipboard){e.preventDefault();armClipboard();}
+   else if(e.key==='Escape'&&(pending.length||drag)){e.preventDefault();canvas.onpointercancel();}
+   else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){
+    e.preventDefault();e.shiftKey?travel(redo,undo):travel(undo,redo);
+   }
+ };
+ box.tabIndex=-1;
+ operation.onchange=draw;
+ const front=el('input',{type:'number',min:'0',max:'4',step:'.05',value:map.cfg.outline?.front??.375,style:'width:68px'});
+ const rear=el('input',{type:'number',min:'0',max:'4',step:'.05',value:map.cfg.outline?.rear??1.1,style:'width:68px'});
+ const collision=el('input',{type:'checkbox'});collision.checked=true;
+ for(const [key,label] of [['select','Chỉnh điểm'],['move','Di chuyển đường'],['polygon','Đa giác'],['rect','Chữ nhật'],['ellipse','Hình elip'],['scan','Quét chọn'],['corridor','Nối hành lang']]){
+  const button=B(label,()=>select(key));modeButtons.set(key,button);toolbar.append(button);
+ }
+ toolbar.append(B('Khép đường',finish),
+  B('Xóa đường đã chọn',()=>{if(picked>=0){record();loops.splice(picked,1);picked=-1;draw();}}));
+ copyButton=B('Sao chép',copyScan);pasteButton=B('Dán',armClipboard);
+ centerButton=B('Đặt giữa',()=>commitPlacement([W/2,H/2]));
+ toolbar.append(copyButton,pasteButton,corridorWidth,centerButton);
+ const editShape=el('details',{},el('summary',{},'Chỉnh hình đã chọn'),
+  el('p',{class:'hint'},'Bấm mép để chọn hình. Di chuyển, xoay và đổi cỡ giữ cả lỗ bên trong.'),
+  el('div',{class:'row'},B('Thu nhỏ',()=>transformPicked(.8,0)),B('Phóng lớn',()=>transformPicked(1.25,0)),
+   B('Xoay trái 90°',()=>transformPicked(1,-Math.PI/2)),B('Xoay phải 90°',()=>transformPicked(1,Math.PI/2))));
+ undoButton=B('Hoàn tác',()=>travel(undo,redo));redoButton=B('Làm lại',()=>travel(redo,undo));
+ const setup=el('div',{class:'row outline-setup'},el('label',{},'Cách đặt ',operation),el('label',{},snap,' Bám 1 ô'),
+  undoButton,redoButton,B('Khôi phục lúc mở',()=>{
+   record();loops=copy(original);W=map.w;H=map.h;levelDraft=null;
+   front.value=map.cfg.outline?.front??.375;rear.value=map.cfg.outline?.rear??1.1;collision.checked=true;
+   resetGridView();picked=-1;select('select');
+  }));
+ const presets=el('select',{'aria-label':'Cỡ lưới nhanh'},el('option',{value:''},'Cỡ nhanh'),
+  ...[[32,24],[48,36],[64,48],[128,96],[256,192],[512,384],[600,600]].map(([w,h])=>
+   el('option',{value:w+'x'+h},w+' × '+h)));
+ presets.onchange=()=>{
+  if(!presets.value)return;
+  [gridWidth.value,gridHeight.value]=presets.value.split('x');readGrid();presets.value='';
+ };
+ const gridSetup=el('form',{class:'row outline-grid-size',novalidate:''},
+  el('strong',{},'Lưới'),el('label',{},'Rộng ',gridWidth),el('label',{},'Cao ',gridHeight),
+  el('button',{class:'b',type:'submit'},'Đổi số ô'),presets);
+ gridSetup.onsubmit=e=>{e.preventDefault();readGrid();};
+ const viewTools=el('div',{class:'row outline-view-tools'},sizeLabel,
+  B('−',()=>{zoom(.8);previewAt=null;draw();}),viewLabel,B('+',()=>{zoom(1.25);previewAt=null;draw();}),
+  B('Vừa lưới',()=>{fitGrid();previewAt=null;draw();}),el('span',{class:'hint'},'Cuộn để zoom · Giữ và kéo chuột giữa'));
+ const groups=['Tất cả','Phòng','Sân và thành','Lối đi'];
+ const category=el('select',{'aria-label':'Nhóm mẫu'},...groups.map(v=>el('option',{value:v},v)));
+ const patterns=el('div',{class:'outline-patterns'});
+ category.onchange=()=>{
+  for(const shape of outlineShapes)templateTiles.get(shape.id).hidden=category.value!=='Tất cả'&&shape.group!==category.value;
+  patterns.scrollTop=0;
+ };
+ for(const shape of outlineShapes){
+  const icon=el('canvas',{width:76,height:47,'aria-hidden':'true'}),ctx=icon.getContext('2d');
+  ctx.beginPath();
+  for(const loop of fitShape({...shape,square:true},76,47,.97)){
+   ctx.moveTo(...loop[0]);for(const pt of loop.slice(1))ctx.lineTo(...pt);ctx.closePath();
+  }
+  ctx.fillStyle='#71978b';ctx.fill('evenodd');ctx.strokeStyle='#b3d9c6';ctx.stroke();
+  const tile=el('button',{type:'button',class:'outline-template',draggable:'true','data-template':shape.id,
+     onclick:()=>armTemplate(shape)},icon,el('span',{},shape.name));
+  tile.ondragstart=e=>{
+   armTemplate(shape);
+   e.dataTransfer?.setData('application/x-outline-template',shape.id);
+   if(e.dataTransfer)e.dataTransfer.effectAllowed='copy';
+  };
+  tile.ondragend=()=>{previewAt=null;draw();};
+  templateTiles.set(shape.id,tile);patterns.append(tile);
+ }
+ canvas.ondragover=e=>{
+  if(!placement?.template)return;
+  e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='copy';
+  previewAt=point(e);draw();
+ };
+ canvas.ondragleave=()=>{previewAt=null;draw();};
+ canvas.ondrop=e=>{
+  const id=e.dataTransfer?.getData('application/x-outline-template');
+  if(!placement?.template||id!==placement.template.id)return;
+  e.preventDefault();commitPlacement(point(e));
+ };
+ const shapePanel=el('div',{class:'outline-shape-panel'},
+  el('div',{class:'row'},category,el('label',{},'Cỡ ',scale)),
+  el('div',{class:'row outline-rotation'},el('label',{},'Góc ',angle,'°'),
+   B('−90°',()=>rotateBy(-90)),B('+90°',()=>rotateBy(90))),
+  patterns);
+ function loadLevel(level){
+  if(!level||commitBusy)return;
+  record();levelDraft=level;loops=copy(level.loops);W=level.w;H=level.h;
+  front.value=.375;rear.value=1.1;collision.checked=true;
+  resetGridView();picked=-1;select('select');
+ }
+ const levelHint=el('p',{class:'hint'},'Bấm một màn để xem bố cục, chơi thử hoặc tạo bản sao.');
+ const levelCards=el('div',{class:'outline-levels'});
+ const levelGroup=el('select',{'aria-label':'Nhóm màn mẫu'},
+  ...['Tất cả',...new Set(outlineLevels.map(level=>level.group))].map(v=>el('option',{value:v},v)));
+ levelGroup.onchange=()=>{
+  for(const level of outlineLevels)levelTiles.get(level.id).hidden=levelGroup.value!=='Tất cả'&&level.group!==levelGroup.value;
+  levelCards.scrollTop=0;
+ };
+ for(const level of outlineLevels){
+  const icon=el('canvas',{width:92,height:58,'aria-hidden':'true'}),ctx=icon.getContext('2d');
+  const z=Math.min(86/level.w,52/level.h),x=(92-level.w*z)/2,y=(58-level.h*z)/2;
+  const project=([a,b])=>[x+a*z,y+b*z];
+  ctx.beginPath();
+  for(const loop of level.loops){ctx.moveTo(...project(loop[0]));for(const pt of loop.slice(1))ctx.lineTo(...project(pt));ctx.closePath();}
+  const colors={'Hầm ngục':'#7f9aa7','Sân và thành':'#8baa8f','Cầu và lối đi':'#b69978'};
+  ctx.fillStyle=colors[level.group];ctx.fill('evenodd');ctx.strokeStyle='#d4dedc';ctx.stroke();
+  for(const [p,color] of [[level.start,'#b0f2bc'],[level.goal,'#ffcc7b']]){
+   ctx.beginPath();ctx.arc(...project(p),2.3,0,2*Math.PI);ctx.fillStyle=color;ctx.fill();
+  }
+  const card=el('button',{type:'button',class:'outline-template','data-level':level.id,onclick:()=>loadLevel(level)},
+   icon,el('strong',{},level.name),el('small',{},level.w+' × '+level.h+' ô'));
+  levelTiles.set(level.id,card);levelCards.append(card);
+ }
+ restoreLevelButton=B('Nạp lại mẫu gốc',()=>loadLevel(levelDraft||originLevel));
+ const levelActions=el('div',{class:'row outline-level-actions'},
+  B('Chơi thử mẫu',playDraft),B('Tạo bản sao',createDraft));
+ const levelPanel=el('div',{class:'outline-level-panel'},el('div',{class:'row'},levelGroup,restoreLevelButton),levelHint,levelActions,levelCards);
+ const shapesTab=B('Mảnh ghép',()=>{setTab('shapes');draw();}),levelsTab=B('Màn mẫu · '+outlineLevels.length,()=>{setTab('levels');draw();});
+ function setTab(tab){
+  activeTab=tab;const levels=tab==='levels';levelPanel.hidden=!levels;shapePanel.hidden=levels;
+  levelsTab.setAttribute('aria-pressed',String(levels));shapesTab.setAttribute('aria-pressed',String(!levels));
+ }
+ const library=el('aside',{class:'outline-library'},el('div',{class:'row'},shapesTab,levelsTab),shapePanel,levelPanel);
+ setTab(initialTab);
+ footer.append(el('label',{},'Tường trước ',front),el('label',{},'Tường sau ',rear),el('label',{},collision,' Cập nhật vùng chặn'));
+ const buttons=el('div',{class:'row outline-actions'});
+ const outlineData=()=>({loops:copy(loops),front:+front.value,rear:+rear.value});
+ async function runAction(action,close){
+  if(commitBusy||!readGrid())return;
+  commitBusy=true;
+  const actions=[...buttons.children,...levelActions.children];actions.forEach(b=>{b.disabled=true;});
+  try{await action();if(close)ov.remove();}
+  catch(e){toast(e.message);}
+  finally{commitBusy=false;actions.forEach(b=>{b.disabled=false;});draw();}
+ }
+ applyButton=B('Áp dụng vào bản đồ',()=>runAction(async()=>{
+  if(levelDraft)throw Error('Bấm Tạo màn mới để lưu bản sao mẫu.');
+  if(!loops.length&&original.length)throw Error('Hãy tạo đường bao hoặc dùng Bỏ lớp đường bao.');
+  if(!loops.length&&W===map.w&&H===map.h)throw Error('Hãy tạo đường bao hoặc đổi số ô.');
+  if(loops.length)await editor.applyOutline(outlineData(),collision.checked,W,H);
+  else editor.resizeOutlineGrid(W,H);
+ },true));
+ function createDraft(){
+  return runAction(async()=>{
+   if(!loops.length)throw Error('Hãy tạo đường bao hoặc chọn một màn mẫu.');
+   await editor.newOutlineMap(outlineData(),W,H,levelDraft);
+  },true);
+ }
+ function playDraft(){
+  return runAction(async()=>{
+   const data=await editor.previewOutlineMap(outlineData(),W,H,levelDraft);
+   const back=()=>{ov.hidden=false;ov.style.display='grid';box.focus();};
+   ov.hidden=true;ov.style.display='none';
+   try{play2D({...data,escapeExit:true,onExit:back});}
+   catch(e){back();throw e;}
+  },false);
+ }
+ createLabel=B('Tạo màn mới từ hình này',createDraft);
+ tryLabel=B('Chơi thử bản nháp',playDraft);
+ buttons.append(applyButton,createLabel,tryLabel,B('Bỏ lớp đường bao',async()=>{if(!map.cfg.outline||!await yes('Bỏ lớp tường và mép cong của màn hiện tại?'))return;editor.clearOutline();ov.remove();}),
+ B('Đóng',()=>ov.remove()));
+ box.append(el('h2',{},'Đường bao bản đồ'),guideBox('outline',appGuides.outline),setup,toolbar,
+  el('div',{class:'outline-layout'},el('div',{},gridSetup,gridNote,viewTools,canvas,status),library),
+  editShape,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons);
+ ov.append(box);document.body.append(ov);draw();
+}

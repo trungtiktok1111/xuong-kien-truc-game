@@ -1,3 +1,4 @@
+import {guideBox,appGuides} from './editorHelp.js';
 import {zRaster,decoZones} from './zones.js';
 // Kiểm tra game theo luật của skill html5-game-studio (kiem-thu.md mục 7, cong-kiem.md, SKILL.md luật 7/9/10)
 // Trạng thái: pass | missing | broken | not_assessed  (không có "đạt giả")
@@ -126,7 +127,7 @@ export function openCheck(o){
     const head=el('div',{style:'padding:10px;border-radius:10px;background:#16202b;margin:6px 0'},
       el('div',{style:'font-weight:700;font-size:16px'},'Máy tự kiểm: '+apass+'/'+auto.length+' đạt'+(auto.some(r=>r.st==='broken'||r.st==='missing')?' — còn lỗi':'')),
       el('div',{style:'opacity:.8;margin-top:4px'},'✅ '+c.pass+' · ❌ '+c.missing+' · 🔴 '+c.broken+' · ⚪ '+c.not_assessed+' chưa kiểm. Mục ⚪ là kết quả đúng, không phải thất bại: máy không xét được.'));
-    body.append(sel,head);
+    body.append(guideBox('check',appGuides.check),sel,head);
     for(const r of rows)body.append(el('div',{style:'padding:8px 10px;margin:4px 0;border-radius:8px;background:'+(r.st==='broken'||r.st==='missing'?'#3a1d22':'#16202b')},
       el('div',{},ICON[r.st]+' ['+r.id+'] '+r.txt+'  — '+LBL[r.st]),r.why?el('div',{style:'opacity:.7;font-size:13px;margin-top:2px'},r.why):''));
     body.append(el('div',{style:'opacity:.7;font-size:12px;margin:8px 0'},'Kiểm bằng logic trên dữ liệu (BFS đường đi, vùng chặn, thông số), chưa phải chơi thật. Luật: không có bằng chứng thì không báo đạt.'));

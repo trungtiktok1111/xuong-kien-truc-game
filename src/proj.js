@@ -16,7 +16,7 @@ export async function ensureAngle(sheets){let miss=[];
 export function sprOf(e,sh,ang){
   if(!sh)return null;
   if(!ang)return {img:sh.img,tw:sh.tw,cols:sh.cols,margin:sh.margin||0,sc:e.sc,oy:e.oy||0};
-  const A=sh.A;if(!A)return null;
+  const A=sh.A;if(!A)return sh.img&&!sh.iso?{img:sh.img,tw:sh.tw,cols:sh.cols,margin:sh.margin||0,sc:e.sc,oy:e.oy||0}:null;
   return {img:A.img,tw:A.tw,cols:A.cols,margin:0,sc:A.sc,oy:((e.oy||0)*sh.tw+A.dA-A.dI)/A.tw};}
 /* ô sàn Angle: (X,Y) = góc trái-trên của mặt trên ô; cw = bề rộng ô trên màn hình */
 export function tileAng(cx,A,idx,X,Y,cw){if(!A||!A.img)return;const k=cw/A.tw,sx=(idx%A.cols)*A.tw,sy=Math.floor(idx/A.cols)*A.th;

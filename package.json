@@ -1,10 +1,11 @@
 {
   "name": "ed",
-  "version": "1.0.0",
-  "description": "",
+  "version": "13.0.0",
+  "description": "Xưởng Kiến Trúc Game",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "esbuild tests/map-collision.test.js --bundle --platform=node --format=cjs --outfile=dist/map-collision.test.cjs && node --test dist/map-collision.test.cjs",
+    "build": "bash build.sh"
   },
   "keywords": [],
   "author": "",
@@ -12,6 +13,8 @@
   "dependencies": {
     "esbuild": "^0.28.2",
     "fflate": "^0.8.3",
+    "node-unrar-js": "^2.0.2",
+    "polygon-clipping": "^0.15.7",
     "three": "^0.187.0"
   }
 }

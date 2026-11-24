@@ -2,8 +2,14 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
-## Chạy nhanh (không cần cài gì)
-Tải `index.html` về, mở bằng Chrome. App chạy hoàn toàn trong trình duyệt, không cần máy chủ.
+## V13
+- Giữ 28 mảnh ghép có thể xoay, 12 màn mẫu chơi thử được và lưới tùy chỉnh theo từng chiều đến 600 ô. Trong **Màn mẫu**, dùng **Tạo bản sao** hoặc **Nạp lại mẫu gốc** để thử bố cục khác.
+- Chân nhân vật bị chặn theo đường bao sàn, kể cả mép cong và sân trong. Lớp kiểm tra va chạm trong trình biên tập và chế độ chơi dùng cùng đường bao. Ô chặn đặt thủ công phía trong sàn và collider riêng của đạo cụ vẫn có hiệu lực.
+- Màn đường bao cũ có đủ mặt nạ ô chặn ngoại vi được nhận dạng tự động. Tùy chọn **Cập nhật vùng chặn** xác định cách áp dụng va chạm cho lần lưu đường bao mới.
+- [Phân tích Kenney Dungeon và quy trình dựng gói độc lập](docs/Phan-Tich-Kenney-Dungeon-va-Quy-Trinh-Tao-Goi-Doc-Lap.md).
+
+## Chạy nhanh
+Mở `index.html` sau khi dựng. Khi cần nạp các gói tài nguyên nằm ngoài tệp HTML, chạy `python3 -m http.server 8000` ở thư mục gốc repo và mở `http://localhost:8000`.
 
 ## Dữ liệu người dùng nằm ở đâu
 Mẫu 2D, bản đồ, tài nguyên đã nạp lưu trong **trình duyệt** (IndexedDB, kho `thk_store`), **không nằm trong kho này**. Muốn chuyển sang máy/AI khác: dùng nút sao lưu trong app (tab "🏠 Mẫu 2D" có Sao lưu/Khôi phục) rồi nạp lại.
@@ -22,10 +28,11 @@ Mẫu 2D, bản đồ, tài nguyên đã nạp lưu trong **trình duyệt** (In
 
 ## Dựng lại từ mã nguồn
 ```
-npm install
-bash build.sh   # esbuild → index.html
+npm ci
+npm run build   # esbuild → index.html
+npm test        # kiểm thử hình học vùng chặn
 ```
-Lưu ý: `build.sh` đang ghi cứng đường dẫn `/home/claude/ed`; đổi sang thư mục của bạn khi chạy ở nơi khác.
+
 
 ## Quy ước kỹ thuật cần biết (cho AI/người tiếp tục)
 - Hình học chéo: màn hình = (ox+(x−y)·D, oy+(x+y)·D/2); neo vật thể = góc dưới ô (x+1,y+1).

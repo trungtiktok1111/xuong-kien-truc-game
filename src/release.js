@@ -1,3 +1,4 @@
+import {guideBox,appGuides} from './editorHelp.js';
 import {zipSync,strToU8} from 'fflate';
 import {el,toast,saveFile,lsGet,lsSet,gameHTML,SELF,pickFile} from './util.js';
 import {gateFilled,gateOff} from './check.js';
@@ -55,7 +56,7 @@ export function openRelease(o){
   const prev=el('div',{});function pv(){prev.textContent='';const c=art(512,250,true);c.style.cssText='width:100%;max-width:420px;border-radius:10px;display:block;margin:6px 0';prev.append(c);}
   const iconBtn=el('button',{style:btnCss,onclick:()=>pickFile('image/*',(u)=>{const i=new Image();i.onload=()=>{iconImg=i;pv();toast('Đã dùng ảnh của bạn làm icon');};i.src=u;},false)},'🖼 Dùng ảnh của bạn làm icon','Bỏ trống: app tự vẽ icon từ tên game');
   const refresh=el('button',{style:btnCss+';text-align:center',onclick:pv},'↻ Xem trước ảnh bìa');
-  const gf=gateFilled();ov.append(el('div',{style:'font:700 18px system-ui;margin-bottom:8px'},'🚀 Phát hành game'),(gf<7&&!gateOff())?el('div',{style:'padding:10px;border-radius:10px;background:#4a2a14;margin-bottom:8px;font-size:13px;line-height:1.5'},'⚠️ Phiếu cổng 1 mới điền '+gf+'/7 ô (bấm ✅ Kiểm tra để điền). Theo quy trình skill: chưa qua cổng 1 và cổng 2 (thị trường, pháp lý, xếp hạng tuổi, bảng giấy phép, thuế) thì chưa nên nộp cửa hàng hay bật quảng cáo. Gói tạo ra ở đây chỉ để thử.'):'',
+  const gf=gateFilled();ov.append(el('div',{style:'font:700 18px system-ui;margin-bottom:8px'},'🚀 Phát hành game'),guideBox('release',appGuides.release),(gf<7&&!gateOff())?el('div',{style:'padding:10px;border-radius:10px;background:#4a2a14;margin-bottom:8px;font-size:13px;line-height:1.5'},'⚠️ Phiếu cổng 1 mới điền '+gf+'/7 ô (bấm ✅ Kiểm tra để điền). Theo quy trình skill: chưa qua cổng 1 và cổng 2 (thị trường, pháp lý, xếp hạng tuổi, bảng giấy phép, thuế) thì chưa nên nộp cửa hàng hay bật quảng cáo. Gói tạo ra ở đây chỉ để thử.'):'',
     el('div',{class:'lbl'},'Loại game'),kindSel,inp('name','Tên game'),inp('studio','Tên tác giả / studio'),inp('short','Mô tả ngắn (≤80 ký tự)'),inp('long','Mô tả đầy đủ (tuỳ chọn)','',1),inp('ver','Phiên bản'),inp('pkg','Mã gói (vd com.studio.game) — để trống: tự tạo'),inp('color','Màu chủ đạo (vd #1b2a3a)'),inp('site','Email/website liên hệ (cho chính sách riêng tư)'),inp('credit','Ghi công thêm (gói tài nguyên khác bạn đã nạp)','',1),
     iconBtn,refresh,prev,
     el('div',{style:'font:700 15px system-ui;margin:12px 0 4px'},'Tạo gói (mỗi nút ra 1 file .zip)'),

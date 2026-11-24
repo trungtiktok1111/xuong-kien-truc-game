@@ -51,6 +51,8 @@ export function createLogic(cfg,ents,host,ov){
       fired[r.id]=1;run(r.do);}
     if(t!=='var')fire('var');
     depth--;}
+  L.snapshot=()=>({vars:{...vars},fired:{...fired},was:{...was}});
+  L.restore=s=>{Object.assign(vars,s.vars);Object.assign(fired,s.fired);Object.assign(was,s.was);refresh();};
   L.fire=fire;L.run=run;L.fmt=fmt;L.refresh=refresh;
   // hội thoại
   L.talk=(npc,after)=>{const d=npc.dlg;if(!d||!d.nodes||!d.nodes.length)return false;

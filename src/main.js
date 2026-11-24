@@ -1,3 +1,7 @@
+import {toggleShortcutHelp} from './editorHelp.js';
+import {el,saveFile} from './util.js';
+import {openOutlineEditor} from './outlineEditor.js';
+import {openStudio,runStudio} from './studio.js';
 import {$,SELF,guessTile} from './util.js';window.__guess=guessTile;import('./anim.js').then(x=>{window.__fg=x.findGrid;});
 import {init2D} from './ed2d.js';
 import {init3D} from './ed3d.js';
@@ -13,7 +17,7 @@ if(G){
   $('#app').style.display='none';document.body.style.background='#10161d';
   if(G.kind==='3d')play3D(G);
   else{const sheets=A.sheets.map(s=>Object.assign({},s)).concat((G.custom||[]).map(s=>Object.assign({},s)));
-    Promise.all(sheets.map(s=>new Promise(r=>{const i=new Image();i.onload=()=>{s.img=i;s.cols=Math.floor((i.width+s.margin)/(s.tw+s.margin));s.rows=Math.floor((i.height+s.margin)/(s.tw+s.margin));r();};i.onerror=r;i.src=s.url;}))).then(()=>playGame({M:G,sheets}));}
+    Promise.all(sheets.map(s=>new Promise(r=>{const i=new Image();i.onload=()=>{s.img=i;s.cols=Math.floor((i.width+s.margin)/(s.tw+s.margin));s.rows=Math.floor((i.height+s.margin)/(s.tw+s.margin));r();};i.onerror=r;i.src=s.url;}))).then(async()=>{if((G.maps||[G]).some(m=>m.cfg?.proj==='angle'))await ensureAngle(sheets);return G.studio?runStudio(G,sheets):playGame({M:G,sheets});});}
 }else{
 const e2=init2D($('#v2d'),A);window.__e2=e2;let e3=null,cur='2d';
 function go(v){cur=v;$('#v2d').style.display=v==='2d'?'flex':'none';$('#v3d').style.display=v==='3d'?'flex':'none';
@@ -26,5 +30,19 @@ $('#playbtn').onclick=()=>{
 const gd=k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData();
 $('#chkbtn').onclick=()=>openCheck({kind:cur,getData:gd});
 $('#relbtn').onclick=()=>openRelease({kind:cur,sheets:()=>e2.sheets(),getData:k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData()});
+$('#outlinebtn').onclick=()=>{go('2d');if(e2.map())openOutlineEditor(e2);};
+$('#levelbtn').onclick=()=>{go('2d');if(e2.map())openOutlineEditor(e2,'levels');};
+$('#studiobtn').onclick=()=>{go('2d');if(e2.map())openStudio(e2);};
+function shortcutHelp(){toggleShortcutHelp($(cur==='2d'?'#pn2':'#pn3'));}
+$('#helpbtn').onclick=shortcutHelp;
+document.addEventListener('keydown',e=>{
+  if(document.activeElement!==$('#cv2')||cur!=='2d'||e.defaultPrevented)return;
+  if(e.key==='F1'){e.preventDefault();shortcutHelp();}
+  if(e.key==='F5'){e.preventDefault();$('#playbtn').click();}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'&&e2.map()){
+    e.preventDefault();const p=e2.readProject();
+    saveFile(p.meta.title+'.xuong.json',new Blob([JSON.stringify(p)],{type:'application/json'}));
+  }
+});
 go('2d');
 }
