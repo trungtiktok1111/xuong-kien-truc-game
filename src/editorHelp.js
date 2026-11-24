@@ -57,7 +57,7 @@ const guide3D={
 };
 export const appGuides={
   outline:['Đường bao','Đây là mặt bằng nhìn thẳng từ trên xuống. Đường khép kín xác định mép sàn, chân tường và sân trong ở cả hai góc nhìn.',
-    'Bấm mẫu, chọn cỡ và góc xoay, rồi bấm nơi muốn đặt. Bạn cũng có thể kéo mẫu sang mặt bằng.','Quét chọn → Ctrl+C → Ctrl+V để nhân bản. Dùng Nối hành lang để kéo một lối đi giữa hai hình.','Nhập số ô Rộng và Cao ngay trên lưới rồi bấm Đổi số ô. Mở Màn mẫu để chọn bố cục có sẵn, chơi thử hoặc tạo một màn mới.'],
+    'Bấm mẫu, chọn cỡ và góc xoay, rồi bấm nơi muốn đặt. Bạn cũng có thể kéo mẫu sang mặt bằng.','Quét chọn → Ctrl+C → Ctrl+V để nhân bản đường bao và ô hình. Bấm Tạo màn từ vùng quét để tách riêng khu đã chọn. Dùng Nối hành lang để kéo một lối đi giữa hai hình.','Nhập số ô Rộng và Cao ngay trên lưới rồi bấm Đổi số ô. Mở Màn mẫu để chọn bố cục có sẵn, chơi thử hoặc tạo một màn mới.'],
   project:['Dự án game','Quản lý và đóng gói toàn bộ game.',
     'Tạo từ mẫu hoặc mở một gói dự án. Dùng Lưu dự án để chỉnh tiếp lần sau.','Bấm Chơi thử để kiểm game. Dùng Xuất game HTML để tạo tệp riêng cho người chơi.'],
   check:['Kiểm tra','Xem các lỗi dữ liệu có thể làm kẹt lượt chơi.',

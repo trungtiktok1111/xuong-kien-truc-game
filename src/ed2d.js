@@ -1324,20 +1324,35 @@ export function init2D(root,A){
     }
     return enc(sid,0);
   }
-  function paintOutline(m,outline,mask,fill,updateCollision,oldMask){
+  function paintOutline(m,outline,mask,fill,updateCollision,oldMask,stamps=[],source=null){
+    const {w,h}=m;
+    const groundCover=(x,y,i)=>mask[i]||x>0&&mask[i-1]||x+1<w&&mask[i+1]||y>0&&mask[i-w]||y+1<h&&mask[i+w];
+    const phase=(v,x,y)=>{const sid=stonePhase(v,0);return sid===null?v:phaseTile(sid,x,y);};
+    if(source){
+      for(let y=0;y<Math.min(h,source.h);y++)for(let x=0;x<Math.min(w,source.w);x++){
+        const dest=y*w+x,i=y*source.w+x;
+        if(groundCover(x,y,dest))m.layers[0][dest]=source.layers[0][i];
+        if(mask[dest])for(let l=1;l<4;l++)m.layers[l][dest]=source.layers[l][i];
+      }
+    }
+    for(const stamp of stamps)for(const {x,y,tiles} of stamp){
+      if(x<0||y<0||x>=w||y>=h)continue;
+      const i=y*w+x;
+      if(tiles[0]&&groundCover(x,y,i))m.layers[0][i]=phase(tiles[0],x,y);
+      if(mask[i])for(let l=1;l<4;l++)if(tiles[l])m.layers[l][i]=tiles[l];
+    }
     m.cfg.outline={...outline,floorCollision:updateCollision};m.cfg.view='iso';m.cfg.proj=m.cfg.proj==='angle'?'angle':'iso';
     const ground=m.layers[0];
     for(let y=0;y<m.h;y++)for(let x=0;x<m.w;x++){
       const i=y*m.w+x;
-      if(!ground[i]&&(mask[i]||x>0&&mask[i-1]||x+1<m.w&&mask[i+1]||y>0&&mask[i-m.w]||y+1<m.h&&mask[i+m.w]))
-        ground[i]=fill;
+      if(!ground[i]&&groundCover(x,y,i))ground[i]=phase(fill,x,y);
       if(updateCollision){
         const wasOutside=oldMask&&!oldMask[i];
         m.blk[i]=!mask[i]||(m.blk[i]&&!wasOutside)?1:0;
       }
     }
   }
-  async function applyOutline(outline,updateCollision,w=M.w,h=M.h){
+  async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[]){
     validateResize(w,h);validateMapOutline(outline,w,h);
     const current=M,m=w===M.w&&h===M.h?M:resizedMap(M,w,h);
     const mask=rasterOutline(outline.loops,w,h),old=m.cfg.outline?.loops;
@@ -1347,12 +1362,15 @@ export function init2D(root,A){
       const invalid=m.ents.find(e=>['start','goal','door'].includes(e.t)&&!mask[Math.floor(e.y)*w+Math.floor(e.x)]);
       if(invalid)throw Error('Đường bao làm mất lối tới '+invalid.name+'. Hãy đặt đối tượng vào trong sàn.');
     }
-    const fill=m.layers[0].find(Boolean)||await stoneTile(sheets);
+    const fill=outlineFill(m,stamps)||await stoneTile(sheets);
     if(M!==current)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
-    pushUndo();M=m;paintOutline(m,outline,mask,fill,updateCollision,oldMask);
+    pushUndo();M=m;paintOutline(m,outline,mask,fill,updateCollision,oldMask,stamps);
     after();fit();draw();toast('Đã áp dụng đường bao');
   }
-  async function buildOutlineMap(outline,w,h,level,target){
+  function outlineFill(source,stamps){
+    return source?.layers[0].find(Boolean)||stamps.flatMap(stamp=>stamp).find(cell=>cell.tiles[0])?.tiles[0];
+  }
+  async function buildOutlineMap(outline,w,h,level,target,stamps,useSource=true){
     validateDimensions(w,h);validateMapOutline(outline,w,h);
     const mask=rasterOutline(outline.loops,w,h);
     const index=p=>p&&p[0]>=0&&p[0]<w&&p[1]>=0&&p[1]<h?p[1]*w+p[0]:-1;
@@ -1372,6 +1390,7 @@ export function init2D(root,A){
     const end=goal!==start&&visited[goal]?goal:queue.at(-1);
     const c=defCfg();c.view='iso';c.proj=level?'iso':M.cfg.proj||'iso';c.win='goal';
     if(level)c.outlineTemplate=level.id;
+    else if(M.layers[0].some(Boolean)){c.smooth=M.cfg.smooth;c.hero={...M.cfg.hero};c.anims=M.cfg.anims;c.heroAnim=M.cfg.heroAnim;}
     const name=level?.name||'Màn '+(MAPS.length+1)+' · Đường bao';
     const fresh=mkMap(w,h,name,c);
     const place=i=>({x:i%w,y:Math.floor(i/w)});
@@ -1381,17 +1400,18 @@ export function init2D(root,A){
       const i=index(p);
       if(visited[i]&&i!==start&&i!==end)fresh.ents.push({id:'chest-'+i,t:'chest',...place(i),name:'Rương',tile:null});
     }
-    paintOutline(fresh,outline,mask,await stoneTile(target),true,null);
+    const source=level||!useSource?null:M;
+    paintOutline(fresh,outline,mask,outlineFill(source,stamps)||await stoneTile(target),true,null,stamps,source);
     return fresh;
   }
-  async function previewOutlineMap(outline,w,h,level){
+  async function previewOutlineMap(outline,w,h,level,stamps=[]){
     const previewSheets=sheets.slice();
-    const draft=await buildOutlineMap(outline,w,h,level,previewSheets);
+    const draft=await buildOutlineMap(outline,w,h,level,previewSheets,stamps);
     if(draft.cfg.proj==='angle')await ensureAngle(previewSheets);
     return {M:draft,sheets:previewSheets};
   }
-  async function newOutlineMap(outline,w=M.w,h=M.h,level){
-    const current=M,fresh=await buildOutlineMap(outline,w,h,level,sheets);
+  async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],useSource=true){
+    const current=M,fresh=await buildOutlineMap(outline,w,h,level,sheets,stamps,useSource);
     if(M!==current)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
     if(MAPS.some(m=>m.name===fresh.name)||M.name===fresh.name){
       const name=fresh.name;

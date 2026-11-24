@@ -2,6 +2,10 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
+## V14
+- **Đường bao → Quét chọn** sao chép đường bao cùng bốn lớp ô hình. Dán vào lưới hoặc bấm **Tạo màn từ vùng quét** để tách riêng khu đã chọn. Nền Đá Xoáy ghép lại đúng mạch ở tọa độ mới.
+- Trong bản đồ có đường bao, ảnh nhân vật và bóng bám điểm chân ở cả Isometric và Angle. Mép tường tiếp tục che nhân vật theo thứ tự chiều sâu.
+
 ## V13
 - Giữ 28 mảnh ghép có thể xoay, 12 màn mẫu chơi thử được và lưới tùy chỉnh theo từng chiều đến 600 ô. Trong **Màn mẫu**, dùng **Tạo bản sao** hoặc **Nạp lại mẫu gốc** để thử bố cục khác.
 - Chân nhân vật bị chặn theo đường bao sàn, kể cả mép cong và sân trong. Lớp kiểm tra va chạm trong trình biên tập và chế độ chơi dùng cùng đường bao. Ô chặn đặt thủ công phía trong sàn và collider riêng của đạo cụ vẫn có hiệu lực.
