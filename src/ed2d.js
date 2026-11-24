@@ -8,10 +8,11 @@ import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,idbDel,
 const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
-import {genRule,RULES,RULE_TEXT,SHAPES} from './genrule.js';
+import {genRule,RULES,RULE_TEXT,SHAPES,SB_KIEU,loadProfiles} from './genrule.js';
 import {build,GEN_KINDS,GEN_KIND_PACK,GEN_KIND_VAT,GEN_VIEWS} from './gen2d.js';
 import {slab,shore,tile192,mirF,derim} from './isoslab.js';
-import {nenIndex,nenPack,nenTag,vatIndex,vatPack} from './nen.js';
+import {nenIndex,nenPack,nenTag,vatIndex,vatPack,registerPack,unregisterPack,customPackIds} from './nen.js';
+import {readZip,buildPack,ROLES,FAMILIES,exportPackZip} from './pack.js';
 import {decoZones,ZK,isBox,isPts,mkBox,mkPts,zHit,zPts,zBounds,zCenter,zMove,zScale,zRotate,zClone,zHandles,zDragHandle,zPath,toLocal} from './zones.js';
 export function init2D(root,A){
   const sheets=A.sheets.map(s=>Object.assign({},s));let curSheet=0,shZ='fit',shQ='';let HID=new Set([0,1,2,3,...lsGet('thk_hide2d',[])]);const visSh=()=>sheets.map((s,i)=>i).filter(i=>!HID.has(i));
@@ -490,7 +491,7 @@ export function init2D(root,A){
       body.append(el('div',{class:'hint'},'Bật/tắt hiển thị từng lớp. Lớp "Vùng chặn" là chỗ nhân vật không đi qua được (xuất kèm trong tệp dữ liệu để dùng trong game).'));
       LAYN.concat(['Vùng chặn']).forEach((n,i)=>body.append(el('div',{class:'row'},btn(vis[i]?'👁 Hiện':'🚫 Ẩn',()=>{vis[i]=vis[i]?0:1;dirty=true;draw();},vis[i]?'':'off'),btn(n,()=>{act=i;draw();},act===i?'on':''))));}
     else if(tab==='file'){
-      body.append(el('div',{style:'border:1px solid #4a7a5a;border-radius:10px;padding:8px;margin-bottom:10px;background:#16261d'},el('div',{class:'lbl',style:'color:#9fe0b0;margin-bottom:6px'},'📂 TẢI TỆP LÊN'),el('div',{class:'row'},btn('🖼 Ảnh tileset (.png)…',addSheet),btn('📦 Gói tài nguyên .zip…',addZip),btn('⬆ Dự án .json…',()=>pickFile('.json,application/json',t=>importJSON(t))),btn('⛓ Cảnh mẫu: Địa lao',()=>openKScene('dia-lao')),btn('⛓ Địa lao 2 (3 phòng + đích)',()=>openKScene('dia-lao-2')),btn('🌾 Cảnh mẫu: Nông trại',()=>openKScene('nong-trai')),btn('🌾 Nông trại 2 (ruộng + kho)',()=>openKScene('nong-trai-2')),btn('📚 Cảnh mẫu: Thư viện',()=>openKScene('thu-vien')),btn('📚 Thư viện 2 (4 phòng + đích)',()=>openKScene('thu-vien-2')),btn('🏯 Sân chùa Thiếu Lâm',()=>openKScene('thieu-lam-san')),btn('🏯 Sân hẹp sâu',()=>openKScene('thieu-lam-hep')),btn('🏯 Sân chùa chính',()=>openKScene('thieu-lam-chinh')),btn('🏯 Sân hai cổng',()=>openKScene('thieu-lam-hai-cong')),btn('🏯 Sân tam quan',()=>openKScene('thieu-lam-tam-quan')),btn('🏯 Sân phẳng kín',()=>openKScene('thieu-lam-phang')),btn('🏯 Sân nhiều tầng',()=>openKScene('thieu-lam-sau')),btn('🏯+⛓ Sân chùa trộn Kenney',()=>openKScene('tron-chua-kenney'))),el('div',{class:'hint'},'Ảnh/zip sẽ thành tileset mới trong tab 🧩 Tileset. Gói zip: chọn ảnh bên trong rồi nhập kích thước ô.')));body.append(ruleBox());
+      body.append(el('div',{style:'border:1px solid #4a7a5a;border-radius:10px;padding:8px;margin-bottom:10px;background:#16261d'},el('div',{class:'lbl',style:'color:#9fe0b0;margin-bottom:6px'},'📂 TẢI TỆP LÊN'),el('div',{class:'row'},btn('🖼 Ảnh tileset (.png)…',addSheet),btn('📦 Gói tài nguyên .zip…',addZip),btn('📦 Gói xuong-pack (.zip, có pack.json)…',addPackZip,'background:#2b6f4a;color:#fff'),btn('⬆ Dự án .json…',()=>pickFile('.json,application/json',t=>importJSON(t))),btn('⛓ Cảnh mẫu: Địa lao',()=>openKScene('dia-lao')),btn('⛓ Địa lao 2 (3 phòng + đích)',()=>openKScene('dia-lao-2')),btn('🌾 Cảnh mẫu: Nông trại',()=>openKScene('nong-trai')),btn('🌾 Nông trại 2 (ruộng + kho)',()=>openKScene('nong-trai-2')),btn('📚 Cảnh mẫu: Thư viện',()=>openKScene('thu-vien')),btn('📚 Thư viện 2 (4 phòng + đích)',()=>openKScene('thu-vien-2')),btn('🏯 Sân chùa chính',()=>genPreset('san-bac',{sb:'chinh'})),btn('🏯 Sân hẹp sâu',()=>genPreset('san-bac',{sb:'hep'})),btn('🏯 Sân hai cổng',()=>genPreset('san-bac',{sb:'hai_cong'})),btn('🏯 Sân tam quan',()=>genPreset('san-bac',{sb:'tam_quan'})),btn('🏯 Sân phẳng kín',()=>genPreset('san-bac',{sb:'phang'})),btn('🏯 Sân nhiều tầng',()=>genPreset('san-bac',{sb:'nhieu_tang'})),),el('div',{class:'hint'},'Ảnh/zip sẽ thành tileset mới trong tab 🧩 Tileset. Gói zip: chọn ảnh bên trong rồi nhập kích thước ô.'),packReport()));body.append(ruleBox());
       body.append(slotsUI('2d',()=>clone(M),o=>{pushUndo();M=clone(o);selId=null;after();fit();},'Làng của tôi'));
       const wi=el('input',{type:'number',value:M.w,min:4,max:600,class:'num'}),hi=el('input',{type:'number',value:M.h,min:4,max:600,class:'num'});
       body.append(el('div',{class:'row'},btn('🏘 Mở lại làng Thanh Hồ',async()=>{if(await yes('Thay bản đồ hiện tại bằng làng Thanh Hồ gốc?')){pushUndo();M=fromVillage();after();fit();}}),btn('🆕 Bản đồ trống',async()=>{if(await yes('Tạo bản đồ trống '+wi.value+'×'+hi.value+'? (có thể hoàn tác)')){pushUndo();M=newMap(+wi.value,+hi.value);after();fit();}})));
@@ -739,6 +740,30 @@ export function init2D(root,A){
       uniqNames(sheets);if(nt+na)curSheet=sheets.length-1;after();draw();
       toast('Đã nạp '+nt+' tileset ô nền + '+na+' atlas'+(skip?' (bỏ '+skip+' gói trùng)':'')+'. Sprites/lớp phủ bỏ qua để nhẹ.');};
     inp.click();}
+  /* ---- Gói xuong-pack (.zip): app tự đọc pack.json, sinh bộ nền + bộ vật, báo vai trò/họ bố cục ---- */
+  let packRep=null;
+  async function refreshProfiles(){loadProfiles(await vatIndex());}
+  async function savePacks(){const out=[];for(const id of customPackIds()){const v=await vatPack(id),n=await nenPack(id).catch(()=>null);out.push({id,vat:v,nen:n&&n.id===id?n:null});}await idbSet('xuong_packs',out);}
+  function packReport(){const R=packRep;if(!R)return el('div');const d=el('div',{style:'margin-top:8px;border:1px solid '+(R.ok?'#4a7a5a':'#a5532f')+';border-radius:10px;padding:8px;background:#141a17'});
+    d.append(el('div',{class:'lbl',style:'color:'+(R.ok?'#9fe0b0':'#ff9b8a')},(R.ok?'✅ Đã nạp gói: ':'⚠ Chưa nạp được gói: ')+R.name));
+    for(const e of R.errors)d.append(el('div',{class:'hint',style:'color:#ff9b8a'},'✘ '+e));
+    if(R.ok){d.append(el('div',{class:'hint'},R.nItems+' mảnh · '+R.nGround+' ô nền · vai trò: '+R.roles.map(r=>(ROLES[r]||r)).join(', ')));
+      for(const f of R.families)d.append(el('div',{class:'hint',style:'color:'+(f.ok?'#9fe0b0':'#e8c08a')},(f.ok?'✔ Dựng được: ':'✘ Chưa dựng được: ')+f.name+(f.ok?'':' — thiếu vai trò '+f.miss.join(', '))));
+      const w=R.warns.slice(0,12);for(const x of w)d.append(el('div',{class:'hint',style:'color:#e8c08a'},'⚠ '+x));if(R.warns.length>12)d.append(el('div',{class:'hint',style:'color:#e8c08a'},'⚠ …và '+(R.warns.length-12)+' cảnh báo nữa'));}
+    return d;}
+  async function addPackZip(){pickFiles('.zip,application/zip',async files=>{const f=files[0]&&files[0].file;if(!f)return;toast('Đang đọc gói…');
+      try{const u8=new Uint8Array(await f.arrayBuffer());const rz=await readZip(u8,f.name);
+        if(rz.error){packRep={ok:false,name:f.name,errors:[rz.error],warns:[]};draw();return;}
+        const ck=rz.check;if(!ck.ok){packRep={ok:false,name:rz.man.name||f.name,errors:ck.errors,warns:ck.warns};draw();return;}
+        const b=await buildPack(rz.man,rz.files,t=>toast(t));registerPack(b);await savePacks();await refreshProfiles();
+        window.__lastPack={id:rz.man.id,man:rz.man};
+        packRep={ok:true,name:rz.man.name+' ('+rz.man.id+')',errors:[],warns:ck.warns,nItems:b.nItems,nGround:b.nGround,roles:b.roles,families:b.families};
+        try{const r=await ensureNen(rz.man.id);curSheet=r.sid;}catch(e){}
+        draw();toast('Đã nạp gói '+rz.man.name);}catch(e){console.error(e);packRep={ok:false,name:f.name,errors:['Lỗi đọc gói: '+(e&&e.message||e)],warns:[]};draw();}},false);}
+  window.__exportRoundTrip=async(u8,nm)=>{const rz=await readZip(u8,nm);const z=exportPackZip(rz.man,rz.files);return z;};
+  window.__vatIndexEntry=async id=>(await vatIndex()).find(o=>o.id===id);
+  window.__vatPack=vatPack;window.__nenPack=nenPack;
+  window.__addPackU8=async(u8,nm)=>{const rz=await readZip(u8,nm);if(rz.error||!rz.check.ok)return {err:rz.error||rz.check.errors};const b=await buildPack(rz.man,rz.files);registerPack(b);return {id:rz.man.id,roles:b.roles,families:b.families,nItems:b.nItems,warns:rz.check.warns};};
   function addZip(){zipBrowser((u,n)=>addWhole([{url:u,name:n}]),addWhole);}
   function addGridZip(){zipBrowser(addSheetUrl,addMany);}
   function exportPNG(k){const c=document.createElement('canvas');c.width=M.w*CELL*k;c.height=M.h*CELL*k;const g=c.getContext('2d');g.imageSmoothingEnabled=false;const sv=vis.slice();rebuild();g.drawImage(mc,0,0,c.width,c.height);c.toBlob(b=>saveFile('ban_do_2d.png',b));}
@@ -760,6 +785,8 @@ export function init2D(root,A){
   // khởi động
   (async()=>{await Promise.all(sheets.map(loadSheet));const sv=lsGet('thk_proj2d',null);const idbC=await idbGet('thk_sheets2d');
     if(sv&&sv.layers){for(const s of ((idbC&&idbC.length)?idbC:(sv.custom||[]))){const ns=Object.assign({},s);await loadSheet(ns);sheets.push(ns);}MAPS=Array.isArray(sv.maps)&&sv.maps.length?sv.maps:[];curMap=Math.min(sv.cur||0,Math.max(0,MAPS.length-1));M=clone(MAPS.length?MAPS[curMap]:sv);if(!MAPS.length){M.name=M.name||'Màn 1';MAPS=[clone(M)];}}else{M=fromVillage();M.name='Màn 1';MAPS=[clone(M)];}
+    try{const pk=await idbGet('xuong_packs');if(Array.isArray(pk))for(const p of pk)registerPack({nen:p.nen,vat:p.vat,nGround:p.nen?Object.keys(p.nen.idx).length:0,thumb:''});}catch(e){}
+    try{await refreshProfiles();draw();}catch(e){}
     if(window.__gn==null)window.__gn='kenney-dia-lao';try{const r=await ensureNen(window.__gn);curSheet=r.sid;}catch(e){}
     (async()=>{try{const L=await nenIndex();let k=0;toast('Đang nạp '+L.length+' bộ nền…');for(const o of L){try{await ensureNen(o.id);k++;}catch(e){}}tgSave();after();draw();toast('Đã nạp đủ '+k+'/'+L.length+' bộ nền (xem ở tab Tileset và Tài nguyên).');}catch(e){}})();
     stamp={w:1,h:1,multi:false,tiles:[enc(0,5)]};draw();setTimeout(fit,50);})();
@@ -784,19 +811,24 @@ export function init2D(root,A){
       const selR=el('select',{class:'num',style:'max-width:230px',onchange:e=>{GR.k=e.target.value;}},Object.entries(RULES).map(([k,v])=>{const o=el('option',{value:k},v.name);if(k===GR.k)o.selected=true;return o;}));
       const selRZ=el('select',{class:'num',onchange:e=>{GR.z=e.target.value;}},[['s','Nhỏ'],['m','Vừa'],['l','Lớn']].map(([k,n])=>{const o=el('option',{value:k},n);if(k===GR.z)o.selected=true;return o;}));
       const selSh=el('select',{class:'num',style:'max-width:230px',onchange:e=>{GR.s=e.target.value;}},Object.entries(SHAPES).map(([k,n])=>{const o=el('option',{value:k},n);if(k===GR.s)o.selected=true;return o;}));
+      const selSB=el('select',{class:'num',style:'max-width:230px',onchange:e=>{GR.sb=e.target.value;}},Object.entries(SB_KIEU).map(([k,n])=>{const o=el('option',{value:k},n);if(k===(GR.sb||'auto'))o.selected=true;return o;}));
       const cbL=el('input',{type:'checkbox',onchange:e=>{GR.l=e.target.checked;}});cbL.checked=!!GR.l;
       const selY=el('select',{class:'num',onchange:e=>{GR.y=e.target.value;}},[['single','Một nhà kho'],['twin','Nhà kho + nhà phụ']].map(([k,n])=>{const o=el('option',{value:k},n);if(k===GR.y)o.selected=true;return o;}));
       const showRep=R=>{out.textContent='';out.append(el('div',{class:'lbl',style:'color:'+(R.ok?'#9fe0b0':'#ff9b8a')},(R.ok?'✅ ĐẠT':'⚠ CHƯA ĐẠT')+' toàn bộ phép kiểm · hình '+(R.shape||'sân')+' · seed '+R.seed+' · thử '+R.tries+' lần'));for(const r of R.report)out.append(el('div',{class:'hint',style:'color:'+(r[1]?'#9fe0b0':'#ff9b8a')},(r[1]?'✔ ':'✘ ')+r[0]));};
       return el('div',{style:'border:1px solid #d9a066;border-radius:10px;padding:8px;margin-top:10px;background:#26201a'},
-        el('div',{class:'lbl',style:'color:#e8c08a'},'🏗 DỰNG THEO NGUYÊN TẮC (bộ Kenney) — bố cục trước, tường suy ra, đồ đặt có luật, tự kiểm'),
+        el('div',{class:'lbl',style:'color:#e8c08a'},'🏗 DỰNG THEO NGUYÊN TẮC (theo vai trò + luật khai báo trong gói) — bố cục trước, tường suy ra, đồ đặt có luật, tự kiểm'),
         el('div',{class:'hint',style:'white-space:pre-line'},RULE_TEXT.join('\n')),
         el('div',{class:'row'},el('span',{class:'lbl'},'Kiểu'),selR,el('span',{class:'lbl'},'Cỡ'),selRZ),
         el('div',{class:'row'},el('span',{class:'lbl'},'Hình dạng (phòng)'),selSh),
+        el('div',{class:'row'},el('span',{class:'lbl'},'Kiểu sân bậc'),selSB),
         el('div',{class:'row'},el('label',{style:'font-size:13px'},cbL,' Có phòng chữ L'),el('span',{class:'lbl'},'Sân'),selY),
-        el('div',{class:'row'},btn('🏗 Dựng theo nguyên tắc',async()=>{if(!await yes('Dựng cảnh mới thay cho màn đang mở? (Ctrl+Z hoàn tác bản đồ)'))return;toast('Đang dựng…');await new Promise(r=>setTimeout(r,30));
-          let R;try{R=await genRule({ensureNen,ensureVat,vatPack,sheets:()=>sheets,enc},GR.k,{size:GR.z,shape:GR.s,lshape:GR.l,yard:GR.y});}catch(e){console.error(e);toast('Lỗi: '+(e&&e.message||e));return;}
-          if(R.error){toast(R.error);return;}
-          pushUndo();M={name:RULES[GR.k].name.replace(/^\S+\s/,'').replace(/ \(.*/,''),w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({hp:6,spd:4.2,dmg:1,rng:1.5,hero:{sid:2,idx:0}},M.cfg,{view:'iso',win:'auto',zones:[]})};selId=null;after();fit();draw();showRep(R);toast(R.ok?'Đã dựng — đạt mọi phép kiểm':'Đã dựng — còn phép kiểm chưa đạt');},'background:#b9772b;color:#fff')),out);}
+        el('div',{class:'row'},btn('🏗 Dựng theo nguyên tắc',async()=>{if(!await yes('Dựng cảnh mới thay cho màn đang mở? (Ctrl+Z hoàn tác bản đồ)'))return;const R=await doGen(GR);if(R)showRep(R);},'background:#b9772b;color:#fff')),out);}
+  /* dựng theo hồ sơ của gói (dùng cho nút Dựng và các nút cảnh mẫu) */
+  async function doGen(GR){toast('Đang dựng…');await new Promise(r=>setTimeout(r,30));
+    let R;try{R=await genRule({ensureNen,ensureVat,vatPack,sheets:()=>sheets,enc},GR.k,{size:GR.z,shape:GR.s,lshape:GR.l,yard:GR.y,sb:GR.sb,seed:GR.seed});}catch(e){console.error(e);toast('Lỗi: '+(e&&e.message||e));return null;}
+    if(R.error){toast(R.error);return null;}window.__lastRep=R;
+    pushUndo();M={name:(RULES[GR.k].name.replace(/^\S+\s/,'').replace(/ \(.*/,'').replace(/ — .*/,'')),w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({hp:6,spd:4.2,dmg:1,rng:1.5,hero:{sid:2,idx:0}},M.cfg,{view:'iso',win:'auto',zones:[]})};selId=null;after();fit();draw();toast(R.ok?'Đã dựng — đạt mọi phép kiểm':'Đã dựng — còn phép kiểm chưa đạt');return R;}
+  async function genPreset(k,o){if(!(await yes('Dựng cảnh mẫu? Bản đồ đang làm sẽ bị thay (có thể hoàn tác).')))return;await doGen(Object.assign({k,z:'m',s:'auto',l:false,y:'single'},o));}
   async function genRun(){const k=window.__gk||'village',z={s:[32,24],m:[48,36],l:[64,48]}[window.__gz||'m'];
     if(!await yes('Tạo bối cảnh mới thay cho màn "'+(M.name||'')+'"?\n(Ctrl+Z hoàn tác được bản đồ; tileset mới tạo sẽ còn lại.)'))return;
     toast('Đang tạo bối cảnh…');await new Promise(r=>setTimeout(r,30));

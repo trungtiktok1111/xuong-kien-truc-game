@@ -5,19 +5,10 @@ const DIRS=['-nam','-đông','-bắc','-tây'];
 const K=(x,y)=>x+','+y;
 const N4=[[1,0],[-1,0],[0,1],[0,-1]];
 
-export const RULES={
-  dungeon:{name:'⛓ Địa lao (phòng + hành lang)',type:'rooms',nen:'kenney-dia-lao',vats:['kenney-dia-lao'],
-    floor:['stone'],floorRare:'stonetile-nam',walls:[['stoneWall',68],['stoneWallAged',16],['stoneWallBroken',6],['stoneWallWindow',6,1],['stoneWallWindowBars',4,1]],
-    corner:'stoneWallCorner',arch:'stoneWallArchway',wallProps:['barrelsStacked','barrels','woodenCrate','woodenCrates','barrel','woodenPile'],
-    centerProps:['tableRoundChairs','tableChairsBroken','chair'],column:'stoneColumn',dens:.08,chest:['kenney-dia-lao','chestClosed'],goal:['kenney-dia-lao','stairsSpiral']},
-  library:{name:'📚 Thư viện (phòng + hành lang)',type:'rooms',nen:'kenney-dia-lao',vats:['kenney-thu-vien','kenney-dia-lao'],
-    floor:['planks'],floorRare:'planksbroken-nam',walls:[['wallBooks',40],['bookcaseBooks',20],['bookcaseHalfBooks',10],['bookcaseEmpty',8],['bookcaseBooksLadder',10],['bookcaseGlass',12]],
-    corner:null,arch:'wallDoorway',wallProps:['bookStand','candleStand','candleStandDouble','displayCase','displayCaseBooks','displayCaseSword'],
-    centerProps:['longTableDecoratedChairs','longTableChairs','longTable','longTableDecoratedChairsBooks','libraryChair'],carpet:'floorCarpet',dens:.07,
-    chest:['kenney-dia-lao','chestClosed'],goal:['kenney-dia-lao','stairsSpiral']},
-  farm:{name:'🌾 Nông trại (sân + ruộng + nhà kho)',type:'yard',nens:['kenney-co','kenney-nong-trai'],vats:['kenney-nong-trai'],
-    chest:['kenney-nong-trai','ladderStand'],goal:['kenney-nong-trai','ladderStand']},
-};
+/* Hồ sơ dựng nằm trong DỮ LIỆU của gói (vat/index.json -> profiles, hoặc rules trong pack.json), không nằm trong mã. */
+export const RULES={};
+export function loadProfiles(vatIdx){for(const k of Object.keys(RULES))delete RULES[k];
+  for(const e of vatIdx||[])for(const [key,pr] of Object.entries(e.profiles||{}))RULES[(e.id.startsWith('kenney-')||!RULES[key]?key:e.id+':'+key)]=Object.assign({pack:e.id},pr);}
 export const RULE_TEXT=[
  '1. Bố cục trước, đồ sau: vẽ phòng/hành lang (hoặc sân + công trình) rồi mới suy ra tường và đặt đồ.',
  '2. Tường chỉ ở hai cạnh sau (bắc, tây) để không che nhân vật; tường suy ra tự động từ rìa sàn.',
@@ -29,11 +20,16 @@ export const RULE_TEXT=[
 /* ---------- tra tài nguyên ---------- */
 async function loadAll(ctx,prof){
   const L={nen:{},vat:{}};
-  for(const id of (prof.nens||[prof.nen])){const r=await ctx.ensureNen(id);L.nen[id]={sid:r.sid,idx:r.pk.idx};}
-  for(const id of prof.vats){await ctx.ensureVat(id);const pk=await ctx.vatPack(id);const sid=ctx.sheets().findIndex((s,i)=>i>=4&&s.name==='Vat-'+id);L.vat[id]={sid,items:pk.items};}
+  for(const id of (prof.nens||[prof.nen])){const r=await ctx.ensureNen(id);L.nen[id]={sid:r.sid,idx:r.pk.idx,roles:r.pk.rolesOf||null};}
+  for(const id of prof.vats){await ctx.ensureVat(id);const pk=await ctx.vatPack(id);const sid=ctx.sheets().findIndex((s,i)=>i>=4&&s.name==='Vat-'+id);L.vat[id]={sid,items:pk.items,T:pk.T};}
   return L;}
-function item(L,pid,k,d){const v=L.vat[pid];if(!v)throw new Error('thiếu gói '+pid);let it=v.items.find(i=>i.k===k&&(!d||i.d===d))||v.items.find(i=>i.k===k);if(!it)throw new Error('thiếu mảnh '+k+' ('+pid+')');return [v.sid,it];}
-function findItem(L,k,d){for(const pid of Object.keys(L.vat)){const v=L.vat[pid],it=v.items.find(i=>i.k===k&&(!d||i.d===d))||v.items.find(i=>i.k===k);if(it)return [pid,v.sid,it];}throw new Error('thiếu mảnh '+k);}
+/* bộ chọn mảnh: "tênKhoá" hoặc "@vaiTrò[:phần][#trạngThái]" */
+function selMatch(it,sel){if(sel[0]!=='@'){const [nm,vr]=sel.split('~');return it.k===nm&&(!vr||it.v===vr);}const m=sel.slice(1).match(/^([^:#]+)(?::([^#]+))?(?:#(.+))?$/);return it.r===m[1]&&(!m[2]||it.part===m[2])&&(!m[3]||it.st===m[3]);}
+function pickDir(list,d){return list.find(i=>i.d===d)||list.find(i=>i.d==='ALL')||list.find(i=>i.d==='S')||list[0];}
+function item(L,pid,k,d){const v=L.vat[pid];if(!v)throw new Error('thiếu gói '+pid);const l=v.items.filter(i=>selMatch(i,k));const it=l.length?pickDir(l,d):null;if(!it)throw new Error('thiếu mảnh '+k+' ('+pid+')');return [v.sid,it];}
+function findItem(L,k,d){for(const pid of Object.keys(L.vat)){const v=L.vat[pid],l=v.items.filter(i=>selMatch(i,k));if(l.length)return [pid,v.sid,pickDir(l,d)];}throw new Error('thiếu mảnh '+k);}
+/* ô nền: danh sách khoá nền của một gói theo vai trò hoặc khai báo tường minh */
+function floorKeys(L,pid,spec){if(Array.isArray(spec))return spec;const n=L.nen[pid];if(!n||!n.roles)throw new Error('gói '+pid+' không có bộ nền');const m=spec.match(/^@([^:]+)/)[1];return Object.entries(n.roles).filter(([k,v])=>v.r===m).map(e=>e[0]);}
 
 class Ctx{
   constructor(ctx,L,W,H,rnd){this.c=ctx;this.L=L;this.W=W;this.H=H;this.rnd=rnd;this.l0=new Array(W*H).fill(0);this.ents=[];this.n=0;this.fl=new Set();this.props=[];this.arches=[];this.zones={};this.chests=[];this.walk=null;}
@@ -41,6 +37,10 @@ class Ctx{
   put(k,d,x,y,prop){const [pid,sid,it]=findItem(this.L,k,d);this.n++;
     this.ents.push(Object.assign({id:'g'+this.n,t:'deco',x,y,f:1,fx:it.fx,fy:it.fy,sc:it.sc,ox:0,oy:it.oy||0,flat:it.role==='Phủ nền',name:it.name,tile:{sid,idx:it.i},zb:it.zb},it.role==='Phủ nền'?{walk:true}:{},it.zps?{zps:it.zps}:{},it.col?{col:it.col}:{},it.cal!=null?{cal:it.cal}:{}));
     if(prop)this.props.push([x,y,k]);}
+  /* đặt mảnh theo toạ độ thực (x,y) = tâm ô; z = độ cao px; neo đã chuẩn hoá nên không cộng/trừ tay */
+  putAt(sel,d,x,y,z,prop){const [pid,sid,it]=findItem(this.L,sel,d),T=this.L.vat[pid].T;this.n++;
+    this.ents.push(Object.assign({id:'g'+this.n,t:'deco',x:Math.round(x*1000)/1000,y:Math.round(y*1000)/1000,f:1,fx:it.fx,fy:it.fy,sc:it.sc,ox:0,oy:Math.round(((it.oy||0)-(z||0)/T)*10000)/10000,flat:it.role==='Phủ nền',name:it.name,tile:{sid,idx:it.i},zb:it.zb},it.role==='Phủ nền'?{walk:true}:{},it.zps?{zps:it.zps}:{},it.col?{col:it.col}:{},it.cal!=null?{cal:it.cal}:{}));
+    if(prop)this.props.push([Math.floor(x),Math.floor(y),sel]);}
   special(spec,kind,x,y,name,extra){const [pid,k]=spec;const [sid,it]=item(this.L,pid,k,'S');this.ents.push(Object.assign({id:kind[0]+x+'_'+y,t:kind,x,y,name,tile:{sid,idx:it.i}},extra||{}));}
 }
 const pickW=(rnd,list,end)=>{const L=list.filter(a=>!(end&&a[2]));let s=0;for(const a of L)s+=a[1];let r=rnd()*s;for(const a of L){r-=a[1];if(r<0)return a[0];}return L[0][0];};
@@ -104,7 +104,8 @@ function buildRooms(ctx,prof,opt,seed){
   rooms.forEach((r,i)=>{for(let y=r.y0;y<=r.y1;y++)for(let x=r.x0;x<=r.x1;x++){if(r.notch&&x>=r.notch[0]&&x<=r.notch[2]&&y>=r.notch[1]&&y<=r.notch[3])continue;B.fl.add(K(x,y));region.set(K(x,y),i);}});
   halls.forEach(h=>{for(let y=h.y0;y<=h.y1;y++)for(let x=h.x0;x<=h.x1;x++){B.fl.add(K(x,y));region.set(K(x,y),'h');}});
   const has=(x,y)=>B.fl.has(K(x,y));
-  for(const key of B.fl){const [x,y]=key.split(',').map(Number),v=prof.floorRare&&rnd()>.97?prof.floorRare:prof.floor[0]+DIRS[ri(rnd,0,3)];B.floor(prof.nen,v,x,y);}
+  const FK=floorKeys(ctx._L,prof.nen,prof.floor);
+  for(const key of B.fl){const [x,y]=key.split(',').map(Number),v=prof.floorRare&&rnd()>.97?prof.floorRare:FK[ri(rnd,0,FK.length-1)];B.floor(prof.nen,v,x,y);}
   const arch=new Set();
   for(const key of B.fl){const [x,y]=key.split(',').map(Number);
     if(has(x,y-1)&&region.get(K(x,y-1))!==region.get(key))arch.add(x+','+y+',S');
@@ -168,9 +169,9 @@ function finishSpecials(B,prof){
 
 /* ================= SÂN + RUỘNG + NHÀ KHO ================= */
 function buildYard(ctx,prof,opt,seed){
-  const rnd=mk(seed),[W,H]={s:[32,24],m:[40,30],l:[52,38]}[opt.size]||[40,30],B=new Ctx(ctx,ctx._L,W,H,rnd),G='kenney-co',F='kenney-nong-trai';
+  const rnd=mk(seed),[W,H]={s:[32,24],m:[40,30],l:[52,38]}[opt.size]||[40,30],B=new Ctx(ctx,ctx._L,W,H,rnd),Y=prof.yard,fk=o=>o.keys[ri(rnd,0,o.keys.length-1)];
   const X0=2,Y0=2,X1=W-3,Y1=H-3;
-  for(let y=Y0;y<=Y1;y++)for(let x=X0;x<=X1;x++){B.fl.add(K(x,y));B.floor(G,'grass'+DIRS[ri(rnd,0,3)],x,y);}
+  for(let y=Y0;y<=Y1;y++)for(let x=X0;x<=X1;x++){B.fl.add(K(x,y));B.floor(Y.grass.pack,fk(Y.grass),x,y);}
   const bw=ri(rnd,8,10),bh=ri(rnd,6,8),bx1=ri(rnd,Math.min(X1-2,X0+Math.round(W*.62)),X1-2),bx0=bx1-bw+1,by0=4+ri(rnd,0,2),by1=by0+bh-1;
   const dy=by0+ri(rnd,2,bh-4),sx=4,sy=Y1-3,px=bx0-5;
   const path=new Set(),addP=(x,y)=>{if(x>=X0&&x<=X1&&y>=Y0&&y<=Y1)path.add(K(x,y));};
@@ -178,48 +179,48 @@ function buildYard(ctx,prof,opt,seed){
   for(const y of [sy,sy-1])for(let x=sx;x<=px+1;x++)addP(x,y);
   for(let y=dy;y<=sy;y++){addP(px,y);addP(px+1,y);}
   for(const y of [dy,dy+1])for(let x=px;x<bx0;x++)addP(x,y);
-  for(const k of path){const [x,y]=k.split(',').map(Number);B.floor(F,'dirt'+DIRS[ri(rnd,0,3)],x,y);}
+  for(const k of path){const [x,y]=k.split(',').map(Number);B.floor(Y.dirt.pack,fk(Y.dirt),x,y);}
   /* ruộng */
   const fw=Math.min(8,px-3-8+1),fh=6,fy0=ri(rnd,Math.max(by0+3,8),Math.max(Math.max(by0+3,8),sy-3-fh)),fx0=8;
   const field=[];if(fw>=4)for(let y=fy0;y<fy0+fh;y++)for(let x=fx0;x<fx0+fw;x++)field.push([x,y]);
   const chestField=field.length?[fx0+(fw>>1),fy0+(fh>>1)]:null;
   const noProp=new Set([...path]);
-  for(const [x,y] of field){B.floor(F,'dirtfarmland-nam',x,y);noProp.add(K(x,y));}
-  for(const [x,y] of field)if((x+y)%2===0&&!(chestField&&x===chestField[0]&&y===chestField[1]))B.put(['corn','cornYoung','cornDouble','corn'][ri(rnd,0,3)],null,x,y,false);
-  if(field.length){for(let x=fx0;x<fx0+fw;x++)B.put('fenceLow','S',x,fy0);const gap=fy0+(fh>>1)-1;for(let y=fy0;y<fy0+fh;y++)if(y!==gap&&y!==gap+1)B.put('fenceLow','E',fx0,y);}
+  for(const [x,y] of field){B.floor(Y.farm.pack,Y.farm.key,x,y);noProp.add(K(x,y));}
+  for(const [x,y] of field)if((x+y)%2===0&&!(chestField&&x===chestField[0]&&y===chestField[1]))B.put(Y.crops[ri(rnd,0,Y.crops.length-1)],null,x,y,false);
+  if(field.length){for(let x=fx0;x<fx0+fw;x++)B.put(Y.fence.low,'S',x,fy0);const gap=fy0+(fh>>1)-1;for(let y=fy0;y<fy0+fh;y++)if(y!==gap&&y!==gap+1)B.put(Y.fence.low,'E',fx0,y);}
   /* rào biên khu: cạnh bắc + tây */
-  for(let x=X0;x<=X1;x++)B.put(x===X0?'fenceHigh':(rnd()>.12?'fenceLow':'fenceLowBroken'),'S',x,Y0);
-  for(let y=Y0+1;y<=Y1;y++)B.put(rnd()>.12?'fenceLow':'fenceLowBroken','E',X0,y);
+  for(let x=X0;x<=X1;x++)B.put(x===X0?Y.fence.high:(rnd()>.12?Y.fence.low:Y.fence.broken),'S',x,Y0);
+  for(let y=Y0+1;y<=Y1;y++)B.put(rnd()>.12?Y.fence.low:Y.fence.broken,'E',X0,y);
   /* nhà kho: tường S + E (cổng ở cạnh tây) */
   const inK=(x,y)=>x>=bx0&&x<=bx1&&y>=by0&&y<=by1;
-  for(let y=by0;y<=by1;y++)for(let x=bx0;x<=bx1;x++)B.floor(F,'planks-nam',x,y);
-  B.put('woodWallCorner','S',bx0,by0);
-  const seq=['woodWall','woodWallWindow','woodWall','woodWall','woodWallWindowGlass','woodWall','woodWall'];
+  for(let y=by0;y<=by1;y++)for(let x=bx0;x<=bx1;x++)B.floor(Y.planks.pack,Y.planks.key,x,y);
+  B.put(Y.barn.corner,'S',bx0,by0);
+  const seq=Y.barn.seq;
   for(let i=1;i<bw;i++)B.put(seq[(i-1)%seq.length],'S',bx0+i,by0);
-  B.arches=[];for(let y=by0+1;y<=by1;y++){if(y===dy||y===dy+1){B.put('woodWallGateOpen','E',bx0,y);B.arches.push(['E',bx0,y]);}else B.put(['woodWall','woodWall','woodWallWindow'][y%3],'E',bx0,y);}
+  B.arches=[];for(let y=by0+1;y<=by1;y++){if(y===dy||y===dy+1){B.put(Y.barn.gate,'E',bx0,y);B.arches.push(['E',bx0,y]);}else B.put(Y.barn.sideSeq[y%Y.barn.sideSeq.length],'E',bx0,y);}
   for(let y=by0;y<=by1;y++)for(let x=bx0;x<=bx1;x++)noProp.add(K(x,y));
   /* kiểu 'twin': thêm nhà phụ nhỏ ở phía nam, cổng quay về đường chính */
   let tw=null;
   if(opt.yard==='twin'){const w2=6,h2=5,x0b=px+5,y1b=sy-3,y0b=y1b-h2+1;
     if(x0b+w2-1<=X1-2&&y0b>by1+3){tw={x0:x0b,y0:y0b,x1:x0b+w2-1,y1:y1b,d2:y0b+2};
-      for(let y=tw.y0;y<=tw.y1;y++)for(let x=tw.x0;x<=tw.x1;x++){B.floor(F,'planks-nam',x,y);noProp.add(K(x,y));}
-      for(const y of [tw.d2,tw.d2+1])for(let x=px+2;x<tw.x0;x++){B.floor(F,'dirt'+DIRS[ri(rnd,0,3)],x,y);noProp.add(K(x,y));}
-      B.put('woodWallCorner','S',tw.x0,tw.y0);for(let x=tw.x0+1;x<=tw.x1;x++)B.put(x===tw.x0+2?'woodWallWindow':'woodWall','S',x,tw.y0);
-      for(let y=tw.y0+1;y<=tw.y1;y++){if(y===tw.d2||y===tw.d2+1){B.put('woodWallGateOpen','E',tw.x0,y);B.arches.push(['E',tw.x0,y]);}else B.put('woodWall','E',tw.x0,y);}
-      B.put('chimneyBase',null,tw.x1,tw.y0+1,true);}}
-  B.put('chimneyBase',null,bx1,by0+1,true);
+      for(let y=tw.y0;y<=tw.y1;y++)for(let x=tw.x0;x<=tw.x1;x++){B.floor(Y.planks.pack,Y.planks.key,x,y);noProp.add(K(x,y));}
+      for(const y of [tw.d2,tw.d2+1])for(let x=px+2;x<tw.x0;x++){B.floor(Y.dirt.pack,fk(Y.dirt),x,y);noProp.add(K(x,y));}
+      B.put(Y.barn.corner,'S',tw.x0,tw.y0);for(let x=tw.x0+1;x<=tw.x1;x++)B.put(x===tw.x0+2?Y.barn.window:Y.barn.wall,'S',x,tw.y0);
+      for(let y=tw.y0+1;y<=tw.y1;y++){if(y===tw.d2||y===tw.d2+1){B.put(Y.barn.gate,'E',tw.x0,y);B.arches.push(['E',tw.x0,y]);}else B.put(Y.barn.wall,'E',tw.x0,y);}
+      B.put(Y.barn.chimney,null,tw.x1,tw.y0+1,true);}}
+  B.put(Y.barn.chimney,null,bx1,by0+1,true);
   const gx=bx0+ri(rnd,4,bw-3),gy=by0+2,cx2=bx1-1,cy2=by1-1;
   B.start=[sx+1,sy];B.goal=[gx,gy];B.chests=[chestField||[X0+3,Y0+5],[cx2,cy2]];if(tw)B.chests.push([tw.x1-1,tw.y1-1]);
   const sp=new Set([K(...B.start),K(...B.goal),...B.chests.map(c=>K(...c))]);
   /* đồ trong kho (thưa) và ngoài sân (rất thưa) */
   const inner=[];for(let y=by0+1;y<=by1;y++)for(let x=bx0+2;x<=bx1;x++)if(!sp.has(K(x,y))&&!(x===bx1&&y===by0+1)&&Math.abs(x-gx)+Math.abs(y-gy)>1&&!(x<=bx0+2&&(y===dy||y===dy+1)))inner.push([x,y]);
-  const KP=['hayBalesStacked','hayBales','sack','hay','sacksCrate'];
-  for(let i=0;i<5&&inner.length;i++){const j=ri(rnd,0,inner.length-1),[x,y]=inner.splice(j,1)[0];if(B.props.some(p=>Math.abs(p[0]-x)<=1&&Math.abs(p[1]-y)<=1))continue;B.put(KP[ri(rnd,0,4)],null,x,y,true);}
-  if(tw){const c1=[tw.x0+2,tw.y1-1],c2=[tw.x1-1,tw.y0+2];for(const c of [c1,c2])if(!sp.has(K(...c))&&!(c[0]===tw.x1&&c[1]===tw.y0+1))B.put(['hay','sack'][ri(rnd,0,1)],null,c[0],c[1],true);}
-  const YP=['hay','hayBales','sacksCrate','hayBalesStacked','sack'];
+  const KP=Y.propsIn;
+  for(let i=0;i<5&&inner.length;i++){const j=ri(rnd,0,inner.length-1),[x,y]=inner.splice(j,1)[0];if(B.props.some(p=>Math.abs(p[0]-x)<=1&&Math.abs(p[1]-y)<=1))continue;B.put(KP[ri(rnd,0,KP.length-1)],null,x,y,true);}
+  if(tw){const c1=[tw.x0+2,tw.y1-1],c2=[tw.x1-1,tw.y0+2];for(const c of [c1,c2])if(!sp.has(K(...c))&&!(c[0]===tw.x1&&c[1]===tw.y0+1))B.put(Y.propsTwin[ri(rnd,0,Y.propsTwin.length-1)],null,c[0],c[1],true);}
+  const YP=Y.propsOut;
   for(let i=0,n=Math.round(W*H/70);i<n;i++)for(let t=0;t<30;t++){const x=ri(rnd,X0+2,X1-2),y=ri(rnd,Y0+3,Y1-2);if(noProp.has(K(x,y))||sp.has(K(x,y)))continue;let bad=false;
     for(let yy=y-1;yy<=y+1&&!bad;yy++)for(let xx=x-1;xx<=x+1;xx++)if(noProp.has(K(xx,yy))||(B.props.some(p=>p[0]===xx&&p[1]===yy)))bad=true;
-    if(bad||inK(x,y)||(x===bx1+1)||(y===by1+1))continue;B.put(YP[ri(rnd,0,4)],null,x,y,true);break;}
+    if(bad||inK(x,y)||(x===bx1+1)||(y===by1+1))continue;B.put(YP[ri(rnd,0,YP.length-1)],null,x,y,true);break;}
   B.blk=new Array(W*H).fill(1);for(const key of B.fl){const [x,y]=key.split(',').map(Number);B.blk[y*W+x]=0;}
   for(let x=bx0;x<=bx1;x++)B.blk[(by1+1)*W+x]=1;for(let y=by0;y<=by1+1;y++)B.blk[y*W+bx1+1]=1;if(tw){for(let x=tw.x0;x<=tw.x1;x++)B.blk[(tw.y1+1)*W+x]=1;for(let y=tw.y0;y<=tw.y1+1;y++)B.blk[y*W+tw.x1+1]=1;}
   B.walk=new Set([...B.fl].filter(k=>{const [x,y]=k.split(',').map(Number);return !B.blk[y*W+x];}));
@@ -228,6 +229,82 @@ function buildYard(ctx,prof,opt,seed){
   finishSpecials(B,prof);
   B.rep=check(B);return Object.assign(B,{rooms:1});
 }
+
+
+/* ================= SÂN BẬC: hai tầng sân nối bằng bậc, tường sau có cổng nhiều cấu kiện =================
+   Chỉ dùng VAI TRÒ + luật của gói (rules['san-bac']): app không biết tên mảnh hay hằng số nào của gói cụ thể. */
+export const SB_KIEU={auto:'🎲 Ngẫu nhiên (mỗi lần một hình)',chinh:'Sân chính (1 cổng)',hep:'Sân hẹp sâu',hai_cong:'Sân hai cổng',tam_quan:'Sân tam quan (3 cổng)',phang:'Sân phẳng kín (không bậc)',nhieu_tang:'Sân nhiều tầng'};
+const SB_P={chinh:{Wd:11,Dl:6,gates:[5]},hep:{Wd:7,Dl:10,gates:[3]},hai_cong:{Wd:13,Dl:6,gates:[3,9]},tam_quan:{Wd:17,Dl:5,gates:[3,8,13]},
+  phang:{Wd:11,Dl:7,gates:[5],flat:true,side:8},nhieu_tang:{Wd:9,Dl:9,gates:[4],beds:false,tr:3,tf:3,side:3}};
+function sbDims(rnd,opt){let k=opt.sb&&opt.sb!=='auto'?opt.sb:null;
+  if(!k){const Wd=ri(rnd,3,8)*2+1,n=Wd<10?1:Wd<15?ri(rnd,1,2):ri(rnd,2,3),g=[];for(let i=0;i<n;i++)g.push(Math.round((i+.5)*Wd/n-.5));
+    return {Wd,Dl:ri(rnd,5,10),gates:g,beds:rnd()>.15,flat:rnd()<.12,side:ri(rnd,0,3),tr:ri(rnd,2,3),tf:ri(rnd,2,3),kind:'ngẫu nhiên'};}
+  const d=Object.assign({beds:true,flat:false,side:0,tr:2,tf:2},SB_P[k]);d.kind=SB_KIEU[k];if(d.flat)d.side=d.side||8;return d;}
+function buildSanBac(ctx,prof,opt,seed){
+  const rnd=mk(seed),R=prof.rules,pid=prof.vats[0],L=ctx._L,v=L.vat[pid],nen=L.nen[pid],D=sbDims(rnd,opt);
+  if(!R||!R.gate||!R.wallBack||!R.wallSide)return null;
+  const {Wd,Dl,gates,flat}=D,stairs=D.stairs||gates,tr=D.tr,tf=D.tf,TT=tr+tf,ox=1,oy=1,W=Wd+3,H=TT+1+Dl+3,B=new Ctx(ctx,L,W,H,rnd);
+  const stair=v.items.find(i=>i.r==='bac'),rise=flat?0:(R.rise!=null?R.rise:(stair&&stair.rise)||0),zt=rise;
+  /* vật liệu theo vai trò: sàn = nhóm nền phổ biến nhất, lối đi = nen-duong, luống = nhóm nền khác (tên cỏ/grass), nền cao = nen-cao */
+  const grp=r=>[...new Set(Object.values(nen.roles).filter(q=>q.r===r).map(q=>q.g))];
+  const mat=Object.assign({},R.mat||{});
+  if(!mat.floor)mat.floor=grp('nen').find(g=>!/co|grass|cỏ/i.test(g))||grp('nen')[0];
+  if(!mat.path)mat.path=grp('nen-duong')[0]||mat.floor;
+  if(mat.bed===undefined)mat.bed=grp('nen').find(g=>/co|grass|cỏ/i.test(g))||null;
+  if(!mat.high)mat.high=grp('nen-cao')[0]||null;
+  const keysOf=g=>Object.entries(nen.roles).filter(([k,q])=>q.g===g&&q.dir==='ALL').map(e=>e[0]);
+  const edge=dir=>{const e=Object.entries(nen.roles).find(([k,q])=>q.r==='vien-nen'&&q.part==='canh'&&q.dir===dir);return e&&e[0];};
+  const vsel=g=>{const vs=[...new Set(v.items.filter(i=>i.k===g).map(i=>i.v||''))];return vs.length&&vs[0]?g+'~'+vs[ri(rnd,0,vs.length-1)]:g;};
+  const nd=()=>keysOf(mat.floor)[ri(rnd,0,keysOf(mat.floor).length-1)],pd=()=>keysOf(mat.path)[ri(rnd,0,keysOf(mat.path).length-1)];
+  const fl=(key,x,y)=>{B.fl.add(K(x+ox,y+oy));B.floor(pid,key,x+ox,y+oy);};
+  const occ=new Set(),P=(piece,d,x,y,z,prop)=>{if(prop){const k=K(Math.floor(x+ox),Math.floor(y+oy));if(occ.has(k))return;occ.add(k);}B.putAt(piece,d,x+ox,y+oy,z||0,prop);};
+  /* nền sân trên + nền dưới nó */
+  if(!flat)for(let y=0;y<TT;y++)for(let x=0;x<Wd;x++)fl(nd(),x,y);
+  for(let y=0;y<TT;y++)for(let x=0;x<Wd;x++){const front=y===TT-1;
+    if(flat)fl(nd(),x,y);
+    else if(front&&!stairs.some(c=>Math.abs(x-c)<=1)&&mat.high)P(vsel(mat.high),'S',x,y,rise);
+    else P(vsel(mat.floor),'S',x,y,zt);}
+  /* bậc: hướng có cạnh cao về phía y nhỏ (-j) */
+  const sdir=stair&&stair.high?(Object.entries(stair.high).find(e=>e[1]==='-j')||['E'])[0]:'E';
+  if(!flat&&stair)for(const c of stairs)for(const x of [c-1,c,c+1])P(stair.k,sdir,x,TT,0);
+  const path=new Set();for(const c of stairs)for(const x of [c-1,c,c+1])path.add(x);
+  const y0=TT+(flat?0:1),lastr=TT+Dl;
+  for(let y=TT;y<=TT+Dl;y++)for(let x=0;x<Wd;x++)fl(path.has(x)?pd():nd(),x,y);
+  if(flat)for(let y=0;y<TT;y++)for(const x of path)fl(pd(),x,y);
+  /* luống cây hai bên lối đi */
+  if(D.beds&&mat.bed){const by0=y0+1,by1=TT+Dl-1,runs=[];let cur=[];
+    for(let x=0;x<Wd;x++){if(path.has(x))continue;if(cur.length&&x!==cur[cur.length-1]+1){runs.push(cur);cur=[];}cur.push(x);}if(cur.length)runs.push(cur);
+    const eE=edge('E'),eW=edge('W'),bk=keysOf(mat.bed);
+    for(const r of runs){if(r.length<2)continue;
+      for(let y=by0;y<=by1;y++)for(const x of r){let k=bk[ri(rnd,0,bk.length-1)];if(x===r[r.length-1]&&path.has(r[r.length-1]+1)&&eE)k=eE;else if(x===r[0]&&path.has(r[0]-1)&&eW)k=eW;fl(k,x,y);}
+      const mid=(r[0]+r[r.length-1])/2;
+      if(R.planter)P(R.planter.piece,R.planter.dirs[ri(rnd,0,R.planter.dirs.length-1)],r.length>2?mid-.5:mid,by0+.1,0,true);
+      if(R.pineBed)P(R.pineBed.piece,'S',r.length>2?r[0]+.1:mid,by1-.55,0,true);}}
+  /* tường sau + cổng nhiều cấu kiện */
+  const G=R.gate,wy=tr-.01,gy=wy-R.wallBack.dy;
+  for(let x=0;x<Wd;x++){if(gates.includes(x))continue;P(R.wallBack.piece,R.wallBack.dir,x,wy,zt);}
+  const beam=G.beam&&v.items.find(i=>i.k===G.beam);
+  for(const c of gates){
+    for(const dx of G.pillarX)P(G.pillar,'S',c+dx,gy,zt);
+    if(G.threshold)P(G.threshold,G.doorDir||'E',c,gy,zt);
+    P(G.door,G.doorDir||'E',c,gy,zt);
+    if(beam)[-1,0,1].forEach((dx,i)=>{P(G.beam,G.doorDir||'E',c+dx,gy,zt+G.beamZ);P(G.roof[i],G.doorDir||'E',c+dx,gy,zt+G.roofZ);});}
+  /* tường bên */
+  const S=R.wallSide,rows=tr+1+D.side;
+  for(let i=0;i<rows;i++){P(S.piece,S.left.dir,S.left.x,S.y0+i*S.step,zt);P(S.piece,S.right.dir,Wd-1+S.right.dx,S.y0+i*S.step,zt);}
+  /* đồ trang trí */
+  const cx=gates[gates.length>>1];
+  if(R.incense)P(R.incense.piece,R.incense.dir,cx,R.incense.y,zt,true);
+  if(R.pineUpper){P(R.pineUpper.piece,'S',R.pineUpper.xL,R.pineUpper.y,zt,true);P(R.pineUpper.piece,'S',Wd-1+R.pineUpper.xR,R.pineUpper.y,zt,true);}
+  if(R.upperLamp)for(const c of stairs){P(R.upperLamp.piece,'S',c-R.upperLamp.dx,TT+R.upperLamp.dyFront,zt,true);P(R.upperLamp.piece,'S',c+R.upperLamp.dx,TT+R.upperLamp.dyFront,zt,true);}
+  if(R.lowerLamp)for(let yy=y0+2;yy<lastr;yy+=R.lowerLamp.every||3)for(const c of stairs){P(R.lowerLamp.piece,'S',c-R.lowerLamp.dx,yy+R.lowerLamp.dyRow,0,true);P(R.lowerLamp.piece,'S',c+R.lowerLamp.dx,yy+R.lowerLamp.dyRow,0,true);}
+  B.start=[stairs[stairs.length>>1]+ox,lastr+oy];B.goal=[gates[0]+ox,oy+1];B.chests=[];
+  B.ents.push({id:'s0',t:'start',x:B.start[0],y:B.start[1],name:'Xuất phát',tile:null},{id:'g0',t:'goal',x:B.goal[0],y:B.goal[1],name:'Đích',tile:null});
+  B.blk=new Array(W*H).fill(1);for(const key of B.fl){const [x,y]=key.split(',').map(Number);B.blk[y*W+x]=0;}
+  B.walk=new Set(B.fl);B.noWide=true;B.openings=gates.map(c=>[c+ox,tr+oy,'S']);
+  B.zones={'Sân trên':[ox,oy,ox+Wd-1,oy+TT-1,.2],'Sân dưới':[ox,oy+TT,ox+Wd-1,oy+TT+Dl,.2]};
+  B.shape=D.kind+' · '+Wd+'×'+(TT+1+Dl)+' · '+gates.length+' cổng'+(flat?' · phẳng':'');
+  B.rep=check(B);return Object.assign(B,{rooms:1});}
 
 /* ================= KIỂM TỰ ĐỘNG ================= */
 export function check(b){
@@ -241,7 +318,7 @@ export function check(b){
   const vis=bfs(b.start,pc),wide=new Set(pc);for(const c of pc){const [x,y]=c.split(',').map(Number);for(const [dx,dy] of N4)wide.add(K(x+dx,y+dy));}wide.delete(K(...b.start));
   const visw=bfs(b.start,wide);
   add('Thông tuyến xuất phát → đích',vis.has(K(...b.goal)));
-  add('Thông tuyến rộng (chừa 1 ô quanh đồ)',visw.has(K(...b.goal)));
+  if(!b.noWide)add('Thông tuyến rộng (chừa 1 ô quanh đồ)',visw.has(K(...b.goal)));
   for(const c of b.chests)add('Rương ('+c+') tới được',vis.has(K(...c)));
   const bad=[];for(const [x,y,d] of b.openings){const bh=d==='E'?[x-1,y]:[x,y-1],c2=d==='E'?[x+1,y]:[x,y+1];for(const c of [[x,y],bh,c2])if(pc.has(K(...c)))bad.push(c);}
   add('Trước/sau cửa không có đồ',!bad.length);
@@ -255,7 +332,7 @@ export async function genRule(ctx,kind,opt){
   const prof=RULES[kind];if(!prof)return{error:'Kiểu không có'};
   const L=await loadAll(ctx,prof);ctx._L=L;
   const base=(opt.seed!=null?opt.seed:Math.floor(Math.random()*1e9));let best=null,tries=0;
-  for(let s=0;s<60;s++){tries++;let b=null;try{b=prof.type==='rooms'?buildRooms(ctx,prof,opt,base+s*7919):buildYard(ctx,prof,opt,base+s*7919);}catch(e){console.error(e);return{error:'Lỗi dựng: '+(e&&e.message||e)};}
+  for(let s=0;s<60;s++){tries++;let b=null;try{b=prof.type==='rooms'?buildRooms(ctx,prof,opt,base+s*7919):prof.type==='sanbac'?buildSanBac(ctx,prof,opt,base+s*7919):buildYard(ctx,prof,opt,base+s*7919);}catch(e){console.error(e);return{error:'Lỗi dựng: '+(e&&e.message||e)};}
     if(!b)continue;if(!best||b.rep.ok&&!best.rep.ok)best=b;if(b.rep.ok){best=b;break;}}
   if(!best)return{error:'Không dựng được bố cục, thử lại.'};
   const b=best,N=b.W*b.H;
