@@ -133,3 +133,9 @@ export function gameHTML(data,title,x){x=x||{};
 export function exportGame(data,title){
   if(!SELF.js)return toast('Không xuất được game từ môi trường này');
   return saveFile('game_'+(data.kind||'x')+'.html',new Blob([gameHTML(data,title)],{type:'text/html'}));}
+
+/* tải tệp nhị phân (zip): thử đường dẫn gốc; nếu nơi lưu không phục vụ đuôi .zip thì dùng bản base64 cùng tên + ".txt" */
+export async function fetchBin(url){
+  try{const r=await fetch(url);if(r.ok&&!/text\/html/i.test(r.headers.get('content-type')||'')){const b=new Uint8Array(await r.arrayBuffer());if(b[0]===0x50&&b[1]===0x4b)return b;}}catch(e){}
+  const r2=await fetch(url+'.txt');if(!r2.ok)throw new Error('Không tải được '+url);
+  const s=atob((await r2.text()).replace(/\s+/g,'')),b=new Uint8Array(s.length);for(let i=0;i<s.length;i++)b[i]=s.charCodeAt(i);return b;}

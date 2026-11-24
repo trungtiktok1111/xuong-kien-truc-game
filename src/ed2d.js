@@ -4,7 +4,7 @@ import {logicTab,entExtra} from './logic.js';
 import {animTab,animPick,uniqNames,makeAnims} from './anim.js';
 import {unzipSync} from 'fflate';
 import {initMau} from './mau2d.js';
-import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,idbDel,guessTile,ask,askText,yes,zipBrowser,slotsUI,exportGame} from './util.js';
+import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,idbDel,guessTile,ask,askText,yes,zipBrowser,slotsUI,exportGame,fetchBin} from './util.js';
 const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
@@ -781,7 +781,7 @@ export function init2D(root,A){
     box.append(el('div',{class:'hint'},'Bấm "Nạp" để thêm gói vào app (lưu trong trình duyệt). Gói nạp xong hiện ở tab 🧩 Vật thể / nền.'));
     for(const e of ix){if(e.skipped){box.append(el('div',{class:'hint',style:'border-top:1px solid #2e4a3a;padding:6px 0'},'⊘ Không nạp — '+e.name+': '+e.reason));continue;}const st=el('span',{class:'hint',style:'margin-left:8px'},have.has(e.id)?'✔ đã nạp':'');
       const b=btn(have.has(e.id)?'Nạp lại':'Nạp',async()=>{b.disabled=true;st.textContent='đang nạp…';
-        try{const u8=new Uint8Array(await (await fetch('packs/'+e.file+'?v=1')).arrayBuffer());const rz=await readZip(u8,e.file);
+        try{const u8=await fetchBin('packs/'+e.file);const rz=await readZip(u8,e.file);
           if(rz.error||!rz.check.ok){st.textContent='✘ '+(rz.error||rz.check.errors[0]);b.disabled=false;return;}
           const bd=await buildPack(rz.man,rz.files,t=>{st.textContent=t;});registerPack(bd);await savePacks();await refreshProfiles();
           packRep={ok:true,name:rz.man.name+' ('+rz.man.id+')',errors:[],warns:rz.check.warns,nItems:bd.nItems,nGround:bd.nGround,roles:bd.roles,families:bd.families};

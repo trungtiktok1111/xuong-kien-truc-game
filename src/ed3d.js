@@ -4,7 +4,7 @@ import {mergeGeometries} from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {logicTab,entExtra} from './logic.js';
 import {parseGLB,scanZip,b64} from './models3d.js';
 import {OT3,COLS,defCfg3,newEnt3,entModel} from './ents3d.js';
-import {expandPacks,packBytes,idbDel,$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,ask,askText,yes,zipBrowser,slotsUI,exportGame} from './util.js';
+import {expandPacks,packBytes,idbDel,$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,ask,askText,yes,zipBrowser,slotsUI,exportGame,fetchBin} from './util.js';
 let GX=48,GZ=48,GY=24;
 import {makeTpl} from './tpl3d.js';
 import {ZK,isBox,isPts,mkBox as zMkBox,mkPts,zHit,zPts,zCenter,zMove,zScale,zRotate,zClone,zHandles,zDragHandle} from './zones.js';
@@ -416,7 +416,7 @@ export function init3D(root){
         if(!(await idbSet('m3dp:'+pk.pack,{tex:pk.tex,glbs})))bad++;PTEX.set(pk.pack,pk.tex);
         for(const m of pk.models){LIB.push({id:pk.pack+'/'+m.name,pack:pk.pack,name:m.name,cat:m.cat,thumb:m.thumb});nm++;}np++;}}
     await idbSet('m3d_index',LIB);toast(np?('Đã nhập '+np+' gói, '+nm+' mô hình'+(bad?' — ⚠ '+bad+' mục chưa lưu được (đầy bộ nhớ)':'')):'Không thấy file .glb trong gói (cần thư mục Models/GLB format)');draw();}
-  async function importBuiltin(ids,quiet){try{const ix=await (await fetch('m3d/index.json?v=1')).json();const fs=[];for(const m of ix){if(ids&&!ids.includes(m.id))continue;const r=await fetch('m3d/'+m.file+'?v=1');if(!r.ok)continue;fs.push(new File([await r.blob()],m.file));}
+  async function importBuiltin(ids,quiet){try{const ix=await (await fetch('m3d/index.json?v=1')).json();const fs=[];for(const m of ix){if(ids&&!ids.includes(m.id))continue;try{fs.push(new File([await fetchBin('m3d/'+m.file)],m.file));}catch(e){}}
     if(!fs.length){if(!quiet)toast('Không tải được gói 3D có sẵn');return;}await importPacks0(fs);}catch(e){console.error(e);if(!quiet)toast('Lỗi nạp gói 3D có sẵn: '+(e&&e.message||e));}}
   async function autoBuiltin(){try{const done=(await idbGet('m3d_builtin'))||[];const ix=await (await fetch('m3d/index.json?v=1')).json();const need=ix.filter(m=>!done.includes(m.id)).map(m=>m.id);if(!need.length)return;await importBuiltin(need,true);await idbSet('m3d_builtin',ix.map(m=>m.id));}catch(e){}}
   function pickZips(){const i=document.createElement('input');i.type='file';i.accept='.zip,.rar';i.multiple=true;i.onchange=()=>{const a=[...i.files];if(a.length)importPacks(a);};i.click();}
