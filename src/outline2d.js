@@ -10,9 +10,16 @@ export function outline2D(data,angle=false){
    if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])yes=!yes;
   return yes;
  }
- const walls=edges.map(([a,b],i)=>{
-  const x=(a[0]+b[0])/2,y=(a[1]+b[1])/2;
-  return {a,b,k:angle?y:x+y,near:inside(angle?x:x-.24,y-.24),i};
+ const walls=edges.flatMap(([a,b],i)=>{
+  const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,near=inside(angle?mx:mx-.24,my-.24);
+  /* cắt cạnh dài thành đoạn ngắn: khóa sắp xếp độ sâu theo từng đoạn, không theo điểm giữa cả cạnh (cạnh dài làm tường đè lên người đứng ở đầu cạnh) */
+  const n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/.5)),out=[];
+  for(let j=0;j<n;j++){
+   const p=[a[0]+(b[0]-a[0])*j/n,a[1]+(b[1]-a[1])*j/n],q=[a[0]+(b[0]-a[0])*(j+1)/n,a[1]+(b[1]-a[1])*(j+1)/n];
+   const x=(p[0]+q[0])/2,y=(p[1]+q[1])/2;
+   out.push({a:p,b:q,k:angle?y:x+y,near,i});
+  }
+  return out;
  });
  const points=loops.flat(),u=points.map(p=>angle?p[0]:p[0]-p[1]),v=points.map(p=>angle?p[1]:(p[0]+p[1])/2);
  const bounds=[Math.min(...u),Math.min(...v),Math.max(...u),Math.max(...v)];

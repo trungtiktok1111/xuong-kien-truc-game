@@ -103,6 +103,35 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
 .outline-actions [hidden],.outline-level-actions[hidden]{display:none}
 .outline-workspace details:not(.editor-guide){margin-bottom:8px}
 @media(max-width:660px){.outline-layout{display:block}.outline-patterns{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* điện thoại / máy bảng: bản đồ ở trên, công cụ một hàng cuộn ngang ngay dưới, mẫu hình cuộn ngang, nút lệnh cuối */
+@media (max-width:900px),(pointer:coarse) and (max-width:1100px){
+ .outline-overlay{place-items:start!important;padding:6px!important;grid-template-columns:minmax(0,1fr)!important}
+ .outline-workspace{display:flex;flex-direction:column;gap:6px;padding:8px;width:100%;box-sizing:border-box}
+ .outline-workspace>h2{display:none}
+ .outline-layout,.outline-layout>div{display:contents}
+ .outline-workspace canvas{order:1;position:sticky;top:0;z-index:3;width:auto!important;height:auto!important;max-width:100%;max-height:50vh;aspect-ratio:760/465;align-self:center}
+ .outline-view-tools{order:2}
+ .outline-tools{order:3}
+ .outline-setup{order:4}
+ .outline-library{order:5}
+ .outline-actions{order:6}
+ .outline-workspace .hint:not(.outline-view-tools .hint){order:7}
+ .outline-grid-size{order:8}.outline-grid-note{order:8}
+ .outline-workspace>details:not(.editor-guide){order:9}
+ .outline-workspace>.editor-guide{order:10}
+ .outline-view-tools,.outline-tools,.outline-setup,.outline-actions{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px;margin:0}
+ .outline-view-tools>*,.outline-tools>*,.outline-setup>*,.outline-actions>*{flex:none;white-space:nowrap}
+ .outline-view-tools .hint{display:none}
+ .outline-library .row{flex-wrap:wrap}
+ .outline-patterns,.outline-levels{grid-template-columns:none!important;grid-auto-flow:column;grid-auto-columns:92px;overflow-x:auto;overflow-y:hidden;max-height:none!important;padding-bottom:6px}
+ .outline-template{min-height:96px;align-content:start}
+}
+@media (max-height:520px) and (orientation:landscape) and (max-width:1100px){
+ .outline-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,42%);column-gap:8px;align-items:start}
+ .outline-workspace>*{grid-column:2;min-width:0}
+ .outline-workspace canvas{grid-column:1;grid-row:1/span 12;max-height:calc(100vh - 28px);align-self:start}
+}
 </style></head><body><div id="app">
 <div id="bar"><h1>Xưởng Kiến Trúc Game</h1><button class="tabbtn" data-v="2d">🗺 2D</button><button class="tabbtn" data-v="3d">🧱 3D</button><button id="outlinebtn" class="tabbtn">Đường bao</button><button id="levelbtn" class="tabbtn">Màn mẫu</button><button id="studiobtn" class="tabbtn">Dự án game</button><button id="playbtn" class="tabbtn" style="background:#2e8b57;color:#fff">🎮 Chơi</button><button id="chkbtn" class="tabbtn" style="background:#3a6ea5;color:#fff">✅ Kiểm</button><button id="helpbtn" class="tabbtn" title="Phím tắt F1">Phím tắt</button><button id="relbtn" class="tabbtn" style="background:#b8742a;color:#fff">🚀 Xuất</button></div>
 <div id="v2d" class="view"><canvas id="cv2" class="main"></canvas><div id="pn2" class="panel"></div></div>

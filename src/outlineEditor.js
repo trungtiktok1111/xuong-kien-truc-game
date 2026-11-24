@@ -25,10 +25,10 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const originLevel=outlineLevels.find(level=>level.id===map.cfg.outlineTemplate);
  const levelTiles=new Map();
  let applyButton,restoreLevelButton,createLabel,tryLabel,commitBusy=false;
- const ov=el('section',{style:'position:fixed;inset:0;z-index:180;background:#101820f5;overflow:auto;display:grid;place-items:center;padding:16px;touch-action:pan-y'});
+ const ov=el('section',{class:'outline-overlay',style:'position:fixed;inset:0;z-index:180;background:#101820f5;overflow:auto;display:grid;place-items:center;padding:16px;touch-action:pan-y'});
  const box=el('div',{class:'outline-workspace'});
  const canvas=el('canvas',{width:'760',height:'465',style:'display:block;width:100%;height:auto;background:#141d24;border:1px solid #50606a;touch-action:none'});
- const c=canvas.getContext('2d'),status=el('p',{class:'hint'}),toolbar=el('div',{class:'row'}),footer=el('div',{class:'row',style:'margin-top:10px'});
+ const c=canvas.getContext('2d'),status=el('p',{class:'hint'}),toolbar=el('div',{class:'row outline-tools'}),footer=el('div',{class:'row',style:'margin-top:10px'});
  let s,ox,oy,pan=null;
  const fitScale=()=>Math.min(720/W,425/H);
  function fitGrid(){s=fitScale();ox=(760-W*s)/2;oy=(465-H*s)/2;}
@@ -261,6 +261,17 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   if(!validOutline(next,W,H)){toast('Hình vượt khung. Hãy dời hình vào trong trước.');return;}
   record();loops=next;draw();
  }
+ function rotateAll(deg){
+  if(!loops.length){toast('Chưa có đường bao.');return;}
+  const a=deg*Math.PI/180,pts=loops.flat(),xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+  const x=(Math.min(...xs)+Math.max(...xs))/2,y=(Math.min(...ys)+Math.max(...ys))/2,c=Math.cos(a),sn=Math.sin(a);
+  let next=loops.map(l=>l.map(([u,v])=>[x+c*(u-x)-sn*(v-y),y+sn*(u-x)+c*(v-y)]));
+  const q=next.flat(),mx=Math.min(...q.map(p=>p[0])),Mx=Math.max(...q.map(p=>p[0])),my=Math.min(...q.map(p=>p[1])),My=Math.max(...q.map(p=>p[1]));
+  let dx=0,dy=0;if(mx<1)dx=1-mx;else if(Mx>W-1)dx=W-1-Mx;if(my<1)dy=1-my;else if(My>H-1)dy=H-1-My;
+  next=next.map(l=>l.map(([u,v])=>[round(u+dx),round(v+dy)]));
+  if(!validOutline(next,W,H)){toast('Xoay xong vượt khung. Hãy tăng cỡ lưới hoặc thu nhỏ bản đồ trước.');return;}
+  record();loops=next;draw();toast('Đã xoay cả bản đồ '+deg+'°');
+ }
  function finish(){if(pending.length<3){toast('Cần ít nhất ba đỉnh.');return;}add([pending.slice()]);}
  function nearest(p){
   let best=null,dist=10/s;
@@ -351,10 +362,14 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  scanMapButton=B('Tạo màn từ vùng quét',createScannedMap);
  centerButton=B('Đặt giữa',()=>commitPlacement([W/2,H/2]));
  toolbar.append(copyButton,pasteButton,scanMapButton,corridorWidth,centerButton);
- const editShape=el('details',{},el('summary',{},'Chỉnh hình đã chọn'),
+ const userAngle=el('input',{type:'number',value:15,step:1,'aria-label':'Góc xoay tùy chọn',class:'outline-num'});
+ const editShape=el('details',{open:true},el('summary',{},'Chỉnh hình đã chọn'),
   el('p',{class:'hint'},'Bấm mép để chọn hình. Di chuyển, xoay và đổi cỡ giữ cả lỗ bên trong.'),
   el('div',{class:'row'},B('Thu nhỏ',()=>transformPicked(.8,0)),B('Phóng lớn',()=>transformPicked(1.25,0)),
-   B('Xoay trái 90°',()=>transformPicked(1,-Math.PI/2)),B('Xoay phải 90°',()=>transformPicked(1,Math.PI/2))));
+   B('Xoay trái 90°',()=>transformPicked(1,-Math.PI/2)),B('Xoay phải 90°',()=>transformPicked(1,Math.PI/2))),
+  el('div',{class:'row'},el('label',{},'Góc tùy chọn ',userAngle,'°'),
+   B('Xoay hình đã chọn',()=>transformPicked(1,(Number(userAngle.value)||0)*Math.PI/180)),
+   B('Xoay cả bản đồ',()=>rotateAll(Number(userAngle.value)||0))));
  undoButton=B('Hoàn tác',()=>travel(undo,redo));redoButton=B('Làm lại',()=>travel(redo,undo));
  const setup=el('div',{class:'row outline-setup'},el('label',{},'Cách đặt ',operation),el('label',{},snap,' Bám 1 ô'),
   undoButton,redoButton,B('Khôi phục lúc mở',()=>{
