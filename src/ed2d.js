@@ -742,7 +742,7 @@ export function init2D(root,A){
     inp.click();}
   /* ---- Gói xuong-pack (.zip): app tự đọc pack.json, sinh bộ nền + bộ vật, báo vai trò/họ bố cục ---- */
   let packRep=null;
-  async function refreshProfiles(){loadProfiles(await vatIndex());}
+  let VIDX=[];async function refreshProfiles(){VIDX=await vatIndex();loadProfiles(VIDX);}
   async function savePacks(){const out=[];for(const id of customPackIds()){const v=await vatPack(id),n=await nenPack(id).catch(()=>null);out.push({id,vat:v,nen:n&&n.id===id?n:null});}await idbSet('xuong_packs',out);}
   function packReport(){const R=packRep;if(!R)return el('div');const d=el('div',{style:'margin-top:8px;border:1px solid '+(R.ok?'#4a7a5a':'#a5532f')+';border-radius:10px;padding:8px;background:#141a17'});
     d.append(el('div',{class:'lbl',style:'color:'+(R.ok?'#9fe0b0':'#ff9b8a')},(R.ok?'✅ Đã nạp gói: ':'⚠ Chưa nạp được gói: ')+R.name));
@@ -812,6 +812,8 @@ export function init2D(root,A){
       const selRZ=el('select',{class:'num',onchange:e=>{GR.z=e.target.value;}},[['s','Nhỏ'],['m','Vừa'],['l','Lớn']].map(([k,n])=>{const o=el('option',{value:k},n);if(k===GR.z)o.selected=true;return o;}));
       const selSh=el('select',{class:'num',style:'max-width:230px',onchange:e=>{GR.s=e.target.value;}},Object.entries(SHAPES).map(([k,n])=>{const o=el('option',{value:k},n);if(k===GR.s)o.selected=true;return o;}));
       const selSB=el('select',{class:'num',style:'max-width:230px',onchange:e=>{GR.sb=e.target.value;}},Object.entries(SB_KIEU).map(([k,n])=>{const o=el('option',{value:k},n);if(k===(GR.sb||'auto'))o.selected=true;return o;}));
+      const mixOpts=[['','— không trộn —'],...VIDX.filter(e=>e.profiles||e.id.startsWith('kenney')).map(e=>[e.id,e.name.slice(0,48)])];
+      const selMix=el('select',{class:'num',style:'max-width:230px',onchange:e=>{GR.mix=e.target.value?[e.target.value]:[];}},mixOpts.map(([k,n])=>{const o=el('option',{value:k},n);if(k===((GR.mix||[])[0]||''))o.selected=true;return o;}));
       const cbL=el('input',{type:'checkbox',onchange:e=>{GR.l=e.target.checked;}});cbL.checked=!!GR.l;
       const selY=el('select',{class:'num',onchange:e=>{GR.y=e.target.value;}},[['single','Một nhà kho'],['twin','Nhà kho + nhà phụ']].map(([k,n])=>{const o=el('option',{value:k},n);if(k===GR.y)o.selected=true;return o;}));
       const showRep=R=>{out.textContent='';out.append(el('div',{class:'lbl',style:'color:'+(R.ok?'#9fe0b0':'#ff9b8a')},(R.ok?'✅ ĐẠT':'⚠ CHƯA ĐẠT')+' toàn bộ phép kiểm · hình '+(R.shape||'sân')+' · seed '+R.seed+' · thử '+R.tries+' lần'));for(const r of R.report)out.append(el('div',{class:'hint',style:'color:'+(r[1]?'#9fe0b0':'#ff9b8a')},(r[1]?'✔ ':'✘ ')+r[0]));};
@@ -821,11 +823,12 @@ export function init2D(root,A){
         el('div',{class:'row'},el('span',{class:'lbl'},'Kiểu'),selR,el('span',{class:'lbl'},'Cỡ'),selRZ),
         el('div',{class:'row'},el('span',{class:'lbl'},'Hình dạng (phòng)'),selSh),
         el('div',{class:'row'},el('span',{class:'lbl'},'Kiểu sân bậc'),selSB),
+        el('div',{class:'row'},el('span',{class:'lbl'},'Trộn thêm đồ từ gói (sân bậc)'),selMix),
         el('div',{class:'row'},el('label',{style:'font-size:13px'},cbL,' Có phòng chữ L'),el('span',{class:'lbl'},'Sân'),selY),
         el('div',{class:'row'},btn('🏗 Dựng theo nguyên tắc',async()=>{if(!await yes('Dựng cảnh mới thay cho màn đang mở? (Ctrl+Z hoàn tác bản đồ)'))return;const R=await doGen(GR);if(R)showRep(R);},'background:#b9772b;color:#fff')),out);}
   /* dựng theo hồ sơ của gói (dùng cho nút Dựng và các nút cảnh mẫu) */
   async function doGen(GR){toast('Đang dựng…');await new Promise(r=>setTimeout(r,30));
-    let R;try{R=await genRule({ensureNen,ensureVat,vatPack,sheets:()=>sheets,enc},GR.k,{size:GR.z,shape:GR.s,lshape:GR.l,yard:GR.y,sb:GR.sb,seed:GR.seed});}catch(e){console.error(e);toast('Lỗi: '+(e&&e.message||e));return null;}
+    let R;try{R=await genRule({ensureNen,ensureVat,vatPack,sheets:()=>sheets,enc},GR.k,{size:GR.z,shape:GR.s,lshape:GR.l,yard:GR.y,sb:GR.sb,mix:GR.mix||[],seed:GR.seed});}catch(e){console.error(e);toast('Lỗi: '+(e&&e.message||e));return null;}
     if(R.error){toast(R.error);return null;}window.__lastRep=R;
     pushUndo();M={name:(RULES[GR.k].name.replace(/^\S+\s/,'').replace(/ \(.*/,'').replace(/ — .*/,'')),w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({hp:6,spd:4.2,dmg:1,rng:1.5,hero:{sid:2,idx:0}},M.cfg,{view:'iso',win:'auto',zones:[]})};selId=null;after();fit();draw();toast(R.ok?'Đã dựng — đạt mọi phép kiểm':'Đã dựng — còn phép kiểm chưa đạt');return R;}
   async function genPreset(k,o){if(!(await yes('Dựng cảnh mẫu? Bản đồ đang làm sẽ bị thay (có thể hoàn tác).')))return;await doGen(Object.assign({k,z:'m',s:'auto',l:false,y:'single'},o));}
