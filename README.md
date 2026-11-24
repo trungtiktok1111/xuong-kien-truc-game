@@ -2,6 +2,9 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
+## V15.1
+- Khi bảng vẽ chưa khởi động, hiện mặt bằng Đá Xoáy và thông báo ngay cả trong khung xem tệp không chạy JavaScript. Bản đồ 2D khởi động trước khi tải các gói nền qua mạng.
+
 ## V15
 - **Màn mẫu** có 23 bố cục, gồm bản Đá Xoáy gốc và 10 màn mới trong nhóm **Bố cục phức tạp**.
 - **Điện thoại:** thanh công cụ 2D nằm dưới vùng vẽ, không che bản đồ. Trình sửa **Đường bao** xếp lại: vùng vẽ dính phía trên, các nhóm nút vuốt ngang; xoay ngang thì vùng vẽ bên trái, công cụ bên phải.

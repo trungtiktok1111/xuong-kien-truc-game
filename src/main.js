@@ -20,7 +20,7 @@ if(G){
     Promise.all(sheets.map(s=>new Promise(r=>{const i=new Image();i.onload=()=>{s.img=i;s.cols=Math.floor((i.width+s.margin)/(s.tw+s.margin));s.rows=Math.floor((i.height+s.margin)/(s.tw+s.margin));r();};i.onerror=r;i.src=s.url;}))).then(async()=>{if((G.maps||[G]).some(m=>m.cfg?.proj==='angle'))await ensureAngle(sheets);return G.studio?runStudio(G,sheets):playGame({M:G,sheets});});}
 }else{
 const e2=init2D($('#v2d'),A);window.__e2=e2;let e3=null,cur='2d';
-function go(v){cur=v;$('#v2d').style.display=v==='2d'?'flex':'none';$('#v3d').style.display=v==='3d'?'flex':'none';
+function go(v){cur=v;$('#v2d').style.display=v==='2d'&&$('#xuong-startup')?.hidden!==false?'flex':'none';$('#v3d').style.display=v==='3d'?'flex':'none';
   document.querySelectorAll('.tabbtn[data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   if(v==='3d'){if(!e3)e3=init3D($('#v3d'));window.__e3=e3;e3.show();}else{e3&&e3.hide();e2.show();}}
 document.querySelectorAll('.tabbtn[data-v]').forEach(b=>b.onclick=()=>go(b.dataset.v));
@@ -45,4 +45,5 @@ document.addEventListener('keydown',e=>{
   }
 });
 go('2d');
+e2.ready.then(()=>{window.dispatchEvent(new Event('xuong:ready'));if(cur==='2d')go('2d');},error=>{console.error(error);window.dispatchEvent(new Event('xuong:startup-error'));});
 }

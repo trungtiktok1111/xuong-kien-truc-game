@@ -587,7 +587,10 @@ export function init2D(root,A){
     const r=selRect(),current=desktopTools.find(t=>t[0]===tool);
     statusText.textContent=(current?.[1]||(tool==='paste'?'Dán':'Công cụ'))+(r?' · '+r.w+' × '+r.h+' ô':'')+' · '+Math.round(view.z*100)+'%';
   }
-  window.matchMedia('(min-width: 980px) and (pointer: fine)').addEventListener('change',()=>{renderTabs();draw();fit();});
+  const desktopQuery=window.matchMedia('(min-width: 980px) and (pointer: fine)');
+  const onLayoutChange=()=>{renderTabs();draw();fit();};
+  if(desktopQuery.addEventListener)desktopQuery.addEventListener('change',onLayoutChange);
+  else desktopQuery.addListener(onLayoutChange);
   ui.stamp=()=>{const c=$('.stampc',pn);if(!c)return;const z=Math.max(1,Math.min(5,Math.floor(120/Math.max(stamp.w,stamp.h)/CELL*3)));c.width=stamp.w*CELL*z/1;c.height=stamp.h*CELL*z/1;const g=c.getContext('2d');g.imageSmoothingEnabled=false;g.fillStyle='#2a3340';g.fillRect(0,0,c.width,c.height);
     for(let j=0;j<stamp.h;j++)for(let i=0;i<stamp.w;i++){if(stamp.multi){for(let l=0;l<4;l++){const v=stamp.layers[l]&&stamp.layers[l][j*stamp.w+i];if(v)drawTile(g,v,i*CELL*z,j*CELL*z,CELL*z);}}else drawTile(g,stamp.tiles[j*stamp.w+i],i*CELL*z,j*CELL*z,CELL*z);}};
   ui.obj=()=>{if(tab==='obj'||tab==='maps')draw();};ui.tools=()=>{if(tab==='tools')draw();};ui.layers=()=>{if(tab==='layers'||tab==='tools')draw();};ui.sel=()=>{if(tab==='tools')draw();};
@@ -1186,16 +1189,23 @@ export function init2D(root,A){
       if(Object.keys(ren).length&&cf.anims)for(const a of cf.anims)for(const st of Object.values(a.st||{}))if(st.src)st.src=st.src.map(n=>ren[n]||n);
       pushUndo();M=clone({w:o.w,h:o.h,layers:lay,blk:o.collision,ents:en,cfg:cf});selId=null;after();fit();toast('Đã nhập bản đồ');}catch(e){toast('Tệp không đúng định dạng');}}
   // khởi động
-  (async()=>{await Promise.all(sheets.map(loadSheet));let sv=lsGet('thk_proj2d',null);if(!sv||sv.large)sv=await idbGet('thk_proj2d_large');const idbC=await idbGet('thk_sheets2d');
+  const ready=(async()=>{await Promise.all(sheets.map(loadSheet));let sv=lsGet('thk_proj2d',null);if(!sv||sv.large)sv=await idbGet('thk_proj2d_large');const idbC=await idbGet('thk_sheets2d');
     if(sv&&sv.layers){for(const s of ((idbC&&idbC.length)?idbC:(sv.custom||[]))){const ns=Object.assign({},s);await loadSheet(ns);sheets.push(ns);}MAPS=Array.isArray(sv.maps)&&sv.maps.length?sv.maps:[];curMap=Math.min(sv.cur||0,Math.max(0,MAPS.length-1));M=clone(MAPS.length?MAPS[curMap]:sv);if(!MAPS.length){M.name=M.name||'Màn 1';MAPS=[clone(M)];}}else{M=fromVillage();M.name='Màn 1';MAPS=[clone(M)];
       const sample=document.getElementById('da-xoay-sample');
       if(sample){await importJSON(sample.textContent);M.name='Hầm ngục Đá Xoáy';M.cfg.outlineTemplate=DA_XOAY_LEVEL;syncCur();grid=false;}
     }
-    try{const pk=await idbGet('xuong_packs');if(Array.isArray(pk))for(const p of pk)registerPack({nen:p.nen,vat:p.vat,nGround:p.nen?Object.keys(p.nen.idx).length:0,thumb:''});}catch(e){}
-    try{await refreshProfiles();draw();}catch(e){}
-    if(window.__gn==null)window.__gn='kenney-dia-lao';try{const r=await ensureNen(window.__gn);curSheet=r.sid;}catch(e){}
-    (async()=>{try{const L=await nenIndex();let k=0;toast('Đang nạp '+L.length+' bộ nền…');for(const o of L){try{await ensureNen(o.id);k++;}catch(e){}}tgSave();after();draw();toast('Đã nạp đủ '+k+'/'+L.length+' bộ nền (xem ở tab Tileset và Tài nguyên).');}catch(e){}})();
-    stamp={w:1,h:1,multi:false,tiles:[0]};if(desktop())act=0;draw();setTimeout(fit,50);})();
+    stamp={w:1,h:1,multi:false,tiles:[0]};if(desktop())act=0;draw();
+    // Optional network packs must not delay the first usable map.
+    void (async()=>{
+      try{const pk=await idbGet('xuong_packs');if(Array.isArray(pk))for(const p of pk)registerPack({nen:p.nen,vat:p.vat,nGround:p.nen?Object.keys(p.nen.idx).length:0,thumb:''});}catch(e){}
+      try{await refreshProfiles();draw();}catch(e){}
+      if(window.__gn==null)window.__gn='kenney-dia-lao';
+      try{const r=await ensureNen(window.__gn);curSheet=r.sid;}catch(e){}
+      try{const L=await nenIndex();let k=0;for(const o of L){try{await ensureNen(o.id);k++;}catch(e){}}
+        tgSave();after();draw();if(L.length)toast('Đã nạp '+k+'/'+L.length+' bộ nền');
+      }catch(e){}
+    })();
+  })();
   async function ensureNen(id){const pk=await nenPack(id),name='Nen-'+id;let sid=sheets.findIndex((s,i)=>i>=4&&s.name===name);
     const wat=Object.entries(pk.idx).filter(([n])=>/^(nuoc|vuc|bo-00|mep-vuc-00|phien-nuoc|phien-ho)/.test(n)).map(e=>e[1]);
     if(sid>=0)sheets[sid].wat=wat;
@@ -1480,5 +1490,5 @@ export function init2D(root,A){
     toast('Đã tạo '+fresh.name);
   }
   function clearOutline(){pushUndo();delete M.cfg.outline;after();fit();draw();}
-  return {applyOutline,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  return {ready,applyOutline,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
 }
