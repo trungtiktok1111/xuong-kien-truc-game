@@ -1,0 +1,26 @@
+[
+ {
+  "id": "kenney-retro-urban-kit",
+  "file": "kenney-retro-urban-kit.zip",
+  "name": "Kenney · Retro Urban Kit (phố hiện đại)",
+  "models": 124,
+  "license": "CC0 (Kenney)",
+  "bytes": 291469
+ },
+ {
+  "id": "kenney-retro-medieval-kit",
+  "file": "kenney-retro-medieval-kit.zip",
+  "name": "Kenney · Retro Medieval Kit (trung cổ)",
+  "models": 105,
+  "license": "CC0 (Kenney)",
+  "bytes": 268796
+ },
+ {
+  "id": "tree-pack",
+  "file": "tree-pack.zip",
+  "name": "Tree Pack 1.1 (cây & bụi, đã đổi FBX→GLB)",
+  "models": 44,
+  "license": "Không có tệp giấy phép trong gói — chưa rõ",
+  "bytes": 1225662
+ }
+]

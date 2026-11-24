@@ -416,6 +416,9 @@ export function init3D(root){
         if(!(await idbSet('m3dp:'+pk.pack,{tex:pk.tex,glbs})))bad++;PTEX.set(pk.pack,pk.tex);
         for(const m of pk.models){LIB.push({id:pk.pack+'/'+m.name,pack:pk.pack,name:m.name,cat:m.cat,thumb:m.thumb});nm++;}np++;}}
     await idbSet('m3d_index',LIB);toast(np?('Đã nhập '+np+' gói, '+nm+' mô hình'+(bad?' — ⚠ '+bad+' mục chưa lưu được (đầy bộ nhớ)':'')):'Không thấy file .glb trong gói (cần thư mục Models/GLB format)');draw();}
+  async function importBuiltin(ids,quiet){try{const ix=await (await fetch('m3d/index.json?v=1')).json();const fs=[];for(const m of ix){if(ids&&!ids.includes(m.id))continue;const r=await fetch('m3d/'+m.file+'?v=1');if(!r.ok)continue;fs.push(new File([await r.blob()],m.file));}
+    if(!fs.length){if(!quiet)toast('Không tải được gói 3D có sẵn');return;}await importPacks0(fs);}catch(e){console.error(e);if(!quiet)toast('Lỗi nạp gói 3D có sẵn: '+(e&&e.message||e));}}
+  async function autoBuiltin(){try{const done=(await idbGet('m3d_builtin'))||[];const ix=await (await fetch('m3d/index.json?v=1')).json();const need=ix.filter(m=>!done.includes(m.id)).map(m=>m.id);if(!need.length)return;await importBuiltin(need,true);await idbSet('m3d_builtin',ix.map(m=>m.id));}catch(e){}}
   function pickZips(){const i=document.createElement('input');i.type='file';i.accept='.zip,.rar';i.multiple=true;i.onchange=()=>{const a=[...i.files];if(a.length)importPacks(a);};i.click();}
   // ===== quản lý / xóa mô hình đã nhập =====
   async function deleteModels(ids){const ds=new Set(ids);if(!ds.size)return;const byPack={};for(const m of LIB)if(ds.has(m.id))(byPack[m.pack]=byPack[m.pack]||[]).push(m.name);
@@ -441,7 +444,7 @@ export function init3D(root){
         btn('⚠ Xóa TẤT CẢ',async()=>{if(!LIB.length)return;if(!(await yes('Xóa TOÀN BỘ '+LIB.length+' mô hình đã nhập (và các món đã đặt trong cảnh)?')))return;await deleteModels(LIB.map(m=>m.id));ov.remove();}),btn('Đóng',()=>ov.remove())));
     ov.append(box);document.body.append(ov);draw2();}
   function mdlTab(){const S=mq;
-    body.append(el('div',{class:'row'},btn('📦 Nhập gói mô hình .zip…',pickZips),LIB.length?btn('🗑 Quản lý / xóa',mdlMgr):null,el('span',{class:'lbl'},LIB.length+' mô hình / '+new Set(LIB.map(m=>m.pack)).size+' gói')));
+    body.append(el('div',{class:'row'},btn('📦 Nhập gói mô hình .zip…',pickZips),btn('📚 Gói 3D có sẵn (Kenney Urban/Medieval, Cây)',()=>importBuiltin()),LIB.length?btn('🗑 Quản lý / xóa',mdlMgr):null,el('span',{class:'lbl'},LIB.length+' mô hình / '+new Set(LIB.map(m=>m.pack)).size+' gói')));
     if(!LIB.length){body.append(el('div',{class:'hint'},'Chưa có mô hình. Bấm "Nhập gói mô hình" và chọn file .zip mô hình của bạn (bên trong phải có thư mục "Models/GLB format"). Chọn được nhiều file một lúc. File .rar cần giải nén ra .zip trước.'));
       body.append(el('div',{class:'hint'},'Sau khi nhập: bấm một món trong thư viện, rồi chạm lên cảnh để đặt. Chạm "✋ Chọn" để chọn lại món đã đặt và xoay/phóng/dời.'));}
     else{
@@ -723,7 +726,7 @@ export function init3D(root){
       body.append(el('div',{class:'row'},btn('🎮 Xuất GAME 3D (file HTML)',()=>exportGame(api.gameData(),'Game 3D của tôi'))));
       body.append(el('div',{class:'hint'},'GLB mở được trong Godot, Unity, Blender, three.js. Ảnh isometric/4 hướng là PNG nền trong suốt để dán vào game 2D. App tự lưu trên trình duyệt này.'));}
   }
-  (async()=>{LIB=(await idbGet('m3d_index'))||[];for(const c of ((await idbGet('thk_cmats3d'))||lsGet('thk_cmats',[])))await addCustomMat(c.n,c.url,true);const sv=lsGet('thk_proj3d',null);if(sv&&(Array.isArray(sv)?sv.length:(sv.v&&sv.v.length)))load(sv);else{TPL['Đình tứ trụ (võ hiệp)']();refreshVis();}if(Math.max(GX,GZ)>48)fitAll();syncEnts();syncProps();draw();})();
+  (async()=>{LIB=(await idbGet('m3d_index'))||[];autoBuiltin();for(const c of ((await idbGet('thk_cmats3d'))||lsGet('thk_cmats',[])))await addCustomMat(c.n,c.url,true);const sv=lsGet('thk_proj3d',null);if(sv&&(Array.isArray(sv)?sv.length:(sv.v&&sv.v.length)))load(sv);else{TPL['Đình tứ trụ (võ hiệp)']();refreshVis();}if(Math.max(GX,GZ)>48)fitAll();syncEnts();syncProps();draw();})();
   draw();
   const api={cam,show(){run=true;loop();},hide(){run=false;},gameData:()=>{const used=[...new Set(props.map(p=>p.m))],pm={},pt={};for(const id of used){const b=BYTES.get(id);if(b){pm[id]={glb:b64(b.u8),pack:b.pack};pt[b.pack]=b.tex;}}return {kind:'3d',grid:[GX,GY,GZ],voxels:snapV(),ents:JSON.parse(JSON.stringify(ents)),cfg:Object.assign({},cfg),cmats:MATS.slice(BASE_N).map(m=>({n:m.n,url:m.url})),props:JSON.parse(JSON.stringify(props)),pmodels:pm,ptex:pt};},_t:{setV,clearAll,refreshVis,exp:expGLB}};
   return api;

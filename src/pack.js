@@ -82,6 +82,7 @@ export function checkManifest(man,files){
   for(const [k,a] of Object.entries(A)){
     if(!a.png){E.push(k+': thiếu png');continue;}
     if(files&&!files[a.png]){E.push(k+': không thấy tệp '+a.png+' trong zip');}
+    if(a.at&&!(Array.isArray(a.at)&&a.at.length===2))E.push(k+': at phải là [x,y] vị trí đặt ảnh trong khung canvas');
     if(!a.role||!ROLES[a.role])E.push(k+': vai trò "'+(a.role||'')+'" không hợp lệ');
     if(a.role==='bac'&&a.rise==null)E.push(k+': bậc phải có rise (px)');
     if(a.role==='nen-cao'&&a.rise==null)W.push(k+': nền cao nên có rise (px)');
@@ -104,6 +105,10 @@ function zbFor(a,d){
   const fp=a.footprint;if(!fp)return null;
   const [x0,y0,x1,y1]=rot(fp,d);return [r3(x0-.5),r3(y0-.5),r3(x1-x0),r3(y1-y0)];}
 const r3=v=>Math.round(v*1000)/1000,r4=v=>Math.round(v*10000)/10000;
+/* vùng chặn tuỳ chỉnh (col): toạ độ theo hệ cục bộ E, gốc ở tâm ô; xoay theo hướng rồi đổi sang gốc góc trước (−.5) như zb */
+function colFor(a,d){if(!a.col||!a.col.length)return null;const f={E:(x,y)=>[x,y],S:(x,y)=>[-y,x],W:(x,y)=>[-x,-y],N:(x,y)=>[y,-x],ALL:(x,y)=>[x,y]}[d]||((x,y)=>[x,y]);
+  const P=q=>{const r=f(q[0],q[1]);return [r3(r[0]-.5),r3(r[1]-.5)];};
+  return a.col.map(c=>c.k==='circle'?{k:'circle',...(()=>{const r=P([c.x,c.y]);return {x:r[0],y:r[1]};})(),r:c.r}:c.k==='rect'?(()=>{const A=P([c.x,c.y]),B=P([c.x+c.w,c.y+c.h]);return {k:'rect',x:Math.min(A[0],B[0]),y:Math.min(A[1],B[1]),w:r3(Math.abs(B[0]-A[0])),h:r3(Math.abs(B[1]-A[1]))};})():c.k==='poly'?{k:'poly',pts:c.pts.map(P)}:{k:'seg',a:P(c.a),b:P(c.b),th:c.th||.25});}
 /* nhóm vai trò thể hiện trên sprite cũ (Hạ tầng/Nhà/Vật…) để editor cũ vẫn phân loại được */
 const OLDROLE={'nen':'Phủ nền','nen-duong':'Phủ nền','nen-cao':'Phủ nền','vien-nen':'Phủ nền','tham':'Phủ nền','nguong':'Phủ nền','bac':'Hạ tầng','tuong':'Nhà','cua':'Nhà','cong':'Nhà','mai':'Mái/cửa','cay':'Cây'};
 const oldRole=a=>a.role==='cong'&&a.part&&a.part!=='tru'?'Mái/cửa':(OLDROLE[a.role]||'Vật');
@@ -129,7 +134,7 @@ export async function readZip(u8,fname){
 
 export async function buildPack(man,files,progress){
   const pr=man.projection,[TW,TH]=pr.tile,[CW,CH]=pr.canvas,[AX,AY]=pr.anchor,ent=Object.entries(man.assets),bms={},ab={};
-  let n=0;for(const [k,a] of ent){const bm=await bmp(files[a.png]);bms[k]=bm;ab[k]=a.alpha&&a.alpha.length===4?a.alpha:bbox(bm);if(progress&&++n%10===0)progress('Đọc ảnh '+n+'/'+ent.length);await new Promise(r=>setTimeout(r));}
+  let n=0;for(const [k,a] of ent){let bm=await bmp(files[a.png]);if(a.at){const c=cnv(CW,CH);c.getContext('2d').drawImage(bm,a.at[0],a.at[1]);bm=c;}bms[k]=bm;ab[k]=a.alpha&&a.alpha.length===4?a.alpha:bbox(bm);if(progress&&++n%10===0)progress('Đọc ảnh '+n+'/'+ent.length);await new Promise(r=>setTimeout(r));}
   /* --- bộ nền: ô TW×TW, đỉnh ô ở y=cy --- */
   const CY=Math.round(TH/2),nc=8;
   const gl=ent.filter(([k,a])=>['nen','nen-duong','nen-cao','vien-nen','nguong'].includes(a.role));
@@ -146,9 +151,10 @@ export async function buildPack(man,files,progress){
   const T=Math.ceil(Math.max(CW,CH-minTop)/8)*8,cols=12,rows=Math.ceil(vl.length/cols),vcv=cnv(cols*T,rows*T),vg=vcv.getContext('2d'),items=[];
   const sc=r4(T*(192/TW)/128),oy=r4((CH-AY-TH/2)/T);
   vl.forEach(([k,a],i)=>{const s=splitKey(k),d=a.dir||s.dir;vg.drawImage(bms[k],0,CH-T,CW,T,(i%cols)*T+Math.floor((T-CW)/2),Math.floor(i/cols)*T,CW,T);
-    const b=ab[k],zb=zbFor(a,d);
+    const b=ab[k],zb=zbFor(a,d),col=colFor(a,d);
     const it={name:VN(a,k,s),role:oldRole(a),cv:null,i,fx:1,fy:1,sc,zb:zb||[-.8,-.8,.6,.6],k:a.group||s.base,d,oy,w:b[2]-b[0],h:CH-b[1],
-      r:a.role,cal:zb?1:0};
+      r:a.role,cal:(zb||col)?1:0};
+    if(col)it.col=col;
     if(a.part)it.part=a.part;if(a.state)it.st=a.state;if(a.place)it.place=a.place;if(a.rise!=null)it.rise=a.rise;if(a.mount!=null)it.mount=a.mount;if(a.blocksEdge)it.blocksEdge=1;if(a.solid===false)it.solid=0;
     if(a.var)it.v=a.var;if(a.high)it.high=a.high;items.push(it);});
   const vatPk={id:man.id,name:man.name,desc:'gói '+(man.legacy?'(manifest tác giả)':'xuong-pack-1'),T,cols,items,atlas:vcv.toDataURL('image/png'),

@@ -27,7 +27,9 @@ rules.json         tuỳ chọn: luật đặt riêng của gói (ghi đè luậ
       "dir": "E",                   // E|S|W|N|ALL
       "footprint": [-0.5,0.27,0.5,0.48],  // khung chiếm chỗ (ô), theo hướng E
       "solid": true,
-      "rise": 0                     // chỉ bậc thang: px nâng lên
+      "rise": 0,                    // chỉ bậc thang: px nâng lên
+      "at": [x,y],                  // tuỳ chọn: đặt ảnh (đã cắt gọn) tại x,y trong khung canvas; nhiều mảnh dùng chung một png
+      "col": [{"k":"seg","a":[-0.5,0.4],"b":[-0.26,0.4],"th":0.22}]  // tuỳ chọn: vùng chặn riêng (thay footprint), theo hệ E, gốc tâm ô
     }
   }
 }
@@ -76,3 +78,10 @@ Quy tắc: gói đủ vai trò thì app mở họ bố cục đó; thiếu thì 
 ## 8. Chuyển gói hiện có
 - **Thiếu Lâm:** `manifest.json` của tác giả → `pack.json` (đổi `kind` thành `role`, giữ footprint/anchor/rise).
 - **Kenney (4 gói):** viết `pack.json` theo cùng định dạng từ các vai trò script đang đoán; bạn duyệt lại danh sách vai trò trước khi dùng.
+
+## 9. Gói dựng sẵn từ SBS / mẫu miễn phí (thư mục `packs/`)
+- Bộ dựng: `tools/sbs/build_all.py` (+ `lib.py`). Mỗi gói ra một zip có `pack.json` riêng; `packs/index.json` liệt kê gói và các gói không nạp (kèm lý do).
+- `at` giúp mảnh Đông/Tây (hoặc Nam/Bắc) dùng chung một ảnh, chỉ khác chỗ đặt; khung canvas do bộ dựng tính từ toàn bộ mảnh.
+- `col` (seg/rect/circle/poly) toạ độ theo hệ E, gốc ở tâm ô, tự xoay theo `dir` — dùng cho cửa vòm (hai trụ hai bên lỗ cửa).
+- Quy ước đặt tường: ảnh nghiêng `\` gán cạnh Đông và Tây, ảnh `/` gán Nam và Bắc; điểm chân là giữa đường chân tường nội suy từ đáy hai đầu ảnh (không dùng cột giữa vì cửa vòm rỗng ở đó).
+- Nạp trong app: tab 💾 Tệp → "📚 Gói 2D có sẵn".
