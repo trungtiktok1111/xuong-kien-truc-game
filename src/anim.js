@@ -3,7 +3,7 @@ import {unzipSync} from 'fflate';
 /* Hoạt ảnh nhân vật 2D: bộ hoạt ảnh = các trạng thái (đứng/chạy/đánh/trúng đòn), mỗi trạng thái là 1 dải ảnh nhiều khung.
    Hướng: 1 ảnh nhiều hàng (mỗi hàng 1 hướng) HOẶC mỗi hướng 1 ảnh (tên có số, vd CHAR_0_Run … CHAR_7_Run). */
 export const STATES=[['idle','Đứng yên'],['run','Chạy'],['atk','Đánh'],['hit','Trúng đòn']];
-const LOOP={idle:1,run:1,atk:0,hit:0};
+const LOOP={idle:1,run:1,atk:0,hit:0,pickup:0};
 const ORD=[['cw','Vòng thuận: Nam→Tây→Bắc→Đông'],['ccw','Vòng ngược: Nam→Đông→Bắc→Tây'],['rpg4','4 hướng kiểu RPG: Nam,Tây,Đông,Bắc']];
 
 /* tên trùng (vd 8 hướng cùng tên) → đánh số theo thứ tự: tên, tên#2, tên#3… */
@@ -42,8 +42,8 @@ export function makeAnims(cfg,sheets){uniqNames(sheets);
     cx.imageSmoothingEnabled=sm;return true;}
   function drawChar(cx,q,id,sx,sy,s,t,hint){
     const set=get(id);if(!set)return false;
-    if(q.lx!==undefined){let dx=q.x-q.lx,dy=q.y-q.ly;if(hint&&hint.iso){const a=dx-dy,b=(dx+dy)*.5;dx=a;dy=b;}if(Math.abs(dx)+Math.abs(dy)>.0004){q.mvt=t;const m=Math.hypot(dx,dy);q.afx=dx/m;q.afy=dy/m;if(Math.abs(dx)>.0002)q.aface=dx>0?1:-1;}}q.lx=q.x;q.ly=q.y;
-    const want=hint&&hint.hit?'hit':hint&&hint.atk?('atk'+(hint.atk>1?hint.atk:'')):(t-(q.mvt===undefined?-9:q.mvt)<.12?'run':'idle');
+    if(q.lx!==undefined){let dx=q.x-q.lx,dy=q.y-q.ly;if(hint&&hint.iso&&!hint.ang){const a=dx-dy,b=(dx+dy)*.5;dx=a;dy=b;}if(Math.abs(dx)+Math.abs(dy)>.0004){q.mvt=t;const m=Math.hypot(dx,dy);q.afx=dx/m;q.afy=dy/m;if(Math.abs(dx)>.0002)q.aface=dx>0?1:-1;}}q.lx=q.x;q.ly=q.y;
+    const want=hint&&hint.pk&&set.st&&set.st.pickup?'pickup':hint&&hint.hit?'hit':hint&&hint.atk?('atk'+(hint.atk>1?hint.atk:'')):(t-(q.mvt===undefined?-9:q.mvt)<.12?'run':'idle');
     const stn=pickState(set,want);if(!stn)return false;
     if(q.ast!==stn||(hint&&hint.atk&&hint.aid!==undefined&&q.aid!==hint.aid)){q.ast=stn;q.ast0=t;}if(hint&&hint.aid!==undefined)q.aid=hint.aid;
     const dirs=dirsOf(set.st[stn]);const d=dirIdx(set,dirs,q.afx||0,q.afy===undefined?1:q.afy,q.aface||1);
