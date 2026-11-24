@@ -490,7 +490,7 @@ export function init2D(root,A){
       body.append(el('div',{class:'hint'},'Bật/tắt hiển thị từng lớp. Lớp "Vùng chặn" là chỗ nhân vật không đi qua được (xuất kèm trong tệp dữ liệu để dùng trong game).'));
       LAYN.concat(['Vùng chặn']).forEach((n,i)=>body.append(el('div',{class:'row'},btn(vis[i]?'👁 Hiện':'🚫 Ẩn',()=>{vis[i]=vis[i]?0:1;dirty=true;draw();},vis[i]?'':'off'),btn(n,()=>{act=i;draw();},act===i?'on':''))));}
     else if(tab==='file'){
-      body.append(el('div',{style:'border:1px solid #4a7a5a;border-radius:10px;padding:8px;margin-bottom:10px;background:#16261d'},el('div',{class:'lbl',style:'color:#9fe0b0;margin-bottom:6px'},'📂 TẢI TỆP LÊN'),el('div',{class:'row'},btn('🖼 Ảnh tileset (.png)…',addSheet),btn('📦 Gói tài nguyên .zip…',addZip),btn('⬆ Dự án .json…',()=>pickFile('.json,application/json',t=>importJSON(t))),btn('🏯 Mở Màn 1 có sẵn (Làng sa mạc)',openLevel1),btn('⛓ Cảnh mẫu: Địa lao',()=>openKScene('dia-lao')),btn('⛓ Địa lao 2 (3 phòng + đích)',()=>openKScene('dia-lao-2')),btn('🌾 Cảnh mẫu: Nông trại',()=>openKScene('nong-trai')),btn('🌾 Nông trại 2 (ruộng + kho)',()=>openKScene('nong-trai-2')),btn('📚 Cảnh mẫu: Thư viện',()=>openKScene('thu-vien')),btn('📚 Thư viện 2 (4 phòng + đích)',()=>openKScene('thu-vien-2'))),el('div',{class:'hint'},'Ảnh/zip sẽ thành tileset mới trong tab 🧩 Tileset. Gói zip: chọn ảnh bên trong rồi nhập kích thước ô.')));body.append(ruleBox());
+      body.append(el('div',{style:'border:1px solid #4a7a5a;border-radius:10px;padding:8px;margin-bottom:10px;background:#16261d'},el('div',{class:'lbl',style:'color:#9fe0b0;margin-bottom:6px'},'📂 TẢI TỆP LÊN'),el('div',{class:'row'},btn('🖼 Ảnh tileset (.png)…',addSheet),btn('📦 Gói tài nguyên .zip…',addZip),btn('⬆ Dự án .json…',()=>pickFile('.json,application/json',t=>importJSON(t))),btn('⛓ Cảnh mẫu: Địa lao',()=>openKScene('dia-lao')),btn('⛓ Địa lao 2 (3 phòng + đích)',()=>openKScene('dia-lao-2')),btn('🌾 Cảnh mẫu: Nông trại',()=>openKScene('nong-trai')),btn('🌾 Nông trại 2 (ruộng + kho)',()=>openKScene('nong-trai-2')),btn('📚 Cảnh mẫu: Thư viện',()=>openKScene('thu-vien')),btn('📚 Thư viện 2 (4 phòng + đích)',()=>openKScene('thu-vien-2'))),el('div',{class:'hint'},'Ảnh/zip sẽ thành tileset mới trong tab 🧩 Tileset. Gói zip: chọn ảnh bên trong rồi nhập kích thước ô.')));body.append(ruleBox());
       body.append(slotsUI('2d',()=>clone(M),o=>{pushUndo();M=clone(o);selId=null;after();fit();},'Làng của tôi'));
       const wi=el('input',{type:'number',value:M.w,min:4,max:600,class:'num'}),hi=el('input',{type:'number',value:M.h,min:4,max:600,class:'num'});
       body.append(el('div',{class:'row'},btn('🏘 Mở lại làng Thanh Hồ',async()=>{if(await yes('Thay bản đồ hiện tại bằng làng Thanh Hồ gốc?')){pushUndo();M=fromVillage();after();fit();}}),btn('🆕 Bản đồ trống',async()=>{if(await yes('Tạo bản đồ trống '+wi.value+'×'+hi.value+'? (có thể hoàn tác)')){pushUndo();M=newMap(+wi.value,+hi.value);after();fit();}})));
@@ -760,7 +760,7 @@ export function init2D(root,A){
   // khởi động
   (async()=>{await Promise.all(sheets.map(loadSheet));const sv=lsGet('thk_proj2d',null);const idbC=await idbGet('thk_sheets2d');
     if(sv&&sv.layers){for(const s of ((idbC&&idbC.length)?idbC:(sv.custom||[]))){const ns=Object.assign({},s);await loadSheet(ns);sheets.push(ns);}MAPS=Array.isArray(sv.maps)&&sv.maps.length?sv.maps:[];curMap=Math.min(sv.cur||0,Math.max(0,MAPS.length-1));M=clone(MAPS.length?MAPS[curMap]:sv);if(!MAPS.length){M.name=M.name||'Màn 1';MAPS=[clone(M)];}}else{M=fromVillage();M.name='Màn 1';MAPS=[clone(M)];}
-    if(window.__gn==null)window.__gn='lang-nui-pho-kenh';try{const r=await ensureNen(window.__gn);curSheet=r.sid;}catch(e){}
+    if(window.__gn==null)window.__gn='kenney-dia-lao';try{const r=await ensureNen(window.__gn);curSheet=r.sid;}catch(e){}
     (async()=>{try{const L=await nenIndex();let k=0;toast('Đang nạp '+L.length+' bộ nền…');for(const o of L){try{await ensureNen(o.id);k++;}catch(e){}}tgSave();after();draw();toast('Đã nạp đủ '+k+'/'+L.length+' bộ nền (xem ở tab Tileset và Tài nguyên).');}catch(e){}})();
     stamp={w:1,h:1,multi:false,tiles:[enc(0,5)]};draw();setTimeout(fit,50);})();
   async function ensureNen(id){const pk=await nenPack(id),name='Nen-'+id;let sid=sheets.findIndex((s,i)=>i>=4&&s.name===name);
@@ -833,26 +833,7 @@ export function init2D(root,A){
     {const rb=el('div',{style:'border:1px solid #6aa8ff;border-radius:10px;padding:8px;margin-top:8px;background:#1b2430'});
       rb.append(el('div',{class:'lbl',style:'color:#9cc4ff'},'🖼 DỰNG TỪ ẢNH MẪU — app tự nhận dạng ảnh, chọn đúng tài nguyên và báo thiếu'),
         btn('Mở ảnh mẫu…',()=>openRefMap({el,btn,toast,yes,get sheets(){return sheets;},nenIndex,nenPack,vatIndex,ensureNen,ensureVat,enc,apply(R){pushUndo();M={name:M.name,w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({},M.cfg,{view:'iso',zones:[]})};selId=null;after();fit();draw();}}),'on'));body.append(rb);}
-    const GS={v:window.__gv||'rpg',k:window.__gk||'village',z:window.__gz||'m',g:!!window.__gg};
-    const selK=el('select',{class:'num',onchange:e=>{window.__gk=e.target.value;const p=GEN_KIND_PACK[e.target.value];if(p){window.__gn=p;selN.value=p;const o=selN._L&&selN._L.find(x=>x.id===p);nenD.textContent=o?o.desc:'';}}},Object.entries(GEN_KINDS).map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.k)o.selected=true;return o;}));
-    const selZ=el('select',{class:'num',onchange:e=>{window.__gz=e.target.value;}},[['s','Nhỏ 32×24'],['m','Vừa 48×36'],['l','Lớn 64×48']].map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.z)o.selected=true;return o;}));
-    const selV=el('select',{class:'num',onchange:e=>{window.__gv=e.target.value;}},Object.entries(GEN_VIEWS).map(([k,n])=>{const o=el('option',{value:k},n);if(k===GS.v)o.selected=true;return o;}));
-    if(window.__gn==null)window.__gn='lang-nui-pho-kenh';
-    const nenD=el('div',{class:'hint'},'');
-    const selN=el('select',{class:'num',style:'width:100%;max-width:230px',onchange:e=>{window.__gn=e.target.value;const o=selN._L&&selN._L.find(x=>x.id===e.target.value);nenD.textContent=o?o.desc:'';}},el('option',{value:''},'Nền cũ (Màn 1)'));
-    nenIndex().then(L=>{L=L.filter(o=>!o.pal);selN._L=L;for(const o of L){const op=el('option',{value:o.id},o.name+' ('+o.n+' ô)');if(o.id===window.__gn){op.selected=true;nenD.textContent=o.desc;}selN.append(op);}});
-    const selVat=el('select',{class:'num',style:'width:100%;max-width:230px',onchange:e=>{window.__gvat=e.target.value||null;}},el('option',{value:''},'Tự động theo kiểu'),el('option',{value:'mine'},'📁 Của tôi (ảnh đã nạp)'));
-    vatIndex().then(L=>{for(const o of L){const op=el('option',{value:o.id},o.name);if(o.id===window.__gvat)op.selected=true;selVat.append(op);}});
-    const cbG=el('input',{type:'checkbox',onchange:e=>{window.__gg=e.target.checked;}});cbG.checked=GS.g;
-    body.append(el('div',{style:'border:1px solid #5aa17a;border-radius:10px;padding:8px;margin-top:10px;background:#16261d'},
-      el('div',{class:'lbl',style:'color:#9fe0b0'},'🎲 TỰ TẠO BỐI CẢNH TỪ TÀI NGUYÊN'),
-      el('div',{class:'hint'},'App dùng các tài nguyên đã gắn nhãn (Cây, Nhà, Nước, Đồ vật, Trang trí…) để trải nền, vẽ đường, đặt hồ, nhà, cây. Thay bản đồ của màn đang mở (hoàn tác được bằng Ctrl+Z).'),
-      el('div',{class:'row'},el('span',{class:'lbl'},'🧱 Bộ nền (theo khu)'),selN),nenD,
-      el('div',{class:'row'},el('span',{class:'lbl'},'🏛 Bộ vật thể'),selVat),
-      el('div',{class:'row'},el('span',{class:'lbl'},'📷 Góc nhìn'),selV),
-      el('div',{class:'row'},el('span',{class:'lbl'},'Kiểu'),selK,el('span',{class:'lbl'},'Cỡ'),selZ),
-      el('div',{class:'row'},el('label',{style:'font-size:13px'},cbG,' Đặt 🏁 đích ở cuối đường')),
-      el('div',{class:'row'},btn('🎲 Tạo bối cảnh',genRun,'background:#2f7d54;color:#fff'))));
+
     body.append(ruleBox());
     const doors=M.ents.filter(e=>e.t==='door');
     body.append(el('div',{class:'lbl',style:'margin-top:8px'},'🚪 CỬA TRÊN MÀN NÀY ('+doors.length+')'));
