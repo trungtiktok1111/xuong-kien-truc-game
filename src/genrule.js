@@ -39,7 +39,7 @@ class Ctx{
   constructor(ctx,L,W,H,rnd){this.c=ctx;this.L=L;this.W=W;this.H=H;this.rnd=rnd;this.l0=new Array(W*H).fill(0);this.ents=[];this.n=0;this.fl=new Set();this.props=[];this.arches=[];this.zones={};this.chests=[];this.walk=null;}
   floor(pid,key,x,y){const n=this.L.nen[pid];this.l0[y*this.W+x]=this.c.enc(n.sid,n.idx[key]);}
   put(k,d,x,y,prop){const [pid,sid,it]=findItem(this.L,k,d);this.n++;
-    this.ents.push(Object.assign({id:'g'+this.n,t:'deco',x,y,f:1,fx:it.fx,fy:it.fy,sc:it.sc,ox:0,oy:it.oy||0,flat:it.role==='Phủ nền',name:it.name,tile:{sid,idx:it.i},zb:it.zb},it.role==='Phủ nền'?{walk:true}:{}));
+    this.ents.push(Object.assign({id:'g'+this.n,t:'deco',x,y,f:1,fx:it.fx,fy:it.fy,sc:it.sc,ox:0,oy:it.oy||0,flat:it.role==='Phủ nền',name:it.name,tile:{sid,idx:it.i},zb:it.zb},it.role==='Phủ nền'?{walk:true}:{},it.zps?{zps:it.zps}:{}));
     if(prop)this.props.push([x,y,k]);}
   special(spec,kind,x,y,name,extra){const [pid,k]=spec;const [sid,it]=item(this.L,pid,k,'S');this.ents.push(Object.assign({id:kind[0]+x+'_'+y,t:kind,x,y,name,tile:{sid,idx:it.i}},extra||{}));}
 }
