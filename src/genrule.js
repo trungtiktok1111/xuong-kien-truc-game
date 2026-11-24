@@ -41,6 +41,13 @@ class Ctx{
   putAt(sel,d,x,y,z,prop,only){const [pid,sid,it]=only?[only,...item(this.L,only,sel,d)]:findItem(this.L,sel,d),V=this.L.vat[pid],T=V.T;z=(z||0)*V.tw/256;this.n++;
     this.ents.push(Object.assign({id:'g'+this.n,t:'deco',x:Math.round(x*1000)/1000,y:Math.round(y*1000)/1000,f:1,fx:it.fx,fy:it.fy,sc:it.sc,ox:0,oy:Math.round(((it.oy||0)-(z||0)/T)*10000)/10000,flat:it.role==='Phủ nền',name:it.name,tile:{sid,idx:it.i},zb:it.zb},it.role==='Phủ nền'?{walk:true}:{},it.zps?{zps:it.zps}:{},it.col?{col:it.col}:{},it.cal!=null?{cal:it.cal}:{}));
     if(prop)this.props.push([Math.floor(x),Math.floor(y),sel]);}
+  /* cửa hai trạng thái: tile + vùng chặn riêng từng trạng thái (đóng = đoạn chặn giữa hai bản lề, mở = không chặn) */
+  putDoor(closedSel,openSel,d,x,y,z,only,hinges,st,auto){
+    const L=this.L,pid=only,V=L.vat[pid],[sidC,itC]=item(L,pid,closedSel,d),[sidO,itO]=item(L,pid,openSel,d);
+    this.putAt(openSel,d,x,y,z,false,pid);const e=this.ents[this.ents.length-1];
+    const h=hinges||[[-.47,0],[.47,0]],seg={k:'seg',a:[h[0][0]-.5,h[0][1]-.5],b:[h[1][0]-.5,h[1][1]-.5],th:.3};
+    e.door={st:st||'dong',auto:auto===false?0:1,v:{dong:{tile:{sid:sidC,idx:itC.i},col:[seg]},mo:{tile:{sid:sidO,idx:itO.i},col:[]}}};
+    const v=e.door.v[e.door.st];e.tile=v.tile;if(v.col.length)e.col=v.col;e.name=e.name.replace(/Cửa (mở|đóng)/,'Cửa');return e;}
   special(spec,kind,x,y,name,extra){const [pid,k]=spec;const [sid,it]=item(this.L,pid,k,'S');this.ents.push(Object.assign({id:kind[0]+x+'_'+y,t:kind,x,y,name,tile:{sid,idx:it.i}},extra||{}));}
 }
 const pickW=(rnd,list,end)=>{const L=list.filter(a=>!(end&&a[2]));let s=0;for(const a of L)s+=a[1];let r=rnd()*s;for(const a of L){r-=a[1];if(r<0)return a[0];}return L[0][0];};
@@ -287,7 +294,7 @@ function buildSanBac(ctx,prof,opt,seed){
   for(const c of gates){
     for(const dx of G.pillarX)P(G.pillar,'S',c+dx,gy,zt);
     if(G.threshold)P(G.threshold,G.doorDir||'E',c,gy,zt);
-    P(G.door,G.doorDir||'E',c,gy,zt);
+    B.putDoor(G.doorClosed||'@cua#dong',G.door,G.doorDir||'E',c+ox,gy+oy,zw(zt),pid,G.hinges,'dong',true);
     if(beam)[-1,0,1].forEach((dx,i)=>{P(G.beam,G.doorDir||'E',c+dx,gy,zt+G.beamZ);P(G.roof[i],G.doorDir||'E',c+dx,gy,zt+G.roofZ);});}
   /* tường bên */
   const S=R.wallSide,rows=tr+1+D.side;

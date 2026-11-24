@@ -6,7 +6,7 @@ import {slab,shore,tile192,mirF} from './isoslab.js';
 import {bakeLayer0,noiseOverlay,paintSlab,drawFog} from './groundfx.js';
 const HERO=88,FOES=[108,109,120,121,122,111,110],TD=2;
 export function play2D(o){
-  const M=o.M,W=M.w,H=M.h,sheets=o.sheets;const CF=Object.assign({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:TD,idx:HERO},win:'auto'},M.cfg||{});const EN=M.ents||[],legacy=!EN.length;const VW=CF.view||'rpg',SIDE=VW==='side',ISO=VW==='iso',DCL=EN.filter(e=>e.t==='deco');
+  const M=o.M,W=M.w,H=M.h,sheets=o.sheets;const CF=Object.assign({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:TD,idx:HERO},win:'auto'},M.cfg||{});const EN=(M.ents||[]).map(e=>e.door?Object.assign({},e,{door:Object.assign({},e.door)}):e),legacy=!EN.length;const VW=CF.view||'rpg',SIDE=VW==='side',ISO=VW==='iso',DCL=EN.filter(e=>e.t==='deco');
   const ov=el('div',{style:'position:fixed;inset:0;z-index:100;background:#10161d;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden'});
   const cv=document.createElement('canvas');cv.style.cssText='width:100%;height:100%;display:block';ov.append(cv);const cx=cv.getContext('2d');
   const msg=el('div',{style:'position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000a;color:#fff;font:700 26px system-ui;text-align:center'});
@@ -34,7 +34,15 @@ export function play2D(o){
   if(o.onExit)ov.append(el('div',{style:'position:absolute;right:10px;top:calc(env(safe-area-inset-top) + 10px);padding:8px 14px;border-radius:16px;background:#263342cc;color:#fff;font:600 14px system-ui',onclick:()=>stop()},'✕ Thoát'));
   document.body.append(ov);if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
   const AN=makeAnims(CF,sheets);
-  const ZS=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(M.ents)],ZR=zRaster(ZS,W,H);
+  const ZP=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(EN.filter(e=>!e.door))],DRS=EN.filter(e=>e.t==='deco'&&e.door);let ZS=ZP,ZR=zRaster(ZS,W,H);
+  /* cửa hai trạng thái: tìm đường coi cửa là đi qua được (ZP); va chạm thật (ZS) theo trạng thái hiện tại */
+  const setDoor=(e,st)=>{const v=e.door.v&&e.door.v[st];if(!v||e.door.st===st)return;e.door.st=st;if(v.tile)e.tile=v.tile;e.col=v.col&&v.col.length?v.col:undefined;rebuildZ();};
+  function rebuildZ(){ZS=DRS.length?[...ZP,...decoZones(DRS)]:ZP;ZR=zRaster(ZS,W,H);}
+  rebuildZ();
+  function doorCtr(e){return {x:e.x+.5,y:e.y+.5};}
+  function nearDoor(r){let b=null,bd=r;for(const e of DRS){const c=doorCtr(e),d=Math.hypot(c.x-P.x,c.y-P.y);if(d<bd){bd=d;b=e;}}return b;}
+  function doorsTick(){for(const e of DRS){const c=doorCtr(e),d=Math.hypot(c.x-P.x,c.y-P.y);if(e.door.st==='dong'&&d<(e.door.rOpen||1.3))setDoor(e,'mo');else if(e.door.st==='mo'&&e.door.auto&&d>(e.door.rClose||2.6))setDoor(e,'dong');}}
+  function toggleDoor(){const e=nearDoor(1.7);if(!e)return false;setDoor(e,e.door.st==='mo'?'dong':'mo');return true;}
   const blocked=(x,y)=>x<0||y<0||x>=W||y>=H||!!M.blk[y*W+x]||!!ZR[y*W+x];
   let CQ=16;for(const sh of sheets)if(sh&&sh.img&&sh.tw>CQ)CQ=Math.min(48,sh.tw);
   while(W*H*CQ*CQ>2.2e7&&CQ>16)CQ-=8;
@@ -101,16 +109,16 @@ export function play2D(o){
     if(winMode!=='kill'&&!hasGoal)winMode='kill';
     L.fire('start');}
   const cblk=(x,y)=>x<0||y<0||x>=W||y>=H||!!M.blk[y*W+x];
-  function free(x,y,r){return !(ZS.length&&zonesHit(ZS,x,y,r))&&!(cblk(Math.floor(x-r),Math.floor(y-r))||cblk(Math.floor(x+r),Math.floor(y-r))||cblk(Math.floor(x-r),Math.floor(y+r))||cblk(Math.floor(x+r),Math.floor(y+r)));}
+  function free(x,y,r,pl){const Z=pl?ZP:ZS;return !(Z.length&&zonesHit(Z,x,y,r))&&!(cblk(Math.floor(x-r),Math.floor(y-r))||cblk(Math.floor(x+r),Math.floor(y-r))||cblk(Math.floor(x-r),Math.floor(y+r))||cblk(Math.floor(x+r),Math.floor(y+r)));}
   function move(e,dx,dy,r){if(!free(e.x,e.y,r)){e.x+=dx;e.y+=dy;return;}if(free(e.x+dx,e.y,r))e.x+=dx;if(free(e.x,e.y+dy,r))e.y+=dy;}
 
   /* ---- tìm đường 8 hướng trên lưới mịn + bỏ góc rẽ thừa; kích thước nhân vật tính bằng bán kính r ---- */
   const PQ=5,NW=W*PQ,NH=H*PQ,NC={};
   const nodesOf=r=>NC[r]||(NC[r]=new Uint8Array(NW*NH));
-  const nfree=(a,i,j,r)=>{if(i<0||j<0||i>=NW||j>=NH)return false;const k=j*NW+i;let v=a[k];if(!v){v=free((i+.5)/PQ,(j+.5)/PQ,r)?1:2;a[k]=v;}return v===1;};
+  const nfree=(a,i,j,r)=>{if(i<0||j<0||i>=NW||j>=NH)return false;const k=j*NW+i;let v=a[k];if(!v){v=free((i+.5)/PQ,(j+.5)/PQ,r,1)?1:2;a[k]=v;}return v===1;};
   const nOf=(x,y)=>[Math.max(0,Math.min(NW-1,Math.floor(x*PQ))),Math.max(0,Math.min(NH-1,Math.floor(y*PQ)))];
-  function clearSeg(ax,ay,bx,by,r){const d=Math.hypot(bx-ax,by-ay),n=Math.max(1,Math.ceil(d/.07));for(let i=1;i<=n;i++){const t=i/n;if(!free(ax+(bx-ax)*t,ay+(by-ay)*t,r))return false;}return true;}
-  function snapFree(x,y,r,maxd){if(x>=0&&y>=0&&x<W&&y<H&&free(x,y,r))return {x,y};let best=null,bd=1e9;for(let dy=-maxd;dy<=maxd;dy+=.25)for(let dx=-maxd;dx<=maxd;dx+=.25){const d=Math.hypot(dx,dy);if(d>maxd||d>=bd)continue;const qx=x+dx,qy=y+dy;if(qx<0||qy<0||qx>=W||qy>=H)continue;if(free(qx,qy,r)){bd=d;best={x:qx,y:qy};}}return best;}
+  function clearSeg(ax,ay,bx,by,r){const d=Math.hypot(bx-ax,by-ay),n=Math.max(1,Math.ceil(d/.07));for(let i=1;i<=n;i++){const t=i/n;if(!free(ax+(bx-ax)*t,ay+(by-ay)*t,r,1))return false;}return true;}
+  function snapFree(x,y,r,maxd){if(x>=0&&y>=0&&x<W&&y<H&&free(x,y,r,1))return {x,y};let best=null,bd=1e9;for(let dy=-maxd;dy<=maxd;dy+=.25)for(let dx=-maxd;dx<=maxd;dx+=.25){const d=Math.hypot(dx,dy);if(d>maxd||d>=bd)continue;const qx=x+dx,qy=y+dy;if(qx<0||qy<0||qx>=W||qy>=H)continue;if(free(qx,qy,r,1)){bd=d;best={x:qx,y:qy};}}return best;}
   function findPath(sx,sy,gx,gy,r){
     if(clearSeg(sx,sy,gx,gy,r))return [{x:gx,y:gy}];
     const a=nodesOf(r.toFixed(2)*1);let [si,sj]=nOf(sx,sy),[gi,gj]=nOf(gx,gy);
@@ -155,7 +163,7 @@ export function play2D(o){
       el('div',{style:'font-weight:700;margin-bottom:6px'},'Tự kiểm (kiểm bằng mã)'),...res.map(([st,n,d])=>el('div',{style:'color:'+col[st]},ic[st]+' '+n+(d?' — '+d:''))),
       el('div',{style:'margin-top:8px;padding:6px 12px;border-radius:10px;background:#263342;display:inline-block;cursor:pointer',onclick:()=>{chkBox.remove();chkBox=null;}},'Đóng'));
     ov.append(chkBox);return res;}
-  window.__pl={goTo,findPath,runCheck,free,get P(){return P;},get PATH(){return PATH;},get W(){return W;},get H(){return H;},GL:()=>GL,toPlane};
+  window.__pl={goTo,toggleDoor,setDoor,DRS,get ZS(){return ZS;},findPath,runCheck,free,get P(){return P;},get PATH(){return PATH;},get W(){return W;},get H(){return H;},GL:()=>GL,toPlane};
   function end(win){over=1;msg.textContent='';msg.append(el('div',{},win?'🏆 Chiến thắng!':'💀 Thất bại'),el('div',{style:'padding:12px 22px;border-radius:20px;background:#e0b050;color:#2a1a08;font-size:18px',onclick:start},'Chơi lại'));msg.style.display='flex';}
   function attack(){if(over||atkCD>0||L.dlgOpen)return;for(const n of NP){if(Math.hypot(n.x-P.x,n.y-P.y)<1.3){atkCD=.3;if(!L.talk(n))said={n,t:4};L.fire('talk',n.id);return;}}slash=.18;{const as=CF.heroAnim&&AN.get(CF.heroAnim);let K=0;if(as)for(let i=1;i<=6;i++){const kk=i>1?'atk'+i:'atk';if(as.st[kk]&&as.st[kk].src&&as.st[kk].src.length)K=i;else break;}
       P.cs=(K>1&&P.cs>0&&P.atkT>-.5)?(P.cs>=K?1:P.cs+1):1;P.atkN=(P.atkN||0)+1;const dur=as&&K?AN.clipSec(as,P.cs>1?'atk'+P.cs:'atk'):0;P.atkT=Math.max(.3,Math.min(1.2,dur||.45));atkCD=Math.max(.3,P.atkT*.8);}for(const e of E){const dx=e.x-P.x,dy=e.y-P.y,d=Math.hypot(dx,dy);if(d<CF.rng&&(d<.3||(dx*fx+dy*fy)/d>-.2)){e.hp-=CF.dmg;e.fl=.3;const k=d||1;move(e,dx/k*.6,dy/k*.6,.3);if(e.hp<=0&&Math.random()<.3)items.push({x:e.x,y:e.y});}}const dead=E.filter(e=>e.hp<=0);E=E.filter(e=>e.hp>0);for(const k of dead)L.fire('kill',k.id);if(dead.length&&!E.length&&!hidEn())L.fire('allkill');checkWin();}
@@ -163,6 +171,7 @@ export function play2D(o){
   function solidPush(o){for(const n of [...NP,...CH]){const dx=o.x-n.x,dy=o.y-n.y,d=Math.hypot(dx,dy),r=.6;if(d<r&&d>0){const nx=n.x+dx/d*r,ny=n.y+dy/d*r;if(free(nx,o.y,.28))o.x=nx;if(free(o.x,ny,.28))o.y=ny;}}}
   function upd(dt){
     t+=dt;atkCD-=dt;slash-=dt;P.inv-=dt;P.atkT-=dt;P.hitT-=dt;if(over||L.dlgOpen)return;
+    doorsTick();
     let ix=0,iy=0;if(keys.ArrowLeft||keys.a)ix--;if(keys.ArrowRight||keys.d)ix++;if(keys.ArrowUp||keys.w)iy--;if(keys.ArrowDown||keys.s)iy++;
     if(stick){ix=stick.x;iy=stick.y;}
     if((ix||iy)&&PATH){PATH=null;GOAL=null;}
@@ -230,7 +239,7 @@ export function play2D(o){
   function fbk(q,x,y,s,flip){if(q.anim){cx.fillStyle='#e0b050';cx.beginPath();cx.arc(x+s/2,y+s*.3,s*.28,0,6.3);cx.fill();cx.fillStyle='#222';cx.font='bold '+(s*.35)+'px system-ui';cx.textAlign='center';cx.fillText((q.name||'?')[0],x+s/2,y+s*.42);}else tile(q.tl.sid,q.tl.idx,x,y,s,flip);}
   function loop(ts){if(dead)return;const dt=Math.min(.05,(ts-last)/1000||0);last=ts;upd(dt);if(dead)return;draw();raf=requestAnimationFrame(loop);}
   // ---- điều khiển ----
-  const kd=e=>{const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=1;if(k==='+'||k==='='){setZ(zm*1.25);}if(k==='-'||k==='_'){setZ(zm*.8);}if(k===' '||k==='j'){attack();e.preventDefault();}if(k.startsWith('Arrow'))e.preventDefault();},ku=e=>{keys[e.key.length===1?e.key.toLowerCase():e.key]=0;};
+  const kd=e=>{const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=1;if(k==='+'||k==='='){setZ(zm*1.25);}if(k==='-'||k==='_'){setZ(zm*.8);}if(k==='e'){toggleDoor();}if(k===' '||k==='j'){attack();e.preventDefault();}if(k.startsWith('Arrow'))e.preventDefault();},ku=e=>{keys[e.key.length===1?e.key.toLowerCase():e.key]=0;};
   addEventListener('keydown',kd);addEventListener('keyup',ku);
   atk.addEventListener('pointerdown',e=>{e.stopPropagation();e.preventDefault();attack();});
   let clk=null;cv.addEventListener('pointerdown',e=>{clk={x:e.clientX,y:e.clientY,t:performance.now(),id:e.pointerId};},true);
