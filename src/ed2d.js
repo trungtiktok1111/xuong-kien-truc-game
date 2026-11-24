@@ -70,7 +70,7 @@ export function init2D(root,A){
   function objDown(c){if(!inb(c.x,c.y))return;const ex=(ISOQ()&&lastPt?entAtScreen(lastPt.x,lastPt.y):null)||entAt(c.x,c.y);pushUndo();
     if(ex){selId=ex.id;drag={ent:true,dx:c.x-ex.x,dy:c.y-ex.y};}
     else if(objType==='start'&&M.ents.some(e=>e.t==='start')){const s=M.ents.find(e=>e.t==='start');s.x=c.x;s.y=c.y;selId=s.id;drag={ent:true};}
-    else if(objType==='deco'){if(!vatSel){toast('Chọn một vật thể trong danh sách bên dưới trước');return;}const it=vatSel,n={id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),t:'deco',x:c.x,y:c.y,f:it.f,fx:it.fx,fy:it.fy,sc:it.sc,ox:it.ox,oy:it.oy,flat:it.role==='Phủ nền',name:it.name,tile:it.tile,zb:it.zb};if(it.zps)n.zps=JSON.parse(JSON.stringify(it.zps));if(it.role==='Phủ nền')n.walk=true;if(it.cv)n.cv=it.cv;M.ents.push(n);selId=n.id;drag={ent:true};}
+    else if(objType==='deco'){if(!vatSel){toast('Chọn một vật thể trong danh sách bên dưới trước');return;}const it=vatSel,n={id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),t:'deco',x:c.x,y:c.y,f:it.f,fx:it.fx,fy:it.fy,sc:it.sc,ox:it.ox,oy:it.oy,flat:it.role==='Phủ nền',name:it.name,tile:it.tile,zb:it.zb};if(it.zps)n.zps=JSON.parse(JSON.stringify(it.zps));if(it.col)n.col=JSON.parse(JSON.stringify(it.col));if(it.cal!=null)n.cal=it.cal;if(it.role==='Phủ nền')n.walk=true;if(it.cv)n.cv=it.cv;M.ents.push(n);selId=n.id;drag={ent:true};}
     else{const n=newEnt(objType,c.x,c.y);M.ents.push(n);selId=n.id;drag={ent:true};}
     after();ui.obj();}
   // ===== chế độ iso (nhìn giống lúc chơi) =====
@@ -773,7 +773,7 @@ export function init2D(root,A){
       out.push({role:t.role||'Vật',name:nm+' · '+(idx+1),tile:{sid,idx},f:1,fx:t.fx,fy:t.fy,sc:t.sc||sheets[sid].tw/128,ox:0,oy:0,zb:[-t.fx,-t.fy,t.fx,t.fy]});}return out;}
   async function ensureVat(id){if(id==='mine')return mineItems();const pk=await vatPack(id),name='Vat-'+id;let sid=sheets.findIndex((s,i)=>i>=4&&s.name===name);
     if(sid<0){const s={name,url:pk.atlas,tw:pk.T,margin:0};await loadSheet(s);sheets.push(s);sid=sheets.length-1;pk.items.forEach(it=>{TG.tiles[name+'#'+it.i]={type:VROLE[it.role]||'Khác',layer:it.role==='Mái/cửa'?3:2,fn:it.role==='Mái/cửa'?'Chỉ trang trí':'Chặn đường'};});tgSave();}
-    return pk.items.map(it=>({role:it.role,name:it.name,cv:it.cv?{sid,idx:it.cv}:null,tile:{sid,idx:it.i},f:1,fx:it.fx,fy:it.fy,sc:it.sc,ox:0,oy:it.oy||0,zb:it.zb||[-it.fx,-it.fy,it.fx,it.fy],zps:it.zps||null}));}
+    return pk.items.map(it=>({role:it.role,name:it.name,cv:it.cv?{sid,idx:it.cv}:null,tile:{sid,idx:it.i},f:1,fx:it.fx,fy:it.fy,sc:it.sc,ox:0,oy:it.oy||0,zb:it.zb||[-it.fx,-it.fy,it.fx,it.fy],zps:it.zps||null,col:it.col||null,cal:it.cal==null?null:it.cal}));}
 
   const M2=initMau({el,btn,toast,yes,askText,pickFiles,pickFile,zipBrowser,saveFile,idbGet,idbSet,idbDel,
     body:()=>body,isTab:()=>tab==='mau',redraw:()=>draw(),sheets:()=>sheets,loadSheet,TG:()=>TG,tgSave,
