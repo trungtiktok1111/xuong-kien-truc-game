@@ -8,7 +8,7 @@ import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,idbDel,
 const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
-import {genRule,RULES,RULE_TEXT} from './genrule.js';
+import {genRule,RULES,RULE_TEXT,SHAPES} from './genrule.js';
 import {build,GEN_KINDS,GEN_KIND_PACK,GEN_KIND_VAT,GEN_VIEWS} from './gen2d.js';
 import {slab,shore,tile192,mirF,derim} from './isoslab.js';
 import {nenIndex,nenPack,nenTag,vatIndex,vatPack} from './nen.js';
@@ -780,16 +780,21 @@ export function init2D(root,A){
     select:it=>{vatSel=it;objType='deco';tool='obj';draw();},curSel:()=>vatSel,
     progress:t=>{let d=document.getElementById('mau-prog');if(!t){d&&d.remove();return;}if(!d){d=document.createElement('div');d.id='mau-prog';d.style.cssText='position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:99;background:#1b2430;color:#ffd24a;border:1px solid #d9a066;border-radius:10px;padding:8px 14px;font:13px system-ui';document.body.append(d);}d.textContent=t;}});
   const mauTab=()=>M2.tab();
-  function ruleBox(){const GR=window.__gr||(window.__gr={k:'dungeon',z:'m'}),out=el('div',{style:'margin-top:6px'});
+  function ruleBox(){const GR=window.__gr||(window.__gr={k:'dungeon',z:'m',s:'auto',l:false,y:'single'}),out=el('div',{style:'margin-top:6px'});
       const selR=el('select',{class:'num',style:'max-width:230px',onchange:e=>{GR.k=e.target.value;}},Object.entries(RULES).map(([k,v])=>{const o=el('option',{value:k},v.name);if(k===GR.k)o.selected=true;return o;}));
       const selRZ=el('select',{class:'num',onchange:e=>{GR.z=e.target.value;}},[['s','Nhỏ'],['m','Vừa'],['l','Lớn']].map(([k,n])=>{const o=el('option',{value:k},n);if(k===GR.z)o.selected=true;return o;}));
-      const showRep=R=>{out.textContent='';out.append(el('div',{class:'lbl',style:'color:'+(R.ok?'#9fe0b0':'#ff9b8a')},(R.ok?'✅ ĐẠT':'⚠ CHƯA ĐẠT')+' toàn bộ phép kiểm · seed '+R.seed+' · thử '+R.tries+' lần'));for(const r of R.report)out.append(el('div',{class:'hint',style:'color:'+(r[1]?'#9fe0b0':'#ff9b8a')},(r[1]?'✔ ':'✘ ')+r[0]));};
+      const selSh=el('select',{class:'num',style:'max-width:230px',onchange:e=>{GR.s=e.target.value;}},Object.entries(SHAPES).map(([k,n])=>{const o=el('option',{value:k},n);if(k===GR.s)o.selected=true;return o;}));
+      const cbL=el('input',{type:'checkbox',onchange:e=>{GR.l=e.target.checked;}});cbL.checked=!!GR.l;
+      const selY=el('select',{class:'num',onchange:e=>{GR.y=e.target.value;}},[['single','Một nhà kho'],['twin','Nhà kho + nhà phụ']].map(([k,n])=>{const o=el('option',{value:k},n);if(k===GR.y)o.selected=true;return o;}));
+      const showRep=R=>{out.textContent='';out.append(el('div',{class:'lbl',style:'color:'+(R.ok?'#9fe0b0':'#ff9b8a')},(R.ok?'✅ ĐẠT':'⚠ CHƯA ĐẠT')+' toàn bộ phép kiểm · hình '+(R.shape||'sân')+' · seed '+R.seed+' · thử '+R.tries+' lần'));for(const r of R.report)out.append(el('div',{class:'hint',style:'color:'+(r[1]?'#9fe0b0':'#ff9b8a')},(r[1]?'✔ ':'✘ ')+r[0]));};
       return el('div',{style:'border:1px solid #d9a066;border-radius:10px;padding:8px;margin-top:10px;background:#26201a'},
         el('div',{class:'lbl',style:'color:#e8c08a'},'🏗 DỰNG THEO NGUYÊN TẮC (bộ Kenney) — bố cục trước, tường suy ra, đồ đặt có luật, tự kiểm'),
         el('div',{class:'hint',style:'white-space:pre-line'},RULE_TEXT.join('\n')),
         el('div',{class:'row'},el('span',{class:'lbl'},'Kiểu'),selR,el('span',{class:'lbl'},'Cỡ'),selRZ),
+        el('div',{class:'row'},el('span',{class:'lbl'},'Hình dạng (phòng)'),selSh),
+        el('div',{class:'row'},el('label',{style:'font-size:13px'},cbL,' Có phòng chữ L'),el('span',{class:'lbl'},'Sân'),selY),
         el('div',{class:'row'},btn('🏗 Dựng theo nguyên tắc',async()=>{if(!await yes('Dựng cảnh mới thay cho màn đang mở? (Ctrl+Z hoàn tác bản đồ)'))return;toast('Đang dựng…');await new Promise(r=>setTimeout(r,30));
-          let R;try{R=await genRule({ensureNen,ensureVat,vatPack,sheets:()=>sheets,enc},GR.k,{size:GR.z});}catch(e){console.error(e);toast('Lỗi: '+(e&&e.message||e));return;}
+          let R;try{R=await genRule({ensureNen,ensureVat,vatPack,sheets:()=>sheets,enc},GR.k,{size:GR.z,shape:GR.s,lshape:GR.l,yard:GR.y});}catch(e){console.error(e);toast('Lỗi: '+(e&&e.message||e));return;}
           if(R.error){toast(R.error);return;}
           pushUndo();M={name:RULES[GR.k].name.replace(/^\S+\s/,'').replace(/ \(.*/,''),w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({hp:6,spd:4.2,dmg:1,rng:1.5,hero:{sid:2,idx:0}},M.cfg,{view:'iso',win:'auto',zones:[]})};selId=null;after();fit();draw();showRep(R);toast(R.ok?'Đã dựng — đạt mọi phép kiểm':'Đã dựng — còn phép kiểm chưa đạt');},'background:#b9772b;color:#fff')),out);}
   async function genRun(){const k=window.__gk||'village',z={s:[32,24],m:[48,36],l:[64,48]}[window.__gz||'m'];
