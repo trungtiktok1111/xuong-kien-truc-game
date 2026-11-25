@@ -26,7 +26,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const originLevel=outlineLevels.find(level=>level.id===map.cfg.outlineTemplate)||
   outlineLevels.find(level=>level.sample&&level.w===map.w&&level.h===map.h&&JSON.stringify(level.loops)===JSON.stringify(original));
  const levelTiles=new Map();
- let applyButton,restoreLevelButton,createLabel,tryLabel,commitBusy=false;
+ let applyButton,clearButton,restoreLevelButton,createLabel,tryLabel,commitBusy=false;
  const ov=el('section',{class:'outline-overlay',style:'position:fixed;inset:0;z-index:180;background:#101820f5;overflow:auto;display:grid;place-items:center;padding:16px;touch-action:pan-y'});
  const box=el('div',{class:'outline-workspace'});
  const canvas=el('canvas',{width:'760',height:'465',style:'display:block;width:100%;height:auto;background:#141d24;border:1px solid #50606a;touch-action:none'});
@@ -97,7 +97,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   sizeLabel.textContent=W+' × '+H+' ô';
   viewLabel.textContent=Math.round(s/fitScale()*100)+'%';
   for(const [id,tile] of levelTiles)tile.setAttribute('aria-pressed',String(id===levelDraft?.id));
-  if(applyButton)applyButton.disabled=commitBusy||!!levelDraft;
+  if(applyButton){
+   applyButton.disabled=commitBusy;
+   applyButton.textContent=levelDraft?'Dùng mẫu cho màn hiện tại':'Áp dụng vào bản đồ';
+  }
+  if(clearButton)clearButton.hidden=!!levelDraft;
   if(restoreLevelButton)restoreLevelButton.hidden=!(levelDraft||originLevel);
   levelActions.hidden=!levelDraft;
   if(createLabel){createLabel.hidden=tryLabel.hidden=!!levelDraft&&activeTab==='levels';}
@@ -144,7 +148,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    mode==='polygon'?op+' · Bấm từng đỉnh, nhấn Enter hoặc bấm Khép đường.':
    mode==='ellipse'||mode==='rect'?op+' · Kéo từ một góc sang góc đối diện, rồi nhả chuột.':
    mode==='move'?'Kéo mép để di chuyển cả hình và các lỗ bên trong.':
-   levelDraft?levelDraft.name+' · A xuất phát · B đích · Tạo màn mới để đưa vào dự án.':
+   levelDraft?levelDraft.name+' · A xuất phát · B đích. Dùng mẫu cho màn hiện tại hoặc tạo bản sao.':
    'Kéo mẫu từ bên phải vào mặt bằng, hoặc bấm mẫu rồi bấm vị trí đặt.';
   corridorWidth.hidden=mode!=='corridor';
   if(copyButton)copyButton.disabled=!selection;
@@ -480,12 +484,17 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   if(commitBusy||!readGrid())return;
   commitBusy=true;
   const actions=[...buttons.children,...levelActions.children,scanMapButton];actions.forEach(b=>{b.disabled=true;});
-  try{await action();if(close)ov.remove();}
+  try{const result=await action();if(close&&result!==false)ov.remove();}
   catch(e){toast(e.message);}
   finally{commitBusy=false;actions.forEach(b=>{b.disabled=false;});draw();}
  }
  applyButton=B('Áp dụng vào bản đồ',()=>runAction(async()=>{
-  if(levelDraft)throw Error('Bấm Tạo màn mới để lưu bản sao mẫu.');
+  if(levelDraft){
+   const name=map.name||'màn hiện tại';
+   if(!await yes('Dùng mẫu “'+levelDraft.name+'” cho “'+name+'”?\nBố cục, ô hình, vật thể và luật của màn này sẽ được thay bằng mẫu. Bạn có thể hoàn tác sau khi áp dụng.'))return false;
+   await editor.replaceWithOutlineMap(outlineData(),W,H,levelDraft,stamps);
+   return;
+  }
   if(!loops.length&&original.length)throw Error('Hãy tạo đường bao hoặc dùng Bỏ lớp đường bao.');
   if(!loops.length&&W===map.w&&H===map.h)throw Error('Hãy tạo đường bao hoặc đổi số ô.');
   if(loops.length)await editor.applyOutline(outlineData(),collision.checked,W,H,stamps);
@@ -519,8 +528,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  }
  createLabel=B('Tạo màn mới từ hình này',createDraft);
  tryLabel=B('Chơi thử bản nháp',playDraft);
- buttons.append(applyButton,createLabel,tryLabel,B('Bỏ lớp đường bao',async()=>{if(!map.cfg.outline||!await yes('Bỏ lớp tường và mép cong của màn hiện tại?'))return;editor.clearOutline();ov.remove();}),
- B('Đóng',()=>ov.remove()));
+ clearButton=B('Bỏ lớp đường bao',async()=>{if(!map.cfg.outline||!await yes('Bỏ lớp tường và mép cong của màn hiện tại?'))return;editor.clearOutline();ov.remove();});
+ buttons.append(applyButton,createLabel,tryLabel,clearButton,B('Đóng',()=>ov.remove()));
  box.append(el('h2',{},'Đường bao bản đồ'),guideBox('outline',appGuides.outline),setup,toolbar,
   el('div',{class:'outline-layout'},el('div',{},gridSetup,gridNote,viewTools,canvas,status),library),
   editShape,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons);

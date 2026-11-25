@@ -43,8 +43,8 @@ export function init2D(root,A){
   const newMap=(w,h)=>({w,h,layers:[0,1,2,3].map(()=>new Array(w*h).fill(0)),blk:new Array(w*h).fill(0),ents:[],cfg:defCfg()});
   const clone=m=>({name:m.name,w:m.w,h:m.h,layers:m.layers.map(l=>l.slice()),blk:m.blk.slice(),ents:JSON.parse(JSON.stringify(m.ents||[])),cfg:Object.assign(defCfg(),JSON.parse(JSON.stringify(m.cfg||{})))});
   function pushUndo(){undo.push(clone(M));if(undo.length>40)undo.shift();redo=[];}
-  function doUndo(){if(!undo.length)return;redo.push(clone(M));M=undo.pop();after();}
-  function doRedo(){if(!redo.length)return;undo.push(clone(M));M=redo.pop();after();}
+  function doUndo(){if(!undo.length)return;redo.push(clone(M));const before=M;M=undo.pop();if(M.w!==before.w||M.h!==before.h)fit();after();}
+  function doRedo(){if(!redo.length)return;undo.push(clone(M));const before=M;M=redo.pop();if(M.w!==before.w||M.h!==before.h)fit();after();}
   let saveT;function after(){dirty=true;clearTimeout(saveT);saveT=setTimeout(save,700);}
   let warned=0,saveInfo='';
   async function save(){const custom=sheets.slice(4).map(s=>({name:s.name,url:s.url,tw:s.tw,margin:s.margin,iso:s.iso||0,cy:s.cy||0,wat:s.wat||null,phaseBrush:s.phaseBrush}));syncCur();const base={w:M.w,h:M.h,layers:M.layers,blk:M.blk,ents:M.ents,cfg:M.cfg,name:M.name,maps:MAPS,cur:curMap};
@@ -1477,6 +1477,19 @@ export function init2D(root,A){
     if(draft.cfg.proj==='angle')await ensureAngle(previewSheets);
     return {M:draft,sheets:previewSheets};
   }
+  async function replaceWithOutlineMap(outline,w,h,level,stamps=[]){
+    const before=M,index=curMap;
+    const incoming=MAPS.flatMap((map,i)=>i===index?[]:map.ents.filter(e=>e.t==='door'&&e.to===index&&e.tx!=null&&e.ty!=null));
+    const replacement=await buildOutlineMap(outline,w,h,level,sheets,stamps);
+    if(M!==before||curMap!==index)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Màn mẫu.');
+    const collision=mapCollision(replacement);
+    if(incoming.some(e=>!collision.free(e.tx+.5,e.ty+.5,.28)))
+      throw Error('Có cửa từ màn khác dẫn vào ô bị chặn trong mẫu. Hãy đưa đích cửa về chế độ tự động hoặc tạo bản sao.');
+    replacement.name=before.name;
+    pushUndo();M=replacement;selId=null;sel=null;hov=null;
+    syncCur();after();fit();draw();cv.focus({preventScroll:true});
+    toast('Đã áp dụng '+level.name+'. Có thể hoàn tác trong trình sửa.');
+  }
   async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],useSource=true){
     const current=M,fresh=await buildOutlineMap(outline,w,h,level,sheets,stamps,useSource);
     if(M!==current)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
@@ -1490,5 +1503,5 @@ export function init2D(root,A){
     toast('Đã tạo '+fresh.name);
   }
   function clearOutline(){pushUndo();delete M.cfg.outline;after();fit();draw();}
-  return {ready,applyOutline,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  return {ready,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
 }

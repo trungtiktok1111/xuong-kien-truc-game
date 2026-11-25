@@ -2,6 +2,9 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
+## V15.2
+- Trong **Màn mẫu**, chọn **Dùng mẫu cho màn hiện tại** để thay bố cục và nội dung sau khi xác nhận. Có thể hoàn tác. **Tạo bản sao** vẫn thêm một màn riêng.
+
 ## V15.1
 - Khi bảng vẽ chưa khởi động, hiện mặt bằng Đá Xoáy và thông báo ngay cả trong khung xem tệp không chạy JavaScript. Bản đồ 2D khởi động trước khi tải các gói nền qua mạng.
 
