@@ -17,6 +17,9 @@ html,body{margin:0;height:100%;background:#0e141b;color:#e8edf3;font:14px -apple
 .erase-items button{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;color:#e7eef7;border:1px solid #354956;background:#22323e;border-radius:6px;padding:6px 8px}
 .erase-items button[aria-pressed=true]{border-color:#ffaca4;background:#523b41}.erase-items small{color:#c5d4de}
 button.erase-confirm:not(:disabled){background:#773e44;color:#fff}
+.placement-anchor-button{min-width:0;padding:3px!important;height:29px;font-size:15px}
+.placement-anchor-button[aria-pressed=true]{color:#ffe499;background:#4b5570;border:1px solid #fdcf70}
+.placement-anchor-button:disabled{opacity:.26}
 .map-aim{position:absolute;top:8px;right:8px;z-index:6;pointer-events:none;width:max-content;max-width:min(265px,45%);background:#111c25e8;color:#e4edf4;border:1px solid #566376;border-radius:7px;padding:6px 9px;font:12px/1.35 system-ui}
 .map-aim[hidden]{display:none}.map-aim strong{color:#ffe2a2}.map-aim[data-state=joined] strong{color:#9ff1d7}.map-aim[data-state=invalid] strong{color:#ffaaa3}
 .view{flex:1;min-height:0;display:none;flex-direction:column}

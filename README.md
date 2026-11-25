@@ -2,6 +2,10 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
+## Điểm neo khi đặt mảnh 2D
+
+Chọn một trong chín vị trí dưới mục Điểm neo để đặt mái theo tâm, theo mép hoặc theo góc. Điểm sáng trên mái đi theo con trỏ. Các dấu tựa xanh vẫn thể hiện nơi đỉnh tường hoặc cột đỡ mái. Vật thể khác có một, ba hoặc chín điểm theo kích thước nhìn thấy. Giữ Shift để bám lưới ¼ ô.
+
 ## Khoảng trống theo trục Z trong cảnh 2D
 
 - X/Y xác định vị trí và diện tích chiếm chỗ. Z tính từ mặt sàn theo đơn vị ô bản đồ. So sánh đỉnh vật với đáy mái thấp nhất trên phần mặt bằng giao nhau. Mái dốc có cao độ khác nhau ở mỗi điểm.

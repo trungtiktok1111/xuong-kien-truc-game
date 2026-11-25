@@ -27,7 +27,7 @@ export const depthAng=d=>{const z=d.zb;return d.y+1+(z&&(z[2]||z[3])?z[1]+z[3]:0
 // A placed prop uses the same frame, scale and ground anchor in the preview and the game.
 export function placedPropFrame(e,project,unit,projection){
   const [x,y]=project(e.x+1,e.y+1),size=e.sc*unit;
-  const frame={x:x-size/2+(e.ox||0)*size,y:y-size+(e.oy||0)*size-(projection==='top'?0:(e.roofBase||0)*unit*.75),size};
+  const frame={anchor:[x,y],worldSize:e.sc,x:x-size/2+(e.ox||0)*size,y:y-size+(e.oy||0)*size-(projection==='top'?0:(e.roofBase||0)*unit*.75),size};
   if(e.roofDirection&&projection!=='top'){
     const side=e.sc/.95;
     const rise=e.roofRise==null?.48*size:e.roofRise*unit*.75;
@@ -108,4 +108,41 @@ export function drawPlacedProp(ctx,e,sheet,frame){
   if(e.spriteFlip&2)ctx.scale(1,-1);
   ctx.drawImage(sheet.img,sx,sy,tw,tw,-size/2,-size/2,size,size);
   ctx.restore();
+}
+
+// Nine named points follow the actual rendered quadrilateral, including a sloped roof.
+export const placementAnchorNames=[
+  'Góc trên trái','Giữa mép trên','Góc trên phải',
+  'Giữa mép trái','Tâm','Giữa mép phải',
+  'Góc dưới trái','Giữa mép dưới','Góc dưới phải'
+];
+
+export function placementAnchors(frame,bounds=[0,0,1,1],mode='auto'){
+  if(frame.edge||mode==='gate'){
+    const p=frame.anchor;
+    return [{id:4,point:p}];
+  }
+  const {x,y,size,matrix}=frame,[l,t,r,b]=bounds;
+  const spritePoint=(u,v)=>{
+    const px=x+(l+(r-l)*u)*size,py=y+(t+(b-t)*v)*size;
+    return matrix?[matrix[0]*px+matrix[4],matrix[1]*px+py+matrix[5]]:[px,py];
+  };
+  const point=frame.roof?((u,v)=>{
+    const [a,h,k]=frame.roof;
+    return a.map((n,i)=>n+(h[i]-n)*u+(k[i]-n)*v);
+  }):spritePoint;
+  let ids=[4];
+  if(frame.roof||mode==='roof')ids=[0,1,2,3,4,5,6,7,8];
+  else if(size>0){
+    const width=r-l,height=b-t,scale=frame.worldSize??1;
+    const columns=width*scale>=.85?[0,1,2]:[1],rows=height*scale>=.85?[0,1,2]:[1];
+    ids=rows.flatMap(row=>columns.map(col=>3*row+col));
+  }
+  return ids.map(id=>({id,point:point((id%3)/2,Math.floor(id/3)/2)}));
+}
+
+export function placementAnchorOffset(frame,bounds,mode,id){
+  const points=placementAnchors(frame,bounds,mode);
+  const anchor=points.find(p=>p.id===id)||points.find(p=>p.id===4);
+  return anchor.point.map((n,i)=>n-frame.anchor[i]);
 }

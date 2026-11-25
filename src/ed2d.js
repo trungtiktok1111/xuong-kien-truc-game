@@ -22,7 +22,7 @@ import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,idbDel,
 const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
-import {placedPropFrame,placedPropBounds,drawPlacedProp,ANG_R,ensureAngle,sprOf,tileAng,depthAng} from './proj.js';
+import {placedPropFrame,placedPropBounds,drawPlacedProp,placementAnchors,placementAnchorNames,placementAnchorOffset,ANG_R,ensureAngle,sprOf,tileAng,depthAng} from './proj.js';
 import {genRule,RULES,RULE_TEXT,SHAPES,SB_KIEU,loadProfiles} from './genrule.js';
 import {build,GEN_KINDS,GEN_KIND_PACK,GEN_KIND_VAT,GEN_VIEWS} from './gen2d.js';
 import {slab,shore,tile192,mirF,derim} from './isoslab.js';
@@ -204,12 +204,19 @@ export function init2D(root,A){
   function drawGateWall(wall){
     stoneWall(cx,wall,g2s,CELL*view.z,cv.clientWidth,cv.clientHeight,null);
   }
-  function drawIndependentProp(e,preview=false,issue=''){
+  function propDisplayFrame(e,support){
+    const unit=CELL*view.z/(ISOQ()?.75:1);
+    return placedPropFrame(support?{...e,roofBase:support.base,roofRise:support.rise}:e,
+      g2s,unit,ANGQ()?'angle':ISOQ()?'iso':'top');
+  }
+  const anchorMode=e=>e.wallGateBrush||e.gateAssembly?'gate':isRoof(e)?'roof':'auto';
+  const anchorChoices=(e,frame)=>placementAnchors(frame,e.spriteBounds||undefined,anchorMode(e));
+  const anchorOrigin=e=>e.anchorId??4;
+  function drawIndependentProp(e,preview=false,issue='',previewSupport){
     const sheet=sheets[e.tile.sid],unit=CELL*view.z/(ISOQ()?.75:1);
-    const support=isRoof(e)?roofBearing(e,ruleCtx()):null;
+    const support=isRoof(e)?(previewSupport===undefined?roofBearing(e,ruleCtx()):previewSupport):null;
     if(isRoof(e)&&!support)issue=roofIssue;
-    const art=support?{...e,roofBase:support.base,roofRise:support.rise}:e;
-    const frame=placedPropFrame(art,g2s,unit,ANGQ()?'angle':ISOQ()?'iso':'top');
+    const frame=propDisplayFrame(e,support);
     const active=(selId!==null&&e.id===selId)||preview;
     cx.save();
     if(isRoof(e)&&!support)cx.globalAlpha=.42;
@@ -224,7 +231,7 @@ export function init2D(root,A){
         if(zone.k==='line'){cx.lineWidth=Math.max(2,zone.th*CELL*view.z);cx.globalAlpha=.65;}
         cx.stroke();cx.lineWidth=1.6;cx.globalAlpha=1;
       }
-      cx.beginPath();cx.arc(px,py,2.5,0,Math.PI*2);cx.stroke();
+      if(!preview){cx.beginPath();cx.arc(px,py,2.5,0,Math.PI*2);cx.stroke();}
     }
     const bounds=placedPropBounds(frame,e.spriteBounds||[0,0,1,1]);
     if(isRoof(e)&&!support){
@@ -298,7 +305,7 @@ export function init2D(root,A){
     drawZ();
     if(grid&&z>=(IS?1.1:2.5)){cx.strokeStyle='rgba(255,255,255,.13)';cx.beginPath();if(IS){for(let x=0;x<=M.w;x++){const a=g2s(x,0),b=g2s(x,M.h);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}for(let y=0;y<=M.h;y++){const a=g2s(0,y),b=g2s(M.w,y);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}}else{for(let x=0;x<=M.w;x++){const X=Math.round(view.x+x*CELL*z)+.5;cx.moveTo(X,view.y);cx.lineTo(X,view.y+M.h*CELL*z);}for(let y=0;y<=M.h;y++){const Y=Math.round(view.y+y*CELL*z)+.5;cx.moveTo(view.x,Y);cx.lineTo(view.x+M.w*CELL*z,Y);}}cx.stroke();}
     if(!IS)drawEnts(z);
-    if(target){drawIndependentProp(target.piece,true,target.issue);showPlacementIssue(target.issue);}
+    if(target){drawIndependentProp(target.piece,true,target.issue,target.support);showPlacementIssue(target.issue);}
     else if(tool!=='wall')showPlacementIssue('');
     drawPlacementGuides(target);
     if(showPieceNames&&tool!=='erase')for(const hit of isoHB){
@@ -954,7 +961,7 @@ export function init2D(root,A){
     }
     return cards;
   }
-  const propSizes=new Map(),propTurns=new Map();
+  const propSizes=new Map(),propTurns=new Map(),propAnchorIds=new Map();
   let propCache=null,ruleContext=null;
   function gateKind(value){
     const {sid,idx}=dec(value),sheet=sheets[sid];
@@ -1018,18 +1025,62 @@ export function init2D(root,A){
     return conflict?(conflict.name||'Vật thể')+' · '+headroomIssue(conflict,[plane],M.cfg):'';
   }
   function aimProp(prop,p){
-    const hit=prop.wallGateBrush?visibleWallAt(p):null;
-    const at=hit?{x:hit.point[0]-1,y:hit.point[1]-1}:propPosition(p);
-    if(!at)return null;
-    const piece={...prop,...at,id:'preview-gate'};
-    if(!piece.wallGateBrush){
-      const stacked=M.ents.some(e=>e.placedProp&&!e.wallLine&&sceneEntityLayer(e)===sceneEntityLayer(piece)&&
-        Math.hypot(e.x-piece.x,e.y-piece.y)<.035&&e.roofDirection===piece.roofDirection);
-      return {piece,issue:stacked?'Vị trí này đã có mảnh cùng lớp. Dời điểm đặt hoặc xóa mảnh cũ.':constructionIssue(piece)};
+    if(prop.wallGateBrush){
+      const hit=visibleWallAt(p);
+      const at=hit?{x:hit.point[0]-1,y:hit.point[1]-1}:propPosition(p);
+      if(!at)return null;
+      const piece={...prop,...at,id:'preview-gate'};
+      const mounted=mountGate(piece,ruleCtx().walls);
+      return mounted?{piece:mounted,issue:constructionIssue(mounted)}:
+        {piece,issue:'Rê cổng lên đoạn tường thẳng, đủ dài và cách góc tường.'};
     }
-    const mounted=mountGate(piece,ruleCtx().walls);
-    return mounted?{piece:mounted,issue:constructionIssue(mounted)}:
-      {piece,issue:'Rê cổng lên đoạn tường thẳng, đủ dài và cách góc tường.'};
+    const ctx=ruleCtx(),probe={...prop,x:0,y:0,id:'preview-piece'};
+    const roof=isRoof(prop),mode=anchorMode(prop),id=anchorOrigin(prop);
+    const fromPointer=support=>{
+      const frame=propDisplayFrame(probe,support);
+      const [dx,dy]=placementAnchorOffset(frame,prop.spriteBounds||undefined,mode,id);
+      return propPosition({...p,x:p.x-dx,y:p.y-dy});
+    };
+    const at=fromPointer(null);
+    let piece=at?{...probe,...at}:null,support=null;
+    if(roof){
+      const candidates=[null];
+      if(ISOQ())for(const h of nearbyBearingHeights(ctx,p))candidates.push({base:h,rise:0});
+      let best=Infinity;
+      for(const guess of candidates){
+        let pos=fromPointer(guess);
+        for(let i=0;pos&&i<3;i++){
+          const placed={...probe,...pos},bearing=roofBearing(placed,ctx);
+          if(!bearing)break;
+          const active=anchorChoices(placed,propDisplayFrame(placed,bearing)).find(a=>a.id===id);
+          const d=Math.hypot(active.point[0]-p.x,active.point[1]-p.y);
+          if(d<best){best=d;piece=placed;support=bearing;}
+          if(d<.25||(p.snap&&d<3))break;
+          pos=fromPointer(bearing);
+        }
+        if(best<.25)break;
+      }
+      const snapTolerance=p.snap?Math.max(7,CELL*view.z*.45):8;
+      if(best>snapTolerance){piece=at?{...probe,...at}:null;support=null;}
+    }
+    if(!piece)return null;
+    const stacked=M.ents.some(e=>e.placedProp&&!e.wallLine&&sceneEntityLayer(e)===sceneEntityLayer(piece)&&
+      Math.hypot(e.x-piece.x,e.y-piece.y)<.035&&e.roofDirection===piece.roofDirection);
+    const issue=stacked?'Vị trí này đã có mảnh cùng lớp. Dời điểm đặt hoặc xóa mảnh cũ.':
+      roof&&!support?roofIssue:constructionIssue(piece);
+    return {piece,support,issue};
+  }
+  function nearbyBearingHeights(ctx,p){
+    const scale=CELL*view.z,reach=Math.max(scale*5,36);
+    const near=ctx.bearingSurfaces().flatMap(({a,b,height})=>{
+      const xy=q=>{const [x,y]=g2s(...q);return [x,y-height*scale];};
+      const d=projectSegment([p.x,p.y],xy(a),xy(b)).distance;
+      return d<=reach?[{d,height}]:[];
+    });
+    near.sort((a,b)=>a.d-b.d);
+    const heights=[...new Set(near.map(t=>t.height))].slice(0,4);
+    const middle=heights.flatMap((a,i)=>heights.slice(i+1).map(b=>(a+b)/2));
+    return [...heights,...middle].slice(0,8);
   }
   function chooseGateBrush(){
     const sid=sheets.findIndex(sh=>sh.img&&/^Đá Xoáy · cổng, cột, rương/.test(sh.name));
@@ -1126,13 +1177,36 @@ export function init2D(root,A){
       hit?'Con trỏ trên '+hit.which.toLowerCase()+' · Điểm dóng ở mặt bằng':'');
     const v=stamp.tiles?.[0],tile=brushAsset(v)&&dec(v);
     const name=target?entityName(target.piece):brushTools.includes(tool)&&tile?constructionTile(tile.sid,tile.idx,0).label:'';
-    const title=(name?name+' · ':'')+aim.label+' · '+xy(aim.point);
+    const anchorTitle=target&&!mounting?placementAnchorNames[anchorOrigin(target.piece)]:aim.label;
+    let location=xy(aim.point);
+    if(target?.piece.roofDirection&&ISOQ()){
+      const e=target.piece,id=anchorOrigin(e),u=(id%3)/2,v=Math.floor(id/3)/2;
+      const span=e.sc/.95,point=[e.x+1+(u-.5)*span,e.y+1+(v-.5)*span];
+      location=xy(point);
+      if(target.support){
+        const t={E:u,W:1-u,N:1-v,S:v}[e.roofDirection];
+        location+=' · Z '+coord.format(target.support.base+target.support.rise*t);
+      }
+    }
+    const title=(name?name+' · ':'')+anchorTitle+' · '+location;
     if(aimTitle.textContent!==title)aimTitle.textContent=title;
     if(aimHint.textContent!==line)aimHint.textContent=line;
     aimHud.dataset.state=issue?'invalid':aim.join?'joined':'ready';
     aimHud.hidden=false;
     if(!wallTool&&!target&&!['draw','rect','fill','paste'].includes(tool))return;
     const color=issue?'#ff8a88':aim.join?'#6aefc9':'#ffd66d';
+    if(target&&!mounting){
+      const frame=propDisplayFrame(target.piece,target.support);
+      cx.save();
+      for(const a of anchorChoices(target.piece,frame)){
+        const selected=a.id===anchorOrigin(target.piece);
+        cx.beginPath();cx.arc(...a.point,selected?4.5:2.7,0,Math.PI*2);
+        cx.fillStyle=selected?color:'#dce8f4';cx.fill();
+        cx.lineWidth=1.5;cx.strokeStyle='#1b2533';cx.stroke();
+      }
+      cx.restore();
+      return;
+    }
     cx.save();cx.strokeStyle=color;cx.lineWidth=1;
     cx.setLineDash([4,5]);cx.globalAlpha=.55;
     cx.beginPath();
@@ -1241,7 +1315,9 @@ export function init2D(root,A){
       for(let i=0;i<turns;i++)turnProp(prop);
       propCache={value,size,proj,prop,asset,turns,layer:act};
     }
-    return propCache.prop;
+    const prop=propCache.prop,choice=propAnchorIds.get(value)??4;
+    const available=anchorChoices(prop,propDisplayFrame({...prop,x:0,y:0})).some(a=>a.id===choice);
+    return {...prop,anchorId:available?choice:4};
   }
   function legacyPropAt(p,layer=2){
     if(!ISOQ()||!vis[layer])return null;
@@ -1317,6 +1393,7 @@ export function init2D(root,A){
       if(size)size.value=propSizes.get(value)||100;
       const toggle=body.querySelector('[data-prop-turn]');
       if(toggle)toggle.setAttribute('aria-pressed',String(propTurns.has(value)));
+      refreshAnchorPicker();
       dirty=true;
       return;
     }
@@ -1389,6 +1466,25 @@ export function init2D(root,A){
     }
     return panel;
   }
+  function anchorPicker(prop,value){
+    const available=new Set(anchorChoices(prop,propDisplayFrame({...prop,x:0,y:0})).map(p=>p.id));
+    const title=el('span',{class:'hint'},'Điểm neo · '+placementAnchorNames[anchorOrigin(prop)]);
+    const buttons=placementAnchorNames.map((name,id)=>el('button',{
+      type:'button',class:'b placement-anchor-button',title:name,'aria-label':name,'aria-pressed':String(id===anchorOrigin(prop)),
+      ...(available.has(id)?{}:{disabled:''}),onclick:()=>{
+        propAnchorIds.set(value,id);
+        title.textContent='Điểm neo · '+name;
+        buttons.forEach((button,i)=>button.setAttribute('aria-pressed',String(i===id)));
+        dirty=true;
+      }},id===4?'●':'○'));
+    return el('div',{class:'row','data-anchor-picker':'',style:'align-items:center'},el('div',{
+      role:'group','aria-label':'Điểm neo khi đặt',style:'display:grid;grid-template-columns:repeat(3,30px);gap:3px'
+    },buttons),title);
+  }
+  function refreshAnchorPicker(){
+    const current=body.querySelector('[data-anchor-picker]'),prop=activeProp();
+    if(current&&prop)current.replaceWith(anchorPicker(prop,stamp.tiles[0]));
+  }
   function buildPalette(){
     const layer=act,panel=el('section',{class:'build-palette','aria-label':'Chọn mảnh để đặt'});
     const categoryBar=el('div',{class:'build-categories',role:'group','aria-label':'Lớp dựng cảnh'},
@@ -1413,9 +1509,10 @@ export function init2D(root,A){
     if(prop){
       const note=isRoof(prop)?'Đặt mái sao cho hai phía tựa lên đỉnh tường hoặc cột. Dấu xanh hiện điểm tựa hợp lệ.':prop.gateAssembly?'Rê cổng lên đoạn tường bao hoặc tuyến tường thẳng. Xưởng mở khoảng giữa hai trụ.':
         prop.gateUncalibrated?constructionIssue(prop):'';
-      panel.append(propSizeField(propSizes.get(current)||100,n=>{propSizes.set(current,n);dirty=true;}),
+      panel.append(propSizeField(propSizes.get(current)||100,n=>{propSizes.set(current,n);refreshAnchorPicker();dirty=true;}),
         el('div',{class:'row'},el('button',{class:'b',type:'button','data-prop-turn':'','aria-pressed':String(propTurns.has(current)),
           onclick:()=>{transformProp('turn');cv.focus({preventScroll:true});}},'Đổi hướng · T')),
+        anchorMode(prop)==='gate'?null:anchorPicker(prop,current),
         el('div',{class:'hint','data-placement-rule':note,role:'status'},note));
     }
     const ids=visibleBuildSheets(layer),groups=new Map();
