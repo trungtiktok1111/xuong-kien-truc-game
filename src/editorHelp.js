@@ -1,14 +1,14 @@
 import {el} from './util.js';
 
 const guide2D={
-  draw:['Vẽ · B','Đặt ô hình đang cầm vào lớp đang sửa, như lát từng viên đá lên sàn.',
-    'Bấm một ô hình trong khung bên phải.','Bấm bản đồ để đặt một ô hoặc kéo chuột trái để lát nhiều ô. Ctrl+Z để hoàn tác.'],
+  draw:['Đặt mảnh · B','Lắp mảnh nền, vật thể hoặc mái vào bản đồ.',
+    'Chọn lớp và mảnh trong Dựng cảnh.','Bấm để đặt một mảnh, kéo để đặt nhiều mảnh. Ctrl+Z để hoàn tác.'],
   select:['Chọn vùng · V','Chọn một khu trên bản đồ để sao chép, di chuyển hoặc xóa.',
     'Kéo chuột trái từ góc đầu đến góc đối diện.','Dùng Ctrl+C để sao chép, Ctrl+V rồi bấm điểm đặt. Dùng phím mũi tên để dời vùng chọn.'],
   erase:['Xóa · E','Xóa các ô tại lớp đang sửa.',
     'Chọn đúng lớp ở thanh dưới.','Bấm hoặc kéo chuột trái trên những ô cần xóa. Ctrl+Z nếu xóa nhầm.'],
-  pick:['Hút ô · I','Lấy lại một ô hình đã có trên bản đồ để dùng làm cọ.',
-    'Bấm vào một ô sàn hoặc ô hình đang thấy.','Nhấn B để quay về Vẽ, rồi bấm nơi muốn đặt ô vừa lấy.'],
+  pick:['Lấy mẫu · I','Lấy lại một ô hình đã có trên bản đồ để đặt lại.',
+    'Bấm vào một ô sàn hoặc ô hình đang thấy.','Nhấn B để quay về Đặt mảnh, rồi bấm nơi muốn đặt ô vừa lấy.'],
   rect:['Hình chữ nhật · R','Lát cùng một ô hình trên cả một khu hình chữ nhật.',
     'Chọn lớp và ô hình trước.','Kéo từ góc đầu đến góc đối diện rồi nhả chuột.'],
   fill:['Đổ · U','Thay nhóm ô liền nhau có cùng hình bằng ô hình đang cầm.',
@@ -21,7 +21,7 @@ const guide2D={
     'Di chuột để xem trước vị trí. Bấm chuột trái để đặt.','Nhấn Esc để thoát chế độ Dán.'],
   obj:['Đối tượng · O','Đặt hoặc chỉnh những thứ có vai trò trong game như điểm xuất phát, NPC hoặc rương.',
     'Chọn loại bên dưới rồi bấm một ô trống để đặt.','Bấm đối tượng có sẵn để xem thuộc tính. Kéo để dời vị trí.'],
-  sheet:['Tileset','Bảng các ô hình để chọn cọ vẽ.',
+  sheet:['Bảng ghép ô','Chọn mảnh hoặc cụm mảnh từ một bảng ảnh.',
     'Chọn tên bộ hình. Bấm một ô, hoặc kéo trên bảng để lấy nhiều ô liền nhau.','Di chuột ra bản đồ và bấm để đặt. Nhấn B nếu đang dùng công cụ khác.'],
   res:['Tài nguyên','Tìm hình, gắn nhãn và chọn cách dùng một mảnh.',
     'Tìm theo tên hoặc chọn nhóm tài nguyên.','Mở một mảnh để xem ảnh và các tùy chọn đặt trên bản đồ.'],
@@ -82,8 +82,8 @@ export function guideFor(view,key,options){
  return guideBox(view+'-'+key,list[key],options);
 }
 const keys=[
- ['B · V · E · I','Vẽ · Chọn vùng · Xóa · Hút ô'],
- ['R · U · O · K','Hình chữ nhật · Đổ nền · Đối tượng · Va chạm'],
+ ['B · V · E · I','Đặt mảnh · Chọn vùng · Xóa · Lấy mẫu'],
+ ['R · U · O · K','Đặt theo khung · Thay vùng liền · Đối tượng · Va chạm'],
  ['1–5 · G · F','Đổi lớp · Bật/tắt lưới · Vừa khung hoặc đến vùng chọn'],
  ['Space + kéo · Chuột giữa','Di chuyển khung nhìn'],
  ['Cuộn · Chuột phải','Zoom tại con trỏ · Thao tác tại chỗ'],
