@@ -117,14 +117,18 @@ const VN=(a,k,s)=>{const b=NAMEVI[a.group||s.base]||a.name||s.base;return b+(s.v
 /* ---------- dựng bộ nền + bộ vật từ zip ---------- */
 export async function readZip(u8,fname){
   let hasImages=false;
-  const files=unzipSync(u8,{filter:e=>{
+  const names=[];
+  unzipSync(u8,{filter:e=>{
     if(/(^|\/)(__MACOSX|\._)/.test(e.name)||e.name.endsWith('/'))return false;
     if(/\.(png|webp|jpe?g|gif)$/i.test(e.name))hasImages=true;
-    return /\.(png|json|md)$/i.test(e.name);
+    names.push(e.name);
+    return false;
   }});
-  /* chuẩn hoá đường dẫn: bỏ thư mục bọc ngoài nếu có */
-  const names=Object.keys(files);let pre='';const pj=names.find(n=>/(^|\/)pack\.json$/i.test(n)),lg=names.find(n=>/(^|\/)manifest\.json$/i.test(n));
-  const mp=pj||lg;if(!mp)return {hasImages,error:'Không thấy pack.json (xuong-pack-1) hoặc Du-Lieu/manifest.json trong zip. Gói cần có tệp khai báo để app biết từng mảnh là gì.'};
+  const pj=names.find(n=>/(^|\/)pack\.json$/i.test(n));
+  const lg=names.find(n=>/(^|\/)manifest\.json$/i.test(n));
+  const mp=pj||lg;
+  if(!mp)return {hasImages,noManifest:true,error:'Gói không có khai báo Xưởng.'};
+  const files=unzipSync(u8,{filter:e=>/\.(png|json)$/i.test(e.name)&&!/(^|\/)(__MACOSX|\._)/.test(e.name)});
   const root=mp.replace(/(pack\.json|manifest\.json)$/i,'');
   /* ảnh có thể ở cạnh pack.json hoặc ở thư mục cha của Du-Lieu/ */
   const base=pj?root:root.replace(/[^/]*\/$/,'');

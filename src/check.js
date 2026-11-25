@@ -1,3 +1,4 @@
+import {mapCollision} from './mapCollision.js';
 import {guideBox,appGuides} from './editorHelp.js';
 import {zRaster,decoZones} from './zones.js';
 // Kiểm tra game theo luật của skill html5-game-studio (kiem-thu.md mục 7, cong-kiem.md, SKILL.md luật 7/9/10)
@@ -13,18 +14,20 @@ function bfs2(d,sx,sy){const W=d.w,H=d.h,seen=new Uint8Array(W*H);if(sx<0||sy<0|
   while(q.length){const [x,y]=q.pop();for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+a,ny=y+b;if(nx<0||ny<0||nx>=W||ny>=H)continue;const i=ny*W+nx;if(seen[i]||d.blk[i])continue;seen[i]=1;q.push([nx,ny]);}}return seen;}
 export function check2D(d0){
   const zz=[...((d0.cfg&&d0.cfg.zones)||[]),...decoZones(d0.ents)],zr=zz.length?zRaster(zz,d0.w,d0.h):null;const d=zr?Object.assign({},d0,{blk:Array.from(d0.blk,(v,i)=>v||zr[i]?1:0)}):d0;
+  const geometry=mapCollision(d0);
   const out=[],E=d.ents||[],cf=d.cfg||{},W=d.w,H=d.h;
   const st=E.find(e=>e.t==='start'),goals=E.filter(e=>e.t==='goal'),en=E.filter(e=>e.t==='enemy');
   const cell=e=>Math.floor(e.y)*W+Math.floor(e.x);
+  const startFree=st&&geometry.free(st.x+.5,st.y+.5,.28)&&!d.blk[cell(st)];
   if(!E.length){out.push(R('F1','not_assessed','Chưa đặt đối tượng nào: game chạy chế độ cũ (quái rải ngẫu nhiên)','không có dữ liệu để kiểm xuất phát/đích; vào tab 🎯 Đối tượng để đặt'));}
   else{
     out.push(st?R('F1','pass','Có điểm xuất phát'):R('F1','missing','Chưa có 🚩 Xuất phát','game sẽ đặt người chơi ở vị trí mặc định'));
-    if(st){out.push(d.blk[cell(st)]?R('F2','broken','Điểm xuất phát nằm trong ô bị chặn','người chơi bị kẹt (luật "không bao giờ kẹt")'):R('F2','pass','Điểm xuất phát nằm trên ô đi được'));}
+    if(st){out.push(!startFree?R('F2','broken','Điểm xuất phát nằm trong ô bị chặn','người chơi bị kẹt (luật "không bao giờ kẹt")'):R('F2','pass','Điểm xuất phát nằm trên ô đi được'));}
     const win=cf.win||'auto';
     const need=win==='goal'?'goal':win==='kill'?'kill':win==='both'?'both':(goals.length?(en.length?'both':'goal'):'kill');
     const byRule=checkLogic(cf,E).canWinByRule;const canWin=byRule||(need==='goal'&&goals.length)||(need==='kill'&&en.length)||(need==='both'&&goals.length&&en.length)||(need==='both'&&goals.length);
     out.push(canWin||(win==='auto'&&(goals.length||en.length))?R('F3','pass','Có cách thắng ('+({goal:'chạm đích',kill:'diệt hết quái',both:'diệt quái rồi chạm đích'})[need]+')'):R('F3','broken','Không có cách thắng','điều kiện thắng "'+win+'" nhưng thiếu '+(win==='goal'?'🏁 Đích':win==='kill'?'👾 Quái':'🏁 Đích hoặc 👾 Quái')));
-    if(st&&!d.blk[cell(st)]){
+    if(startFree){
       const seen=bfs2(d,Math.floor(st.x),Math.floor(st.y));
       const bad=(arr)=>arr.filter(e=>!seen[cell(e)]);
       if(goals.length){const b=bad(goals);out.push(b.length?R('F4','broken','Đích không đi tới được từ điểm xuất phát','bị tường/nước chặn kín ('+b.length+'/'+goals.length+' đích)'):R('F4','pass','Đích đi tới được từ điểm xuất phát (BFS 4 hướng)'));}

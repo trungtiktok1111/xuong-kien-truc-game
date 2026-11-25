@@ -2,6 +2,10 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
+## V15.6
+- Lớp Vật thể tự gắn vùng chặn ước lượng theo chân ảnh có nhãn Chặn đường. Bật hiển thị Va chạm để xem viền cam trong trình sửa hoặc lúc chơi.
+- Xem [Quy tắc đặt vật thể 2D](docs/quy-tac-dat-vat-the-2d.md) để biết quy ước tọa độ, dữ liệu từ gói và giới hạn suy từ PNG.
+
 ## V15.4
 - Báo kết quả riêng cho từng ZIP, liệt kê gói đã lưu và mở trực tiếp ZIP có ảnh khi thiếu tệp khai báo.
 

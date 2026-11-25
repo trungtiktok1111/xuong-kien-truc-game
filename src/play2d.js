@@ -1,3 +1,4 @@
+import {paintedGroups} from './placement2d.js';
 import {tileFoot} from './spriteFoot.js';
 import {mapCollision} from './mapCollision.js';
 import {outline2D,clipOutline,stoneBackdrop,stoneWall,drawFloorCollision} from './outline2d.js';
@@ -66,13 +67,22 @@ export function play2D(o){
       if(!f)g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,CQ,CQ);else{g.save();g.translate(dx+h2,dy+h2);if(f&4){g.rotate(Math.PI/2);g.scale(1,-1);}if(f&1)g.scale(-1,1);if(f&2)g.scale(1,-1);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-h2,-h2,CQ,CQ);g.restore();}}}if(SM)noiseOverlay(g,W,H,CQ);return c;}
   const base=ISO?null:mk(false),top=ISO?null:mk(true),gnd=ISO?mk(2):null;
   const SL=[];if(ISO){for(const l of [0,1])for(let i=0;i<W*H;i++){const v=M.layers[l][i];if(!v)continue;const t=(v-1)>>3,sid=t>>12,sh=sheets[sid];if(sh&&sh.img&&sh.iso&&!(SMG&&l===0&&bakedOk(v)))SL.push({x:i%W,y:(i/W)|0,sid,idx:t&4095,l,f:(v-1)&7});}SL.sort(ANG?((a,b)=>(a.y-b.y)||(a.x-b.x)||a.l-b.l):((a,b)=>(a.x+a.y)-(b.x+b.y)||a.l-b.l));}
-  const mkG=Ls=>{const out=[];if(!ISO)return out;const oc=new Uint8Array(W*H),lab=new Uint8Array(W*H);for(let i=0;i<W*H;i++)oc[i]=Ls.some(l=>M.layers[l][i])?1:0;
-    for(let i=0;i<W*H;i++){if(!oc[i]||lab[i])continue;const st=[i],cells=[];lab[i]=1;let x0=W,y0=H,x1=-1,y1=-1;
-      while(st.length){const c=st.pop();cells.push(c);const x=c%W,y=(c/W)|0;x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+a,ny=y+b;if(nx<0||ny<0||nx>=W||ny>=H)continue;const q=ny*W+nx;if(oc[q]&&!lab[q]){lab[q]=1;st.push(q);}}}
-      const bw=x1-x0+1,bh=y1-y0+1,c=document.createElement('canvas');c.width=bw*CQ;c.height=bh*CQ;const g=c.getContext('2d');g.imageSmoothingEnabled=CQ>16;
-      for(const l of Ls)for(const ci of cells){const v=M.layers[l][ci];if(!v)continue;const n=v-1,t=n>>3,sid=t>>12,idx=t&4095,sh=sheets[sid];if(!sh||!sh.img)continue;const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,((ci%W)-x0)*CQ,(((ci/W)|0)-y0)*CQ,CQ,CQ);}
-      out.push({c,xc:(x0+x1+1)/2,yb:y1+1,x0,y0,x1:x1+1,y1:y1+1,a:1});}return out;};
-  const GR=mkG([2]),OVG=mkG([3]);
+  const mkG=l=>ISO?paintedGroups(M.layers[l],W,H).map(group=>{
+    const {x0,y0,x1,y1,cells}=group,c=el('canvas',{width:(x1-x0)*CQ,height:(y1-y0)*CQ}),g=c.getContext('2d');
+    g.imageSmoothingEnabled=CQ>16;
+    for(const i of cells){
+      const n=M.layers[l][i]-1,f=n&7,t=n>>3,sh=sheets[t>>12],idx=t&4095;
+      if(!sh?.img)continue;
+      const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin);
+      const dx=(i%W-x0)*CQ,dy=(Math.floor(i/W)-y0)*CQ;
+      g.save();g.translate(dx+CQ/2,dy+CQ/2);
+      if(f&4){g.rotate(Math.PI/2);g.scale(1,-1);}
+      g.scale(f&1?-1:1,f&2?-1:1);
+      g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-CQ/2,-CQ/2,CQ,CQ);g.restore();
+    }
+    return {...group,c,a:1};
+  }):[];
+  const GR=mkG(2),OVG=mkG(3);
   function ico(k,x,y,s){cx.save();cx.translate(x,y);
     if(k==='heart'){cx.fillStyle='#e8484f';cx.beginPath();cx.moveTo(0,s*.3);cx.bezierCurveTo(-s*.5,-s*.05,-s*.25,-s*.4,0,-s*.12);cx.bezierCurveTo(s*.25,-s*.4,s*.5,-s*.05,0,s*.3);cx.fill();}
     else if(k==='chest'||k==='chest2'){const o=k==='chest2';cx.fillStyle='#8a5a2b';cx.fillRect(-s*.3,-s*.05,s*.6,s*.3);cx.fillStyle='#b8823f';if(o){cx.fillRect(-s*.3,-s*.32,s*.6,s*.12);cx.fillStyle='#ffe58a';cx.fillRect(-s*.24,-s*.1,s*.48,s*.08);}else{cx.fillRect(-s*.3,-s*.22,s*.6,s*.18);cx.fillStyle='#e8c34a';cx.fillRect(-s*.05,-s*.1,s*.1,s*.14);}}
@@ -284,7 +294,10 @@ export function play2D(o){
       else if(dbgMode===2||window.__dbg){cx.fillStyle='rgba(40,220,90,.2)';cx.beginPath();for(const [a,b] of [[0,0],[W,0],[W,H],[0,H]]){const q=Tq(a,b);cx.lineTo(q[0],q[1]);}cx.closePath();cx.fill();}
       cx.save();if(collision.floor)clipOutline(cx,collision.floor,Tq);
       cx.fillStyle='rgba(255,40,40,.5)';for(let i=0;i<W*H;i++)if(collision.tileBlocked(i)){const x=i%W,y=(i/W)|0;cx.beginPath();for(const [a,b] of [[x,y],[x+1,y],[x+1,y+1],[x,y+1]]){const q=Tq(a,b);cx.lineTo(q[0],q[1]);}cx.closePath();cx.fill();}
-      cx.restore();cx.strokeStyle='#ff8a8a';cx.lineWidth=1.5;for(const q of ZS){if(q.k==='line'){cx.save();cx.strokeStyle='rgba(255,40,40,.5)';cx.lineWidth=(q.th||.6)*s;cx.lineJoin='round';zPath(cx,q,Tq);cx.stroke();cx.restore();}else{zPath(cx,q,Tq);cx.fill();cx.stroke();}}cx.restore();}
+      cx.restore();cx.strokeStyle='#ff8a8a';cx.lineWidth=1.5;for(const q of ZS){if(q.k==='line'){cx.save();cx.strokeStyle='rgba(255,40,40,.5)';cx.lineWidth=(q.th||.6)*s;cx.lineJoin='round';zPath(cx,q,Tq);cx.stroke();cx.restore();}else{zPath(cx,q,Tq);cx.fill();cx.stroke();}}
+      cx.fillStyle='rgba(255,170,45,.45)';cx.strokeStyle='#ffbd69';
+      for(const q of M.placementZones||[]){zPath(cx,q,Tq);cx.fill();cx.stroke();}
+      cx.restore();}
     if(showGrid||showReach){const TQ=ISO?((x,y)=>[pX(x,y),pY(x,y)]):((x,y)=>[ox1+x*s,oy1+y*s]);cx.save();
       if(showReach&&REACH){cx.save();if(collision.floor)clipOutline(cx,collision.floor,TQ);for(let i=0;i<W*H;i++){const f=REACH[i],fl=M.layers[0][i];if(!f&&!fl)continue;const x=i%W,y=(i/W)|0;cx.fillStyle=f?'rgba(60,220,110,'+(.16+.26*f)+')':'rgba(255,150,40,.3)';cx.beginPath();for(const [a,b] of [[x,y],[x+1,y],[x+1,y+1],[x,y+1]]){const q=TQ(a,b);cx.lineTo(q[0],q[1]);}cx.closePath();cx.fill();}cx.restore();}
       if(showGrid){cx.strokeStyle='rgba(255,255,255,.28)';cx.lineWidth=1;cx.beginPath();for(let x=0;x<=W;x++){const a=TQ(x,0),b=TQ(x,H);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}for(let y=0;y<=H;y++){const a=TQ(0,y),b=TQ(W,y);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}cx.stroke();}

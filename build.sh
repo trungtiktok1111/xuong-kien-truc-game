@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
   --loader:.json=json --loader:.wasm=binary --outfile=dist/app.js
 node <<'JS'
 const { readFileSync, writeFileSync } = require('node:fs');
-const script = readFileSync('dist/app.js', 'utf8').replaceAll('</script', '<\\/script');
+const script = readFileSync('dist/app.js', 'utf8').replaceAll('</script', '<\\/script').replaceAll('</body', '<\\/body').replaceAll('</head', '<\\/head');
 const template = readFileSync('tpl.html', 'utf8');
 const sample = JSON.parse(template.match(/id="da-xoay-sample"[^>]*>(.*?)<\/script>/s)[1]);
 const path = sample.cfg.outline.loops.map(loop =>

@@ -52,19 +52,19 @@ import {unzipSync,zipSync} from 'fflate';
 import {createExtractorFromData} from 'node-unrar-js';
 import unrarWasm from 'node-unrar-js/esm/js/unrar.wasm';
 /* .rar: giải nén (chỉ lấy zip/png/json/glb/…); mỗi .zip bên trong thành 1 gói riêng, tệp lẻ gộp thành 1 gói. Hàm trả danh sách "tệp ảo" dùng như File */
-const isRar=u8=>u8.length>7&&u8[0]===0x52&&u8[1]===0x61&&u8[2]===0x72&&u8[3]===0x21;
+export const isRar=u8=>u8.length>7&&u8[0]===0x52&&u8[1]===0x61&&u8[2]===0x72&&u8[3]===0x21;
 const vf=(name,data)=>({name,size:data.length,arrayBuffer:async()=>data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength)});
-export async function expandPacks(files){const out=[];
+export async function expandPacks(files, catalog=false){const out=[];
   for(const f of files){const u8=new Uint8Array(await f.arrayBuffer());
     if(!isRar(u8)){out.push(f);continue;}
     toast('Đang giải nén '+f.name+' (RAR)…');
     try{const ex=await createExtractorFromData({wasmBinary:unrarWasm.buffer.slice(unrarWasm.byteOffset,unrarWasm.byteOffset+unrarWasm.byteLength),data:u8});
-      const r=ex.extract({files:h=>!h.flags.directory&&/\.(zip|png|json|glb|gltf|jpe?g|webp|bin)$/i.test(h.name)&&!/(^|\/)(__MACOSX|\._)/.test(h.name)});
+      const r=ex.extract({files:h=>!h.flags.directory&&(/\.(zip|png|json|glb|gltf|jpe?g|webp|bin)$/i.test(h.name)||(catalog&&/\.(tsx|gif)$/i.test(h.name)))&&!/(^|\/)(__MACOSX|\._)/.test(h.name)});
       const loose={};let nz=0;
       for(const e of r.files){if(!e.extraction)continue;const nm=e.fileHeader.name.replace(/\\/g,'/');
-        if(/\.zip$/i.test(nm)){out.push(vf(nm.split('/').pop(),e.extraction));nz++;}else loose[nm]=e.extraction;}
-      if(Object.keys(loose).length)out.push(vf(f.name.replace(/\.rar$/i,'')+'.zip',zipSync(loose,{level:0})));
-    }catch(er){console.error('RARERR',er&&er.message||er);toast('Không giải nén được '+f.name+' (RAR lỗi hoặc có mật khẩu)');}}
+        if(/\.zip$/i.test(nm)){const child=vf(nm.split('/').pop(),e.extraction);if(catalog)child.name=f.name+' / '+child.name;out.push(child);nz++;}else loose[nm]=e.extraction;}
+      if(Object.keys(loose).length||(catalog&&!nz))out.push(vf(catalog?f.name:f.name.replace(/\.rar$/i,'')+'.zip',zipSync(loose,{level:0})));
+    }catch(er){console.error('RARERR',er&&er.message||er);toast('Không giải nén được '+f.name+' (RAR lỗi hoặc có mật khẩu)');if(catalog)out.push({name:f.name,archiveError:'RAR lỗi hoặc có mật khẩu'});}}
   return out;}
 export async function packBytes(f){return new Uint8Array(await f.arrayBuffer());}
 const MIME={png:'image/png',webp:'image/webp',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif'};
