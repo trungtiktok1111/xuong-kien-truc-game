@@ -1,3 +1,4 @@
+import {campaignStart,mapLinkLanding} from './mapLinks2d.js';
 import {bridgeHeight,bridgeRails,drawSettlementBridge,pickBridge} from './settlementBridge.js';
 import {tiledDepth} from './tiledScene.js';
 import {actorFootprint,actorHeights,bodyHeight,fitsUnderRoof,lowestCeiling,roofPlane,roofBlockedFootprint} from './headroom2d.js';
@@ -139,9 +140,10 @@ export function play2D(o){
     PATH=null;GOAL=null;said=null;
     if(sp&&sp.hp!=null&&!sp.used){P.hp=Math.max(1,Math.min(CF.hp,sp.hp));score=sp.score||0;sp.used=1;}
     DR=EN.filter(isMapLink).flatMap(e=>{
+      if(o.canUseDoor&&!o.canUseDoor(e))return [];
       const anchor=portalAnchor(e,(x,y,r)=>portalFloor?.fits(x,y,r)??collision.free(x,y,r));
       if(!anchor)return [];
-      const [x,y]=anchor;return [{x,y,to:e.to,tx:e.tx,ty:e.ty,gate:e.gateAssembly,gx:e.x+1,gy:e.y+1,armed:Math.hypot(x-P.x,y-P.y)>.9}];
+      const [x,y]=anchor;return [{x,y,to:e.to,tx:e.tx,ty:e.ty,advanceGoal:e.advanceGoal,gate:e.gateAssembly,gx:e.x+1,gy:e.y+1,armed:Math.hypot(x-P.x,y-P.y)>.9}];
     });
     items=[];over=0;msg.style.display='none';E=[];NP=[];CH=[];GL=null;HID=new Map();ov.querySelectorAll('.dlgbox').forEach(x=>x.remove());if(L&&L.hud)L.hud.remove();L=createLogic(CF,EN,host,ov);
     if(legacy){
@@ -161,7 +163,7 @@ export function play2D(o){
     }
     const hasGoal=EN.some(e=>e.t==='goal'),hasEn=EN.some(e=>e.t==='enemy');
     winMode=CF.win==='auto'?(hasGoal?(hasEn&&!legacy?'both':'goal'):'kill'):CF.win;
-    if(winMode!=='kill'&&!hasGoal)winMode='kill';
+    if(['goal','both'].includes(winMode)&&!hasGoal)winMode='kill';
     const saved=o.restore;
     if(saved&&o.spawn){
       if(saved.logic)L.restore(saved.logic);
@@ -301,7 +303,7 @@ export function play2D(o){
     if(o.onSnapshot&&t-(P.lastSnapshot||-5)>1){P.lastSnapshot=t;o.onSnapshot(snapshot());}
     if(said){said.t-=dt;if(said.t<=0)said=null;}
     if(GL&&Math.hypot(GL.x-P.x,GL.y-P.y)>=.6)GL.hit=0;
-    if(GL&&Math.hypot(GL.x-P.x,GL.y-P.y)<.6){if(!GL.hit){GL.hit=1;L.fire('goal');if(over||!GL)return;}if(winMode==='goal'||(winMode==='both'&&!E.length&&!hidEn()))end(true);else if(winMode==='both'){said={n:{x:GL.x,y:GL.y,name:'Đích',text:'Còn quái chưa diệt!'},t:1.2};}}
+    if(GL&&!(o.onDoor&&DR.some(d=>d.advanceGoal!=null&&d.advanceGoal===GL.id))&&Math.hypot(GL.x-P.x,GL.y-P.y)<.6){if(!GL.hit){GL.hit=1;L.fire('goal');if(over||!GL)return;}if(winMode==='goal'||(winMode==='both'&&!E.length&&!hidEn()))end(true);else if(winMode==='both'){said={n:{x:GL.x,y:GL.y,name:'Đích',text:'Còn quái chưa diệt!'},t:1.2};}}
     for(let i=items.length-1;i>=0;i--)if(Math.hypot(items[i].x-P.x,items[i].y-P.y)<.6){items.splice(i,1);P.hp=Math.min(CF.hp,P.hp+1);}
   }
   function draw(){
@@ -427,21 +429,31 @@ export function play2D(o){
 
 /* Nhiều màn: nối các bản đồ bằng cửa, lưu tiến độ trong trình duyệt */
 export function playGame(o){const D=o.M;if(!D.maps||D.maps.length<2)return play2D(o);
-  const key='thk_save_'+(D.gid||'g'),maps=D.maps;let cur=null,idx=0,stopped=false;
-  const startOf=m=>{const st=(m.ents||[]).find(e=>e.t==='start');return st?{x:st.x+.5,y:st.y+.5}:{x:m.w/2,y:m.h/2};};
-  const run=(i,sp)=>{idx=i;const m=Object.assign({},maps[i]);
-    cur=play2D({M:m,sheets:o.sheets,spawn:sp,onExit:()=>{stopped=true;o.onExit&&o.onExit();},
+  const key='thk_save_'+(D.gid||'g'),maps=D.maps,first=campaignStart(maps,o.startMap??D.startMap);
+  let cur=null,stopped=false;
+  const landingCache=new Map();
+  const landing=d=>{
+    const key=[d.to,d.tx,d.ty].join(':');
+    if(!landingCache.has(key))landingCache.set(key,mapLinkLanding(maps,d));
+    return landingCache.get(key);
+  };
+  const run=(i,sp)=>{
+    cur=play2D({M:{...maps[i]},sheets:o.sheets,spawn:sp,canUseDoor:landing,onExit:()=>{stopped=true;o.onExit&&o.onExit();},
       onTick:q=>{try{localStorage.setItem(key,JSON.stringify({i,x:q.x,y:q.y,hp:q.hp,score:q.score}));}catch(e){}},
-      onDoor:d=>{const ti=maps[d.to]?d.to:0,tm=maps[ti],dp=(d.tx!=null&&d.ty!=null)?{x:d.tx+.5,y:d.ty+.5}:startOf(tm);
-        try{localStorage.setItem(key,JSON.stringify({i:ti,x:dp.x,y:dp.y,hp:d.hp,score:d.score}));}catch(e){}
-        const c=cur;setTimeout(()=>{c.stop(true);if(!stopped)run(ti,{x:dp.x,y:dp.y,hp:d.hp,score:d.score});},0);}});};
+      onDoor:d=>{
+        const dp=landing(d);
+        if(!dp)return;
+        try{localStorage.setItem(key,JSON.stringify({i:d.to,x:dp.x,y:dp.y,hp:d.hp,score:d.score}));}catch(e){}
+        const c=cur;setTimeout(()=>{c.stop(true);if(!stopped)run(d.to,{...dp,hp:d.hp,score:d.score});},0);
+      }});
+  };
   let sv=null;try{sv=JSON.parse(localStorage.getItem(key)||'null');}catch(e){}
   if(sv&&maps[sv.i]){
     const ov=el('div',{style:'position:fixed;inset:0;z-index:300;background:#10161d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#fff;font:700 22px system-ui'});
     const b=(t,f,c)=>el('div',{style:'padding:12px 26px;border-radius:20px;color:#2a1a08;font-size:18px;background:'+c,onclick:()=>{ov.remove();f();}},t);
     ov.append(el('div',{},'Có tiến độ đã lưu'),el('div',{style:'font-size:15px;font-weight:400;opacity:.8'},(maps[sv.i].name||'Màn '+(sv.i+1))+' · ❤️'+sv.hp+(sv.score?' · ⭐'+sv.score:'')),
       b('▶ Tiếp tục',()=>run(sv.i,{x:sv.x,y:sv.y,hp:sv.hp,score:sv.score}),'#e0b050'),
-      b('↺ Chơi mới',()=>{try{localStorage.removeItem(key);}catch(e){}run(0,null);},'#cfd8e3'));
+      b('↺ Chơi mới',()=>{try{localStorage.removeItem(key);}catch(e){}run(first,null);},'#cfd8e3'));
     document.body.append(ov);
-  }else run(0,null);
+  }else run(first,null);
   return {stop(){stopped=true;cur&&cur.stop();}};}

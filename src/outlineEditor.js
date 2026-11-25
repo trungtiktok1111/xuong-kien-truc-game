@@ -556,7 +556,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  }
  restoreLevelButton=B('Nạp lại mẫu gốc',()=>loadLevel(levelDraft||originLevel));
  const levelActions=el('div',{class:'row outline-level-actions'},
-  B('Chơi thử mẫu',playDraft),B('Tạo bản sao',createDraft));
+  B('Chơi thử mẫu',playDraft),B('Tạo bản sao',()=>createDraft()),
+  is3D?null:B('Tạo và nối với màn hiện tại',()=>createDraft(true)));
  const levelPanel=el('div',{class:'outline-level-panel'},el('div',{class:'row'},levelGroup,restoreLevelButton),levelHint,levelActions,levelCards);
  const shapesTab=B('Mảnh ghép',()=>{setTab('shapes');draw();}),levelsTab=B('Màn mẫu · '+outlineLevels.length,()=>{setTab('levels');draw();});
  function setTab(tab){
@@ -602,10 +603,10 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const stamp=placeOutlineTiles(scan.cells,placed,{x:0,y:0,dx:actualX,dy:actualY,c:1,s:0},w,h,v=>v);
   return runAction(()=>editor.newOutlineMap({...outlineData(),gates:[],loops:placed},w,h,null,[stamp],[0,0],false),true);
  }
- function createDraft(){
+ function createDraft(connect=false){
   return runAction(async()=>{
    if(!loops.length)throw Error('Hãy tạo đường bao hoặc chọn một màn mẫu.');
-   await editor.newOutlineMap(outlineData(),W,H,levelDraft,stamps,origin);
+   await editor.newOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,true,connect);
   },true);
  }
  function playDraft(){
@@ -617,10 +618,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    catch(e){back();throw e;}
   },false);
  }
- createLabel=B('Tạo màn mới từ hình này',createDraft);
+ createLabel=B('Tạo màn mới từ hình này',()=>createDraft());
  tryLabel=B('Chơi thử bản nháp',playDraft);
  clearButton=B('Bỏ lớp đường bao',async()=>{if(!map.cfg.outline||!await yes('Bỏ tường bao, mép cong và những cổng gắn vào tường bao của màn hiện tại?'))return;if(editor.clearOutline()!==false)ov.remove();});
  buttons.append(applyButton,createLabel,tryLabel,clearButton,B('Đóng',()=>ov.remove()));
+ if(!is3D)buttons.insertBefore(B('Tạo và nối hai chiều',()=>createDraft(true)),tryLabel);
  box.append(el('h2',{},(is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ')),guideBox('outline',appGuides.outline),setup,toolbar,
   el('div',{class:'outline-layout'},el('div',{},gridSetup,gridNote,viewTools,el('div',{class:'outline-canvas-wrap',style:'position:relative'},canvas,aim),status),library),
   editShape,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons);

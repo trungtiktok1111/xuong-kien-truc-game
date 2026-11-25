@@ -28,7 +28,7 @@ function go(v){cur=v;$('#v2d').style.display=v==='2d'&&$('#xuong-startup')?.hidd
   }else{e3&&e3.hide();e2.show();}}
 document.querySelectorAll('.tabbtn[data-v]').forEach(b=>b.onclick=()=>go(b.dataset.v));
 $('#playbtn').onclick=()=>{
-  if(cur==='2d'){const d=e2.gameData();(async()=>{if(d.cfg&&d.cfg.proj==='angle')await ensureAngle(e2.sheets());playGame({M:d,sheets:e2.sheets(),onExit:()=>{}});})();}
+  if(cur==='2d'){const d=e2.gameData();(async()=>{if((d.maps||[d]).some(m=>m.cfg?.proj==='angle'))await ensureAngle(e2.sheets());playGame({M:d,sheets:e2.sheets(),startMap:d.currentMap,onExit:()=>{}});})();}
   else{(async()=>{
     await e3.ready;
     if(cur!=='3d')return;

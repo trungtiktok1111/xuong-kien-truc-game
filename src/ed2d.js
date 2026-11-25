@@ -1,3 +1,4 @@
+import {campaignStart,planMapPair} from './mapLinks2d.js';
 import {stockScenes,packPurpose} from './stockScenes.js';
 import {drawSettlementBridge} from './settlementBridge.js';
 import {settlementIssues} from './settlementChecks.js';
@@ -2966,15 +2967,39 @@ export function init2D(root,A){
   function switchMap(i){if(i===curMap||!MAPS[i])return;syncCur();curMap=i;M=clone(MAPS[i]);undo=[];redo=[];selId=null;inventoryGroup='';inventoryId='';inventoryMoving=false;after();fit();draw();}
   function mkMap(w,h,name,cfg){const m=newMap(w,h);m.name=name;m.cfg=cfg;const sx=Math.floor(w/2),sy=Math.floor(h/2);m.ents.push({id:'s'+Date.now().toString(36),t:'start',x:sx,y:sy,name:'Xuất phát',tile:null});return m;}
   const mapName=i=>(i===curMap?M.name:(MAPS[i]&&MAPS[i].name))||('Màn '+(i+1));
+  function addPair(source,target,from,to,prepared=sheets){
+    const lookup=makePaintLookup();
+    const [out,back]=planMapPair(sceneForPlay(source,source.cfg,lookup),
+      sceneForPlay(target,target.cfg,prepared===sheets?lookup:makePaintLookup(prepared)),from,to,crypto.randomUUID());
+    source.ents.push(out);target.ents.push(back);
+    return out;
+  }
+  function connectMap(to){
+    if(!MAPS[to]||to===curMap)throw Error('Hãy chọn màn khác để nối.');
+    if(M.ents.some(e=>e.pairId&&e.to===to&&MAPS[to].ents.some(peer=>peer.pairId===e.pairId&&peer.to===curMap)))
+      throw Error('Hai màn đã có lối nối hai chiều.');
+    syncCur();
+    const target=clone(MAPS[to]);
+    const out=addPair(M,target,curMap,to);
+    MAPS[to]=target;syncCur();after();draw();
+    toast('Đã nối hai chiều · '+out.name+' · ô '+out.x+', '+out.y+'.');
+  }
+  function mapConnectionBox(){
+    const options=MAPS.map((m,i)=>[i,m]).filter(([i])=>i!==curMap);
+    const select=el('select',{class:'num','aria-label':'Chọn màn để kết nối'},options.map(([i])=>el('option',{value:i},mapName(i))));
+    return options.length?el('div',{class:'row'},el('span',{class:'hint'},'Nối từ '+mapName(curMap)),select,btn('Nối hai chiều',()=>{
+      try{connectMap(+select.value);}catch(error){toast(error.message);}
+    })):el('p',{class:'hint'},'Thêm một màn Cảnh ZIP hoặc Đường bao để nối.');
+  }
   function mapsTab(){
     if(!MAPS.length)syncCur();
     body.append(el('div',{class:'lbl'},'🗺 CÁC MÀN CỦA GAME'),el('div',{class:'hint'},'Mỗi màn là một bản đồ riêng. Đặt 🚪 cửa trên màn này để đi sang màn khác. Nhân vật và hoạt ảnh lấy theo Màn 1.'));
-    const lst=el('div',{class:'row'});MAPS.forEach((m,i)=>lst.append(btn((i+1)+'. '+mapName(i),()=>switchMap(i),i===curMap?'on':'')));body.append(lst);
+    const lst=el('div',{class:'row'});MAPS.forEach((m,i)=>lst.append(btn((i+1)+'. '+mapName(i),()=>switchMap(i),i===curMap?'on':'')));body.append(lst,mapConnectionBox());
     body.append(el('div',{class:'row'},
       btn('Thêm màn trống',()=>{syncCur();const c=MAPS[0].cfg;MAPS.push(mkMap(M.w,M.h,'Màn '+(MAPS.length+1),{hp:c.hp,spd:c.spd,dmg:c.dmg,rng:c.rng,win:'auto'}));switchMap(MAPS.length-1);toast('Đã thêm màn '+MAPS.length);}),
       btn('⧉ Nhân bản màn này',()=>{syncCur();const m=clone(M);m.name=M.name+' (bản sao)';MAPS.push(m);switchMap(MAPS.length-1);}),
       btn('✏ Đổi tên',async()=>{const n=await askText('Tên màn này?',M.name);if(n){M.name=n.slice(0,30);syncCur();draw();}}),
-      btn('🗑 Xoá màn này',async()=>{if(MAPS.length<2){toast('Phải còn ít nhất 1 màn');return;}if(!await yes('Xoá "'+M.name+'"? Cửa trỏ tới màn này sẽ bị bỏ.\nKhông hoàn tác được.'))return;const d=curMap;MAPS.splice(d,1);for(const m of MAPS)m.ents=(m.ents||[]).filter(e=>!(e.t==='door'&&e.to===d)).map(e=>{
+      btn('🗑 Xoá màn này',async()=>{if(MAPS.length<2){toast('Phải còn ít nhất 1 màn');return;}if(!await yes('Xoá "'+M.name+'"? Cửa trỏ tới màn này sẽ bị bỏ.\nKhông hoàn tác được.'))return;const d=curMap;MAPS.splice(d,1);const start=projectMeta.startMap??0;setProjectMeta({...projectMeta,startMap:start===d?0:start>d?start-1:start});for(const m of MAPS)m.ents=(m.ents||[]).filter(e=>!(e.t==='door'&&e.to===d)).map(e=>{
       if(!isMapLink(e))return e;
       if(e.to===d)return {...e,to:null,tx:null,ty:null};
       return e.to>d?{...e,to:e.to-1}:e;
@@ -3033,13 +3058,13 @@ export function init2D(root,A){
     }catch{}
     const info={contact,bounds,rectangular};cache.set(key,info);return info;
   }
-  function makePaintLookup(){
+  function makePaintLookup(source=sheets){
     const profiles=new Map();
     return value=>{
       if(profiles.has(value))return profiles.get(value);
-      const {sid,idx,f}=dec(value),sheet=sheets[sid];
+      const {sid,idx,f}=dec(value),sheet=source[sid];
       let profile=null;
-      if(sheet?.img&&!sheet.iso){
+      if(sheet?.img&&!sheet.iso&&sheet===sheets[sid]){
         const info=constructionTile(sid,idx,0);
         const family=paintFamily(info.source,info.type,info.behavior);
         if(idx===0&&sheet.tw===64&&/^Đá Xoáy · cổng, cột, rương/.test(sheet.name)&&info.behavior==='Chặn đường'){
@@ -3076,7 +3101,7 @@ export function init2D(root,A){
     });
     let gid=lsGet('thk_gid',null);
     if(!gid){gid='g'+Date.now().toString(36);lsSet('thk_gid',gid);}
-    return {...gameData1(),...maps[curMap],maps:maps.length>1?maps:undefined,gid};
+    return {...gameData1(),...maps[curMap],maps:maps.length>1?maps:undefined,currentMap:curMap,startMap:campaignStart(maps,projectMeta.startMap),gid};
   };
   const gameData1=()=>({kind:'2d',w:M.w,h:M.h,layers:M.layers.map(l=>l.slice()),blk:M.blk.slice(),ents:JSON.parse(JSON.stringify(M.ents)),cfg:M.cfg,custom:sheets.slice(4).map(s=>({name:s.name,url:s.url,tw:s.tw,margin:s.margin,iso:s.iso||0,cy:s.cy||0,wat:s.wat||null,phaseBrush:s.phaseBrush}))});
   function setProjectMeta(meta){projectMeta=meta;lsSet('xuong_project_meta',meta);after();}
@@ -3311,18 +3336,22 @@ export function init2D(root,A){
     syncCur();after();fit();draw();cv.focus({preventScroll:true});
     toast('Đã áp dụng '+level.name+'. Có thể hoàn tác trong trình sửa.');
   }
-  async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true){
-    const current=M,fresh=await buildOutlineMap(outline,w,h,level,sheets,stamps,useSource,null,origin);
-    if(M!==current)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
+  async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true,connect=false){
+    const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
+    const fresh=await buildOutlineMap(outline,w,h,level,prepared,stamps,useSource,null,origin);
+    if(M!==current||curMap!==index||revision!==buildRevision)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
     if(MAPS.some(m=>m.name===fresh.name)||M.name===fresh.name){
       const name=fresh.name;
       let i=2;while(MAPS.some(m=>m.name===name+' · '+i)||M.name===name+' · '+i)i++;
       fresh.name=name+' · '+i;
     }
-    syncCur();curMap=MAPS.push(clone(fresh))-1;M=fresh;undo=[];redo=[];selId=null;sel=null;
+    syncCur();
+    const next=MAPS.length;
+    if(connect)addPair(current,fresh,index,next,prepared);
+    sheets.push(...prepared.slice(sheets.length));syncCur();curMap=MAPS.push(clone(fresh))-1;M=fresh;undo=[];redo=[];selId=null;sel=null;
     after();fit();draw();await save();
-    toast('Đã tạo '+fresh.name);
+    toast('Đã tạo '+fresh.name+(connect?' và nối hai chiều với '+current.name:'.'));
   }
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
-  return {ready,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  return {ready,connectMap,mapConnectionBox,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
 }

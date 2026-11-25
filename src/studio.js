@@ -1,5 +1,6 @@
-import {isMapLink,portalAnchor} from './wall2d.js';
-import {mapCollision} from './mapCollision.js';
+import {isMapLink} from './wall2d.js';
+import {campaignStart,mapLinkLanding,mapLinkReports} from './mapLinks2d.js';
+import {ensureAngle} from './proj.js';
 import {guideBox,appGuides} from './editorHelp.js';
 import {el,ask,yes,pickFile,saveFile,gameHTML,toast,lsGet,lsSet} from './util.js';
 import {check2D} from './check.js';
@@ -10,39 +11,12 @@ const panel=()=>el('section',{style:'position:fixed;inset:0;z-index:190;overflow
 const card=()=>el('div',{style:'width:min(560px,100%);padding:26px;background:#1e2b36;border:1px solid #50606a;border-radius:16px;box-shadow:0 12px 40px #0007'});
 export function newMeta(title){return {title,id:globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2)};}
 function projectChecks(data){
- const maps=data.maps||[data];
- const problems=[];
- for(const [i,m] of maps.entries()){
-  const name=m.name||'Màn '+(i+1);
-  const rows=check2D(m);
-  const exits=m.ents.filter(isMapLink),geometry=mapCollision(m);
-  for(const r of rows){
-   if(exits.length&&r.id==='F3'&&!m.ents.some(e=>e.t==='goal'))continue;
+ const maps=data.maps||[data],problems=mapLinkReports(maps);
+ for(const [i,map] of maps.entries()){
+  const name=map.name||'Màn '+(i+1),exits=map.ents.some(isMapLink);
+  for(const r of check2D(map)){
+   if(exits&&r.id==='F3'&&!map.ents.some(e=>e.t==='goal'))continue;
    if(r.st==='missing'||r.st==='broken')problems.push(name+' · '+r.txt);
-  }
-  const start=m.ents.find(e=>e.t==='start');
-  const reachable=new Set();
-  if(start&&!m.blk[start.y*m.w+start.x]){
-   const q=[[start.x,start.y]];
-   reachable.add(start.y*m.w+start.x);
-   for(let k=0;k<q.length;k++){
-    const [x,y]=q[k];
-    for(const [a,b] of [[x+1,y],[x-1,y],[x,y+1],[x,y-1]]){
-     const cell=b*m.w+a;
-     if(a<0||b<0||a>=m.w||b>=m.h||reachable.has(cell)||m.blk[cell])continue;
-     reachable.add(cell);q.push([a,b]);
-    }
-   }
-  }
-  for(const e of exits){
-   const p=portalAnchor(e,(x,y,r)=>geometry.floor?.fits(x,y,r)??geometry.free(x,y,r));
-   if(!p||!reachable.has(Math.floor(p[1])*m.w+Math.floor(p[0])))problems.push(name+' · không có đường tới cửa '+e.name);
-   const dest=maps[e.to];
-   if(!dest){problems.push(name+' · cửa '+e.name+' trỏ tới màn chưa có');continue;}
-   const fallback=dest.ents.find(q=>q.t==='start');
-   const fixed=e.tx!=null&&e.ty!=null,x=fixed?e.tx:fallback?.x,y=fixed?e.ty:fallback?.y;
-   if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||y<0||x>=dest.w||y>=dest.h||dest.blk[y*dest.w+x])
-    problems.push(name+' · điểm đến của cửa '+e.name+' bị chặn hoặc thiếu');
   }
  }
  return problems;
@@ -71,7 +45,12 @@ export function openStudio(editor){
  const root=panel(),body=card();root.append(body);document.body.append(root);
  const refresh=()=>{
   const project=editor.readProject(),meta=project.meta;
+  const start=el('select',{class:'num','aria-label':'Màn bắt đầu game',
+   onchange:()=>editor.setProjectMeta({...meta,startMap:+start.value})},project.maps.map((m,i)=>
+   el('option',{value:i},m.name||'Màn '+(i+1))));
+  start.value=String(campaignStart(project.maps,meta.startMap));
   body.replaceChildren(el('h2',{},meta.title),guideBox('project',appGuides.project),el('p',{class:'hint'},project.maps.length+' màn · Dự án game 2D'),
+   el('label',{class:'row'},'Màn bắt đầu game',start),editor.mapConnectionBox(),
    el('div',{class:'row'},
     action('Tạo từ mẫu Đá Xoáy',async()=>{
      const title=await ask('Tên dự án mới','Hầm ngục Đá Xoáy');
@@ -85,7 +64,11 @@ export function openStudio(editor){
     action('Mở dự án',()=>openProjectFile(editor,refresh))),
    el('div',{class:'row'},
     action('Kiểm toàn dự án',()=>showCheck(studioData(editor,meta))),
-    action('Chơi thử',()=>{root.remove();runStudio(studioData(editor,meta),editor.sheets(),{preview:true});}),
+    action('Chơi thử',async()=>{
+     const data=studioData(editor,editor.readProject().meta),sheets=editor.sheets();
+     if((data.maps||[data]).some(m=>m.cfg?.proj==='angle'))await ensureAngle(sheets);
+     root.remove();runStudio(data,sheets,{preview:true});
+    }),
     action('Xuất game HTML',()=>{
      const data=studioData(editor,meta);
      saveFile(meta.title+'.html',new Blob([gameHTML(data,meta.title)],{type:'text/html'}));
@@ -104,7 +87,13 @@ export function openStudio(editor){
 }
 export function runStudio(data,sheets,{preview=false}={}){
  const key=(preview?'xuong_preview_':'xuong_play_')+data.studio.id;
- const maps=data.maps||[data];
+ const maps=data.maps||[data],first=campaignStart(maps,data.startMap);
+ const landingCache=new Map();
+ const landing=door=>{
+  const key=[door.to,door.tx,door.ty].join(':');
+  if(!landingCache.has(key))landingCache.set(key,mapLinkLanding(maps,door));
+  return landingCache.get(key);
+ };
  const root=panel(),body=card();root.append(body);document.body.append(root);
  let current,states={},index=0,entry=null,finished=false;
  const valid=s=>s&&Number.isInteger(s.index)&&maps[s.index]&&s.states&&Number.isFinite(s.entry?.x)&&Number.isFinite(s.entry?.y);
@@ -116,30 +105,28 @@ export function runStudio(data,sheets,{preview=false}={}){
  function launch(i,spawn=null){
   root.style.display='none';index=i;entry=spawn;
   const m=maps[i];
-  current=play2D({M:m,sheets,spawn:entry,restore:states[i],onSnapshot:save,published:!preview,
+  current=play2D({M:m,sheets,spawn:entry,restore:states[i],canUseDoor:landing,onSnapshot:save,published:!preview,
    onExit:()=>{current=null;menu();},
    onRetry:()=>{
-    current.stop(true);states={};finished=false;lsSet(key,null);launch(0);
+    current.stop(true);states={};finished=false;lsSet(key,null);launch(first);
    },
    onResult:win=>{if(win){finished=true;lsSet(key,null);}},
    onDoor:d=>{
-    const to=maps[d.to];if(!to)return;
-    const start=to.ents.find(e=>e.t==='start');
+    const point=landing(d);if(!point)return;
     save(d.state);
     current.stop(true);
-    const fixed=d.tx!=null&&d.ty!=null;
-    launch(d.to,{x:(fixed?d.tx:start?.x??0)+.5,y:(fixed?d.ty:start?.y??0)+.5,hp:d.hp,score:d.score});
+    launch(d.to,{...point,hp:d.hp,score:d.score});
    }});
  }
  function menu(){
   root.style.display='grid';
   const saved=lsGet(key,null);
   body.replaceChildren(el('h1',{style:'font:700 32px Georgia;margin:0 0 16px;color:#e8c25a'},data.studio.title),
-   el('p',{class:'hint'},maps[0].cfg?.brief||'Bấm bản đồ hoặc dùng WASD để di chuyển.'),
+   el('p',{class:'hint'},maps[first].cfg?.brief||'Bấm bản đồ hoặc dùng WASD để di chuyển.'),
    el('div',{class:'row',style:'margin-top:18px'},
     action('Chơi mới',async()=>{
      if(valid(saved)&&!await yes('Bắt đầu lượt mới và thay tiến độ đã lưu?'))return;
-     states={};finished=false;lsSet(key,null);launch(0);
+     states={};finished=false;lsSet(key,null);launch(first);
     }),
     ...(valid(saved)?[action('Tiếp tục',()=>{states=saved.states;finished=false;launch(saved.index,saved.entry);})]:[]),
     action('Điều khiển',()=>body.append(el('p',{class:'hint'},'Bấm đất hoặc WASD để đi · J / Space để nói chuyện hoặc đánh · E để tương tác với cửa gần nhân vật.'))),
