@@ -17,9 +17,28 @@ export function sprOf(e,sh,ang){
   if(!sh)return null;
   if(!ang)return {img:sh.img,tw:sh.tw,cols:sh.cols,margin:sh.margin||0,sc:e.sc,oy:e.oy||0};
   const A=sh.A;if(!A)return sh.img&&!sh.iso?{img:sh.img,tw:sh.tw,cols:sh.cols,margin:sh.margin||0,sc:e.sc,oy:e.oy||0}:null;
-  return {img:A.img,tw:A.tw,cols:A.cols,margin:0,sc:A.sc,oy:((e.oy||0)*sh.tw+A.dA-A.dI)/A.tw};}
+  return {img:A.img,tw:A.tw,cols:A.cols,margin:0,sc:A.sc*(e.sizeBase?e.sc/e.sizeBase:1),oy:((e.oy||0)*sh.tw+A.dA-A.dI)/A.tw};}
 /* ô sàn Angle: (X,Y) = góc trái-trên của mặt trên ô; cw = bề rộng ô trên màn hình */
 export function tileAng(cx,A,idx,X,Y,cw){if(!A||!A.img)return;const k=cw/A.tw,sx=(idx%A.cols)*A.tw,sy=Math.floor(idx/A.cols)*A.th;
   cx.drawImage(A.img,sx,sy,A.tw,A.th,X,Y-A.cy*k,A.tw*k,A.th*k);}
 /* độ sâu vẽ của vật thể trong Angle: mép trước của khung chân (xa camera = nhỏ) */
 export const depthAng=d=>{const z=d.zb;return d.y+1+(z&&(z[2]||z[3])?z[1]+z[3]:0);};
+
+// A placed prop uses the same frame, scale and ground anchor in the preview and the game.
+export function placedPropFrame(e,project,unit){
+  const [x,y]=project(e.x+1,e.y+1),size=e.sc*unit;
+  return {x:x-size/2+(e.ox||0)*size,y:y-size+(e.oy||0)*size,size};
+}
+
+export function drawPlacedProp(ctx,e,sheet,frame){
+  if(!sheet?.img)return;
+  const {x,y,size}=frame,tw=sheet.tw,step=tw+(sheet.margin||0);
+  const sx=e.tile.idx%sheet.cols*step,sy=Math.floor(e.tile.idx/sheet.cols)*step;
+  ctx.save();
+  ctx.translate(x+size/2,y+size/2);
+  if(e.spriteFlip&4){ctx.rotate(Math.PI/2);ctx.scale(1,-1);}
+  if(e.spriteFlip&1)ctx.scale(-1,1);
+  if(e.spriteFlip&2)ctx.scale(1,-1);
+  ctx.drawImage(sheet.img,sx,sy,tw,tw,-size/2,-size/2,size,size);
+  ctx.restore();
+}

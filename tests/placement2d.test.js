@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {automaticPaintZones,daXoayArchProfiles,estimateContact,indexPaintZones,makePaintProfile,paintedGroups,paintFamily} from '../src/placement2d.js';
+import {automaticPaintZones,daXoayArchProfiles,estimateContact,indexPaintZones,makePaintProfile,paintedGroups,paintFamily,propContact,resizeProp} from '../src/placement2d.js';
 import {mapCollision} from '../src/mapCollision.js';
 
 test('painted props choose foot profile by role and keep open or unknown multipart assets clear',()=>{
@@ -76,4 +76,23 @@ test('a painted Đá Xoáy arch has two separate post colliders in every project
       assert.equal(collision.free((a[0]+b[0])/2,(a[1]+b[1])/2,.08),true);
     }
   }
+});
+
+
+test('freely placed arches keep their contact pixels aligned with both posts when resized',()=>{
+  const parts=daXoayArchProfiles(0);
+  const e={t:'deco',x:5.25,y:8.625,sc:3.4,sizeBase:3.4,...propContact(parts,null,3.4,'iso')};
+  const original=structuredClone(e);
+  resizeProp(e,1.5);
+  assert.equal(e.sc,5.1);
+  for(let i=0;i<parts.length;i++){
+    const c=e.col[i],part=parts[i];
+    const imageX=(part.u-.5+e.ox)*e.sc/.75;
+    const imageY=(part.v-1+e.oy)*e.sc/.75;
+    assert.ok(Math.abs(c.x-c.y-imageX)<1e-9);
+    assert.ok(Math.abs((c.x+c.y)/2-imageY)<1e-9);
+    assert.ok(Math.abs(c.r-original.col[i].r*1.5)<1e-9);
+    assert.ok(Math.hypot(c.x,c.y)>c.r);
+  }
+  assert.deepEqual([e.x,e.y,e.sizeBase],[5.25,8.625,3.4]);
 });

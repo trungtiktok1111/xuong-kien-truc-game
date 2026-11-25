@@ -1,4 +1,5 @@
 import {zBounds, zHit} from './zones.js';
+import {ANG_R} from './proj.js';
 
 const ART_SCALE = .95 / .75;
 const nonSolid = /mái|roof|canopy|phủ nền|shadow|bóng|decal|overlay|effect|vfx|nhân vật|quái/i;
@@ -114,4 +115,39 @@ export function indexPaintZones(zones) {
         for(const zone of buckets.get(key(i,j)) || [])if(zHit(zone,x,y,radius))return true;
     return false;
   };
+}
+
+// The average contact of a multi-post prop is the cursor anchor, leaving the gap open.
+export function propContact(parts, fallback, scale, projection){
+  const anchor=parts.length?{
+    u:parts.reduce((sum,p)=>sum+p.u,0)/parts.length,
+    v:parts.reduce((sum,p)=>sum+p.v,0)/parts.length
+  }:fallback;
+  const offset=scale/.75;
+  const col=parts.map(part=>{
+    const u=(part.u-anchor.u)*offset,v=(part.v-anchor.v)*offset;
+    const x=projection==='angle'?u/2:projection==='iso'?v+u/2:u*.75;
+    const y=projection==='angle'?v/(2*ANG_R):projection==='iso'?v-u/2:v*.75;
+    const w=part.w*scale/.95,h=part.h*scale/.95;
+    return part.kind==='ell'?{k:'circle',x,y,r:w/2}:{k:'rect',x:x-w/2,y:y-h/2,w,h};
+  });
+  return {ox:.5-anchor.u,oy:1-anchor.v,col};
+}
+
+export function resizeProp(e,factor){
+  const pair=p=>p.map(v=>v*factor);
+  const shapes=col=>col?.map(c=>{
+    const next={...c};
+    for(const key of ['x','y','w','h','r','th'])if(Number.isFinite(c[key]))next[key]=c[key]*factor;
+    if(c.pts)next.pts=c.pts.map(pair);
+    if(c.a)next.a=pair(c.a);
+    if(c.b)next.b=pair(c.b);
+    return next;
+  });
+  e.sc=(e.sc||3)*factor;
+  if(e.zb)e.zb=pair(e.zb);
+  if(e.zp)e.zp=e.zp.map(pair);
+  if(e.zps)e.zps=e.zps.map(p=>p.map(pair));
+  if(e.col)e.col=shapes(e.col);
+  if(e.door?.v)for(const state of Object.values(e.door.v))if(state.col)state.col=shapes(state.col);
 }
