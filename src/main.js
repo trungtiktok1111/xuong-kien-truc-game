@@ -46,6 +46,7 @@ async function openPlan(tab){
 }
 $('#outlinebtn').onclick=()=>openPlan('shapes');
 $('#levelbtn').onclick=()=>openPlan('levels');
+$('#zipscenebtn').onclick=async()=>{go('2d');await e2.ready;e2.showStockScenes();};
 $('#studiobtn').onclick=()=>{go('2d');if(e2.map())openStudio(e2);};
 function shortcutHelp(){toggleShortcutHelp($(cur==='2d'?'#pn2':'#pn3'));}
 $('#helpbtn').onclick=shortcutHelp;

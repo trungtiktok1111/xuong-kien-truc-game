@@ -1,3 +1,6 @@
+import {referencePlan,farmBarn,cityBuilding,cityBuildings} from './stockScenes.js';
+import {mapCollision} from './mapCollision.js';
+import {decoZones,zonesHit} from './zones.js';
 import {unzipSync} from 'fflate';
 import {buildTiledScene} from './tiledScene.js';
 import {classifyArchiveImage,clearSheetColor,readTileset,sheetColor,tileFrames} from './archiveCatalog.js';
@@ -98,6 +101,95 @@ function entity(a,x,y,z,id,order){
     sc:1.5*a.side/a.tileWidth,ox:.5-a.ax/a.side,oy:1-(a.ay+elevation)/a.side};
 }
 
+const miniatureAsset=(pack,name,dir)=>({
+  pack,path:'isometric/'+name.toLowerCase()+'_'+dir.toLowerCase()+'.png',label:name+' '+dir,
+  layer:2,tileWidth:256,native:true,anchor:[128,437,1],direction:dir
+});
+
+async function miniatureFloor(result,pack,name){
+  const asset=name.includes('/')?{pack,path:norm(name)}:miniatureAsset(pack,name,'E');
+  if(!pack.files[asset.path])throw Error('Thiếu ô nền '+name+' trong '+pack.name+'.');
+  const image=await loadImage(asset);
+  const art=crop(image,[0,0,image.width,image.height],null,true);
+  if(!art)throw Error('Không đọc được ô nền '+name+'.');
+  const c=canvas(128,128),g=c.getContext('2d');
+  g.beginPath();g.moveTo(64,0);g.lineTo(128,32);g.lineTo(64,64);g.lineTo(0,32);g.closePath();g.clip();
+  const [l,t]=art.bounds;
+  g.drawImage(art.out,l*art.side,t*art.side,art.w,art.h,0,0,128,art.h*128/art.w);
+  result.sheets.push({name:pack.name+' · Nền '+name,tw:128,margin:0,iso:1,url:c.toDataURL()});
+  return result.sheets.length-1;
+}
+
+const walls={E:[-.5,-.5,0,1],S:[-.5,-.5,1,0],W:[.5,-.5,0,1],N:[-.5,.5,1,0]};
+function wallSegments(dir,open){
+  const [x,y,dx,dy]=walls[dir];
+  return (open?[[0,.125],[.875,1]]:[[0,1]]).map(([a,b])=>({
+    k:'seg',a:[x+dx*a,y+dy*a],b:[x+dx*b,y+dy*b],th:.07
+  }));
+}
+
+async function miniaturePiece(result,packs,p,cache){
+  const key=p.source+'|'+p.asset+'|'+p.dir;
+  if(!cache.has(key)){
+    const classic=p.asset.includes('/');
+    const asset=classic?{pack:packs[p.source],path:norm(p.asset),label:stem(p.asset),layer:2,
+      tileWidth:132,native:true,direction:p.dir}:miniatureAsset(packs[p.source],p.asset,p.dir);
+    if(!asset.pack.files[asset.path])throw Error('Thiếu mảnh '+p.asset+' · '+p.dir+'.');
+    if(classic){
+      const image=await loadImage(asset),width=image.width,height=image.height;
+      const centerY=/buildingtiles/i.test(p.asset)?height-(p.stack?33:68):height-4;
+      const art=crop(image,[0,0,width,height],[width/2,centerY,1]);
+      if(!art)throw Error('Ảnh trống '+p.asset);
+      cache.set(key,addSprite(result,asset,art));
+    }else cache.set(key,addSprite(result,asset,await sprite(asset)));
+  }
+  const a={...cache.get(key),layer:p.roof?3:2,block:p.solid};
+  const e=entity(a,p.x+.5,p.y+.5,p.z,'scene-'+result.ents.length);
+  if(p.wall){e.col=wallSegments(p.dir,p.open);e.walk=false;}
+  return e;
+}
+
+function referenceCanWalk(scene,start,goal){
+  const {w,h}=scene,collision=mapCollision({w,h,blk:scene.blocked});
+  const zones=decoZones(scene.ents),free=(x,y)=>collision.free(x,y,.28)&&!zonesHit(zones,x,y,.28);
+  const list=[start],seen=new Set([start.join(':')]);
+  if(!free(start[0]+.5,start[1]+.5))return false;
+  for(let i=0;i<list.length;i++){
+    const [x,y]=list[i];
+    if(x===goal[0]&&y===goal[1])return true;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const a=x+dx,b=y+dy,key=a+':'+b;
+      if(seen.has(key)||![.25,.5,.75,1].every(t=>free(x+.5+dx*t,y+.5+dy*t)))continue;
+      seen.add(key);list.push([a,b]);
+    }
+  }
+  return false;
+}
+
+export async function buildReferenceScene(id,packs){
+  const plan=referencePlan(id);
+  if(!plan)throw Error('Chưa có cảnh ráp cho gói này.');
+  const {w,h,name,parts,blocks,start,goal}=plan;
+  const scene={w,h,name,ents:[],sheets:[],ground:[],gaps:[],blocked:new Array(w*h).fill(0)};
+  const floors=new Map();
+  for(const floor of plan.ground){
+    const {asset,source=0}=typeof floor==='string'?{asset:floor}:floor,key=source+'|'+asset;
+    if(!floors.has(key))floors.set(key,await miniatureFloor(scene,packs[source],asset));
+    scene.ground.push(floors.get(key));
+  }
+  const cache=new Map();
+  for(const p of parts){
+    const e=await miniaturePiece(scene,packs,p,cache);
+    scene.ents.push(e);
+  }
+  for(const [x,y,width,depth] of blocks)
+    for(let b=y;b<y+depth;b++)for(let a=x;a<x+width;a++)scene.blocked[b*w+a]=1;
+  if(!referenceCanWalk(scene,start,goal))throw Error(name+' chưa có lối đi tới đích.');
+  scene.ents.push({id:'start',t:'start',name:'Xuất phát',x:start[0],y:start[1]},
+    {id:'goal',t:'goal',name:'Đích',x:goal[0],y:goal[1]});
+  return scene;
+}
+
 function nativeScenes(pack){
   const s=pack.scene;
   if(!pack.metadata?.assets||!pack.metadata?.projection)return [];
@@ -156,6 +248,10 @@ const ignored=/preview|sample|spritesheet|tilesheet|kenneynl|(?:^|\/)(?:angle|ch
 const groundName=/^(?:base|square)[_-](?:grass|dirt|stone|wood|snow)|(?:^|\/)(?:nen[_-]|ground|floor|grass|path|road|dirt|terrain|landscape|beach|snow|water|river|duong|boong)/i;
 const structure=/roof|mai[_-]|wall|doorway|tuong|vach|fence|lan-can|chimney|buom/;
 function catalog(pack){
+  const flatImage=/isometric-(?:city|landscape)/i.test(pack.name)&&Object.keys(pack.files).find(p=>
+    /(^|\/)(?:citytiles_066|landscapetiles_010)\.png$/i.test(p));
+  if(flatImage)return [{pack,path:flatImage,label:stem(flatImage),layer:0,flatTop:true}];
+
   if(pack.metadata?.assets&&pack.metadata.projection)return Object.keys(pack.metadata.assets).flatMap(id=>{
     const a=nativeAsset(pack,id);
     if(!a||/(?:[_-])[nsw]$/i.test(id)||a.layer===1||a.layer===3||structure.test(slug(id)))return [];
@@ -172,7 +268,7 @@ function catalog(pack){
     const grid=info.recipes[0];
     const material=info.kind==='material'||/tile toolkit/i.test(pack.name);
     if(/textures - wall|crate textures/i.test(pack.name))return [];
-    const ground=material||info.kind==='terrain'||(groundName.test(path)||groundName.test(name))&&!structure.test(slug(name));
+    const ground=/^(?:dirt|dirtfarmland|stone|stoneuneven|floor)_e$/i.test(name)||material||info.kind==='terrain'||(groundName.test(path)||groundName.test(name))&&!structure.test(slug(name));
     if(ground&&/water|river|thac|overworld - forest/i.test(name))return [];
     const role=ground?0:2;
     return [{pack,path,label:name,layer:role,recipe:grid,material,tileWidth:grid?.width,block:role===2}];
@@ -180,7 +276,7 @@ function catalog(pack){
 }
 function pickAssets(pack,layer,rng,limit=6){
   const src=catalog(pack),pool=src.filter(a=>a.layer===layer);
-  const ranked=pool.map(a=>({a,score:rng()+(/flat|grass|stone|ground|duong|wood|crate|barrel|wall|house|building|tree/i.test(a.label)?.8:0)+(/^square/.test(a.label)?1:0)-(/high|float/.test(a.label)?2:0)}))
+  const ranked=pool.map(a=>({a,score:rng()+(/flat|grass|stone|ground|duong|wood|crate|barrel|wall|house|building|tree|^dirt_e$|^stone_e$/i.test(a.label)?.8:0)+(/^square/.test(a.label)?1:0)-(/high|float/.test(a.label)?2:0)}))
     .sort((a,b)=>b.score-a.score);
   const result=[],seen=new Set();
   for(const {a} of ranked){
@@ -203,6 +299,9 @@ async function groundTile(result,a){
     g.save();g.transform(64,32,-64,32,64,0);
     g.drawImage(art.out,0,art.side-art.h,art.w,art.h,0,0,1,1);g.restore();
   }else{
+    if(a.flatTop){
+      g.beginPath();g.moveTo(64,0);g.lineTo(128,32);g.lineTo(64,64);g.lineTo(0,32);g.closePath();g.clip();
+    }
     const [l,t,r,b]=art.bounds;
     g.drawImage(art.out,l*art.side,t*art.side,(r-l)*art.side,(b-t)*art.side,0,0,128,Math.min(128,128*art.h/art.w));
   }
@@ -251,7 +350,7 @@ function buildLots(town,profile,rng){
   });
 }
 
-const sceneryProps=/^(?:barrel|crate|chest|cart|wagon|bench|rock|boulder|lamp|statue|ruong|thung|chum|lu_huong|kien-hang|den|ban|ghe|bon_cay)|(?:crate|barrel|chest)/i;
+const sceneryProps=/^(?:barrel|crate|chest|cart|wagon|bench|rock|boulder|lamp|statue|ambulance|car|truck|hay|sack|ladder|barrels|woodencrate|displaycase|bookstand|candlestand|table|longtable|chair|ruong|thung|chum|lu_huong|kien-hang|den|ban|ghe|bon_cay)|(?:crate|barrel|chest)/i;
 
 async function networkTile(result,pack,name){
   const path='png/'+name.toLowerCase()+'.png',asset={pack,path};
@@ -282,11 +381,38 @@ async function prepareYard(result,pack,rng){
   return selected;
 }
 
-export async function generateScene({ground,objects,seed,w,h,town,network,trees,style='river',profile='market'}){
+export async function generateScene({ground,objects,seed,w,h,town,farm,city,network,trees,style='river',profile='market'}){
   const rng=random(seed),r={name:settlementProfiles[profile]+' · '+seed,w,h,sheets:[],ents:[],ground:[],gaps:[]};
   const sizes=random(seed+'|nhà');
-  const lots=buildLots(town,profile,sizes);
-  const compact=buildingParts(town).map(kit=>buildLot(kit,2,2,'Nhà nhỏ',0));
+  const lots=town?buildLots(town,profile,sizes):[];
+  const compact=town?buildingParts(town).map(kit=>buildLot(kit,2,2,'Nhà nhỏ',0)):[];
+  const kits=new Map();
+  async function includeKit(pack,key,name,build){
+    if(!pack)return;
+    const local={sheets:[],ents:[]},cache=new Map(),additions=[];
+    for(let i=0;i<8;i++){
+      const {w,h,recipe}=build(i),parts=[];
+      for(const p of recipe){
+        const e=await miniaturePiece(local,[pack],p,cache);
+        e.id=parts.length;
+        e.tiledLayer??=2;
+        parts.push(e);
+      }
+      additions.push({name,w,h,parts,source:key});
+    }
+    kits.set(key,{sheets:local.sheets,name:pack.name});
+    if(lots.length)lots.splice(0,lots.length,...lots.flatMap((lot,i)=>additions[i]?[additions[i],lot]:[lot]));
+    else lots.push(...additions);
+    compact.push(additions[0]);
+  }
+  await includeKit(farm,'farm','Nhà gỗ Farm',i=>{
+    const w=i%3===0?1:2,h=2+Math.floor(sizes()*3);
+    return {w,h,recipe:farmBarn(0,0,w,h)};
+  });
+  await includeKit(city,'city','Nhà phố Kenney',i=>{
+    const index=(i+Math.floor(sizes()*cityBuildings.length))%cityBuildings.length;
+    return {w:1,h:1,recipe:cityBuilding(0,0,...cityBuildings[index])};
+  });
   const placementRules={
     lots(route,bridge){
       const views=protectedViews(route,bridge);
@@ -304,23 +430,36 @@ export async function generateScene({ground,objects,seed,w,h,town,network,trees,
     return tiles.get(name);
   }
   const lawn=await tile('grass');
-  let groundSid=lawn;
-  if(ground!==network){
-    for(const a of pickAssets(ground,0,rng,4)){
-      try{groundSid=await groundTile(r,a);break;}catch{continue;}
+  const sources=new Set([network.name,trees.name]);
+  const terrain=[];
+  for(const pack of Array.isArray(ground)?ground:[ground]){
+    if(pack===network){terrain.push(lawn);continue;}
+    const start=r.sheets.length;
+    for(const a of pickAssets(pack,0,rng,4)){
+      try{
+        terrain.push(await groundTile(r,a));
+        sources.add(pack.name);break;
+      }catch{continue;}
     }
-    if(groundSid===lawn)r.gaps.push('Gói nền đã chọn chưa có ô nền phù hợp. Cảnh dùng cỏ mặc định.');
+    if(r.sheets.length===start)r.gaps.push('Chưa có ô nền phù hợp trong '+pack.name+'.');
   }
+  if(!terrain.length)terrain.push(lawn);
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
     const name=settlementTile(plan,x,y,style,{raised:true});
     const bank=plan.water.has((x-1)+':'+y)||plan.water.has((x+1)+':'+y)||plan.water.has(x+':'+(y-1))||plan.water.has(x+':'+(y+1));
-    r.ground[y*w+x]=name?await tile(name):bank?lawn:groundSid;
+    const zone=Math.min(terrain.length-1,Math.floor(x*terrain.length/w));
+    r.ground[y*w+x]=name?await tile(name):bank?lawn:terrain[zone];
   }
-  const base=r.sheets.length;
-  r.sheets.push(...town.sheets);
+  const townBase=r.sheets.length;
+  if(town)r.sheets.push(...town.sheets);
+  for(const kit of kits.values()){
+    kit.base=r.sheets.length;r.sheets.push(...kit.sheets);
+  }
   for(const [i,{x,y,lot}] of plan.buildings.entries()){
+    const kit=kits.get(lot.source),base=kit?.base??townBase;
     r.ents.push(...lot.parts.map(e=>({...e,id:'building-'+i+'-'+e.id,name:lot.name+' '+(i+1)+' · '+e.name,
-      x:x+e.x,y:y+e.y,settlementRole:'building',tile:{...e.tile,sid:e.tile.sid+base}})));
+      x:x+e.x,y:y+e.y,settlementRole:'building',walk:true,tile:{...e.tile,sid:e.tile.sid+base}})));
+    sources.add(kit?.name??'SBS Town');
   }
   const views=protectedViews(plan.route,plan.bridge),houses=r.ents.map(artBounds);
   const lotsWithParts=plan.buildings.map(({x,y,lot},i)=>({id:'building-'+i+'-',x,y,w:lot.w,h:lot.h,parts:lot.parts.map(e=>[e.x,e.y,e.tiledLayer])}));
@@ -346,13 +485,19 @@ export async function generateScene({ground,objects,seed,w,h,town,network,trees,
     }
     if(placed.length>=4){r.ents.push(...placed);planted++;}
   }
-  const props=await prepareYard(r,objects,rng);
+  const props=[];
+  for(const pack of Array.isArray(objects)?objects:[objects]){
+    const variants=await prepareYard(r,pack,rng);
+    if(variants.length)props.push(variants);
+    else r.gaps.push('Chưa có đạo cụ sân tương thích trong '+pack.name+'.');
+  }
   if(!props.length)r.gaps.push('Gói vật thể đã chọn chưa có đạo cụ phù hợp cho sân.');
   for(const [i,cells] of plan.yards.entries())for(const [j,[x,y]] of cells.entries()){
     if(!props.length)continue;
     r.ground[y*w+x]=await tile('dirt');
-    const e={...entity(props[(i+j)%props.length],x+.5,y+.5,0,'yard-'+i+'-'+j),settlementRole:'yard'};
-    if(canSeeRoad(e,views)&&!overlapsHouseArt(e,houses))r.ents.push(e);
+    const group=props[(i*4+j)%props.length],art=group[(i+j)%group.length];
+    const e={...entity(art,x+.5,y+.5,0,'yard-'+i+'-'+j),settlementRole:'yard'};
+    if(canSeeRoad(e,views)&&!overlapsHouseArt(e,houses)){r.ents.push(e);sources.add(art.pack.name);}
   }
   r.blocked=plan.blocked;
   r.ents.push({id:'start',t:'start',name:'Xuất phát',x:plan.start[0],y:plan.start[1]},
@@ -361,7 +506,7 @@ export async function generateScene({ground,objects,seed,w,h,town,network,trees,
   const inspection={route:plan.route,accesses:plan.accesses,bridge:plan.bridge,
     lots:lotsWithParts,
     water:[...plan.water].map(k=>k.split(':').map(Number)).filter(([,y])=>y>=0&&y<h)};
-  r.summary={buildings:plan.buildings.length,groves:planted,bridges:plan.bridge?1:0,style,profile,seed,plan:inspection};
+  r.summary={buildings:plan.buildings.length,groves:planted,bridges:plan.bridge?1:0,style,profile,seed,sources:[...sources],plan:inspection};
   r.summary.draft=settlementIssues({w,h,ents:r.ents,blk:r.blocked,cfg:{settlement:r.summary}}).length>0;
   return r;
 }

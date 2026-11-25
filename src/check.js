@@ -34,7 +34,8 @@ export function check2D(d0){
     const win=cf.win||'auto';
     const need=win==='goal'?'goal':win==='kill'?'kill':win==='both'?'both':(goals.length?(en.length?'both':'goal'):'kill');
     const byRule=checkLogic(cf,E).canWinByRule;const canWin=byRule||(need==='goal'&&goals.length)||(need==='kill'&&en.length)||(need==='both'&&goals.length&&en.length)||(need==='both'&&goals.length);
-    out.push(canWin||(win==='auto'&&(goals.length||en.length))?R('F3','pass','Có cách thắng ('+({goal:'chạm đích',kill:'diệt hết quái',both:'diệt quái rồi chạm đích'})[need]+')'):R('F3','broken','Không có cách thắng','điều kiện thắng "'+win+'" nhưng thiếu '+(win==='goal'?'🏁 Đích':win==='kill'?'👾 Quái':'🏁 Đích hoặc 👾 Quái')));
+    if(win==='explore')out.push(R('F3','pass','Màn khám phá · không đặt điều kiện thắng'));
+    else out.push(canWin||(win==='auto'&&(goals.length||en.length))?R('F3','pass','Có cách thắng ('+({goal:'chạm đích',kill:'diệt hết quái',both:'diệt quái rồi chạm đích'})[need]+')'):R('F3','broken','Không có cách thắng','điều kiện thắng "'+win+'" nhưng thiếu '+(win==='goal'?'🏁 Đích':win==='kill'?'👾 Quái':'🏁 Đích hoặc 👾 Quái')));
     if(startFree){
       const seen=bfs2(d,Math.floor(st.x),Math.floor(st.y),(x,y)=>canPass(x+.5,y+.5));
       const bad=(arr)=>arr.filter(e=>!seen[cell(e)]);
