@@ -47,6 +47,23 @@ function projectChecks(data){
 function studioData(editor,meta){
  return Object.assign(editor.gameData(),{studio:{title:meta.title,id:meta.id}});
 }
+export function saveProjectFile(editor){
+ const project=editor.readProject();
+ return saveFile(project.meta.title+'.xuong.json',new Blob([JSON.stringify(project)],{type:'application/json'}));
+}
+
+export function openProjectFile(editor,onOpened){
+ pickFile('.json,application/json',async text=>{
+  try{
+   const saved=JSON.parse(text);
+   if(saved?.format==='thk-map-1')throw Error('Đây là tệp một bản đồ. Dùng Tệp → Nâng cao → Nhập bản đồ 2D.');
+   if(saved?.format!=='xuong-project-1')throw Error('Tệp dự án Xưởng không hợp lệ.');
+   if(!await yes('Mở dự án đã chọn? Lưu dự án hiện tại trước nếu muốn mở lại sau.'))return;
+   await editor.restoreProject(saved);onOpened?.();toast('Đã mở dự án');
+  }catch(e){toast(e.message||'Không mở được dự án');}
+ });
+}
+
 export function openStudio(editor){
  const root=panel(),body=card();root.append(body);document.body.append(root);
  const refresh=()=>{
@@ -61,14 +78,8 @@ export function openStudio(editor){
     }),
     action('Đổi tên',async()=>{const title=await ask('Tên game',meta.title);if(title?.trim()){editor.setProjectMeta({...meta,title:title.trim()});refresh();}})),
    el('div',{class:'row'},
-    action('Lưu dự án',()=>saveFile(meta.title+'.xuong.json',new Blob([JSON.stringify(editor.readProject())],{type:'application/json'}))),
-    action('Mở dự án',()=>pickFile('.json,application/json',async text=>{
-     try{
-      const saved=JSON.parse(text);
-      if(!await yes('Mở dự án đã chọn? Lưu dự án hiện tại trước nếu muốn mở lại sau.'))return;
-      await editor.restoreProject(saved);refresh();toast('Đã mở dự án');
-     }catch(e){toast(e.message||'Không mở được dự án');}
-    }))),
+    action('Lưu dự án',()=>saveProjectFile(editor)),
+    action('Mở dự án',()=>openProjectFile(editor,refresh))),
    el('div',{class:'row'},
     action('Kiểm toàn dự án',()=>showCheck(studioData(editor,meta))),
     action('Chơi thử',()=>{root.remove();runStudio(studioData(editor,meta),editor.sheets(),{preview:true});}),

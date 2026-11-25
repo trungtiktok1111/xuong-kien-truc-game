@@ -37,8 +37,8 @@ const guide2D={
     'Tạo hoặc chọn một hoạt ảnh rồi chọn trạng thái như đứng hoặc chạy.','Gán ảnh, kiểm thứ tự và tốc độ phát, rồi gán hoạt ảnh cho nhân vật.'],
   layers:['Lớp bản đồ','Điều khiển lớp đang sửa và lớp đang nhìn thấy.',
     'Chọn Nền để lát sàn, Vật thể để đặt đồ hoặc Mái / cửa cho hình che phía trên.','Dùng Hiện / Ẩn để xem riêng một lớp khi cần kiểm.'],
-  file:['Tệp','Nạp hình và trao đổi dữ liệu cho màn đang sửa.',
-    'Dùng Nhập .json để mở dữ liệu bản đồ hoặc chọn tệp ảnh để thêm tài nguyên.','Muốn lưu tất cả các màn cùng nhau, dùng Dự án game → Lưu dự án.']
+  file:['Tệp','Mở hoặc lưu toàn bộ dự án.',
+    'Dùng Lưu dự án để tải một bản sao .xuong.json chứa tất cả các màn.','Mở Nâng cao nếu cần trao đổi dữ liệu của một bản đồ.']
 };
 const guide3D={
   build:['Đặt khối 3D','Dựng cảnh bằng các khối có hình và chất liệu riêng.','Chọn hình khối và chất liệu, rồi chỉnh Độ cao đặt.','Bấm hoặc kéo chuột trái để đặt. Phím R xoay khối trước khi đặt.'],

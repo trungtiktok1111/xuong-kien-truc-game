@@ -1,7 +1,7 @@
 import {toggleShortcutHelp} from './editorHelp.js';
-import {el,saveFile} from './util.js';
+import {el} from './util.js';
 import {openOutlineEditor} from './outlineEditor.js';
-import {openStudio,runStudio} from './studio.js';
+import {openStudio,runStudio,saveProjectFile} from './studio.js';
 import {$,SELF,guessTile} from './util.js';window.__guess=guessTile;import('./anim.js').then(x=>{window.__fg=x.findGrid;});
 import {init2D} from './ed2d.js';
 import {init3D} from './ed3d.js';
@@ -29,7 +29,7 @@ $('#playbtn').onclick=()=>{
   else{e3.hide();play3D(Object.assign({onExit:()=>e3.show()},e3.gameData()));}};
 const gd=k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData();
 $('#chkbtn').onclick=()=>openCheck({kind:cur,getData:gd});
-$('#relbtn').onclick=()=>openRelease({kind:cur,sheets:()=>e2.sheets(),getData:k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData()});
+$('#relbtn').onclick=()=>openRelease({kind:cur,sheets:()=>e2.sheets(),exportMapPNG:e2.exportPNG,getData:k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData()});
 $('#outlinebtn').onclick=()=>{go('2d');if(e2.map())openOutlineEditor(e2);};
 $('#levelbtn').onclick=()=>{go('2d');if(e2.map())openOutlineEditor(e2,'levels');};
 $('#studiobtn').onclick=()=>{go('2d');if(e2.map())openStudio(e2);};
@@ -40,8 +40,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='F1'){e.preventDefault();shortcutHelp();}
   if(e.key==='F5'){e.preventDefault();$('#playbtn').click();}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'&&e2.map()){
-    e.preventDefault();const p=e2.readProject();
-    saveFile(p.meta.title+'.xuong.json',new Blob([JSON.stringify(p)],{type:'application/json'}));
+    e.preventDefault();saveProjectFile(e2);
   }
 });
 go('2d');
