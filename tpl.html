@@ -12,6 +12,11 @@ html,body{margin:0;height:100%;background:#0e141b;color:#e8edf3;font:14px -apple
 #xuong-startup h2{color:#f4dda1;margin:0 0 6px;font-size:19px}
 #xuong-startup p{line-height:1.5;margin:8px 0;color:#dce8ee}
 #xuong-startup svg{display:block;width:100%;height:auto;max-height:45vh;margin:10px 0;background:#101b23;border-radius:8px}
+.erase-categories{grid-template-columns:repeat(3,minmax(0,1fr))}
+.erase-items{display:grid;gap:4px;max-height:220px;overflow:auto;margin:6px 0}
+.erase-items button{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;color:#e7eef7;border:1px solid #354956;background:#22323e;border-radius:6px;padding:6px 8px}
+.erase-items button[aria-pressed=true]{border-color:#ffaca4;background:#523b41}.erase-items small{color:#c5d4de}
+button.erase-confirm:not(:disabled){background:#773e44;color:#fff}
 .map-aim{position:absolute;top:8px;right:8px;z-index:6;pointer-events:none;width:max-content;max-width:min(265px,45%);background:#111c25e8;color:#e4edf4;border:1px solid #566376;border-radius:7px;padding:6px 9px;font:12px/1.35 system-ui}
 .map-aim[hidden]{display:none}.map-aim strong{color:#ffe2a2}.map-aim[data-state=joined] strong{color:#9ff1d7}.map-aim[data-state=invalid] strong{color:#ffaaa3}
 .view{flex:1;min-height:0;display:none;flex-direction:column}
@@ -131,7 +136,8 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
  .outline-workspace{display:flex;flex-direction:column;gap:6px;padding:8px;width:100%;box-sizing:border-box}
  .outline-workspace>h2{display:none}
  .outline-layout,.outline-layout>div{display:contents}
- .outline-workspace canvas{order:1;position:sticky;top:0;z-index:3;width:auto!important;height:auto!important;max-width:100%;max-height:50vh;aspect-ratio:760/465;align-self:center}
+ .outline-canvas-wrap{order:1;position:sticky!important;top:0;z-index:3;align-self:center;max-width:100%}
+ .outline-canvas-wrap canvas{width:auto!important;height:auto!important;max-width:100%;max-height:50vh;aspect-ratio:760/465}
  .outline-view-tools{order:2}
  .outline-tools{order:3}
  .outline-setup{order:4}
@@ -151,7 +157,8 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
 @media (max-height:520px) and (orientation:landscape) and (max-width:1100px){
  .outline-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,42%);column-gap:8px;align-items:start}
  .outline-workspace>*{grid-column:2;min-width:0}
- .outline-workspace canvas{grid-column:1;grid-row:1/span 12;max-height:calc(100vh - 28px);align-self:start}
+ .outline-canvas-wrap{grid-column:1;grid-row:1/span 12;align-self:start}
+ .outline-canvas-wrap canvas{max-height:calc(100vh - 28px)}
 }
 .pack-results,.installed-packs{margin:8px 0;padding:8px;border:1px solid #34485a;border-radius:8px;overflow-wrap:anywhere}
 .pack-result{padding:6px 0;border-top:1px solid #34485a}

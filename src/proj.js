@@ -27,7 +27,19 @@ export const depthAng=d=>{const z=d.zb;return d.y+1+(z&&(z[2]||z[3])?z[1]+z[3]:0
 // A placed prop uses the same frame, scale and ground anchor in the preview and the game.
 export function placedPropFrame(e,project,unit,projection){
   const [x,y]=project(e.x+1,e.y+1),size=e.sc*unit;
-  const frame={x:x-size/2+(e.ox||0)*size,y:y-size+(e.oy||0)*size,size};
+  const frame={x:x-size/2+(e.ox||0)*size,y:y-size+(e.oy||0)*size-(projection==='top'?0:(e.roofBase||0)*unit*.75),size};
+  if(e.roofDirection&&projection!=='top'){
+    const side=e.sc/.95;
+    const rise=e.roofRise==null?.48*size:e.roofRise*unit*.75;
+    const eaves=e.roofBase==null?.75*size:e.roofBase*unit*.75;
+    const corners=[[-.5,-.5],[.5,-.5],[-.5,.5]].map(([u,v])=>{
+      const [px,py]=project(e.x+1+side*u,e.y+1+side*v);
+      const height={E:.5+u,W:.5-u,N:.5-v,S:.5+v}[e.roofDirection]??0;
+      return [px,py-eaves-rise*height];
+    });
+    frame.roof=corners;
+    return frame;
+  }
   if(!e.gateAssembly||!e.propProjection||(e.propProjection===projection&&!e.gateArt))return frame;
   const [a,b]=e.col||[];
   if(!a||!b)return frame;
@@ -47,6 +59,11 @@ export function placedPropFrame(e,project,unit,projection){
 }
 
 export function placedPropBounds(frame,bounds){
+  if(frame.roof){
+    const [a,b,c]=frame.roof,points=[a,b,c,[b[0]+c[0]-a[0],b[1]+c[1]-a[1]]];
+    const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);
+    return [Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
+  }
   if(frame.edge){
     const {feet,height,halfWidth}=frame.edge,[a,b]=feet;
     return [Math.min(a[0],b[0])-halfWidth,a[1]-height,Math.max(a[0],b[0])+halfWidth,b[1]];
@@ -77,6 +94,13 @@ export function drawPlacedProp(ctx,e,sheet,frame){
   const {x,y,size}=frame,tw=sheet.tw,step=tw+(sheet.margin||0);
   const sx=e.tile.idx%sheet.cols*step,sy=Math.floor(e.tile.idx/sheet.cols)*step;
   ctx.save();
+  if(frame.roof){
+    const [a,b,c]=frame.roof,[l,t,r,d]=e.spriteBounds||[0,0,1,1];
+    ctx.transform(b[0]-a[0],b[1]-a[1],c[0]-a[0],c[1]-a[1],a[0],a[1]);
+    ctx.drawImage(sheet.img,sx+l*tw,sy+t*tw,(r-l)*tw,(d-t)*tw,0,0,1,1);
+    ctx.restore();
+    return;
+  }
   if(frame.matrix)ctx.transform(...frame.matrix);
   ctx.translate(x+size/2,y+size/2);
   if(e.spriteFlip&4){ctx.rotate(Math.PI/2);ctx.scale(1,-1);}

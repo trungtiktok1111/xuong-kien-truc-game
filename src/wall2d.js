@@ -72,3 +72,45 @@ export function builtWallZones(ents,ignoreGate){
     id:wall.id+'-'+i,k:'line',pts,th:wallThickness(wall),deco:wall.id
   })));
 }
+
+// Consecutive collinear edges are one support even when an outline has been subdivided.
+export function outlineSupports(outline){
+  return (outline?.loops||[]).flatMap((loop,li)=>{
+    const straight=(a,b,c)=>{
+      const x=b[0]-a[0],y=b[1]-a[1],u=c[0]-b[0],v=c[1]-b[1];
+      return x*u+y*v>0&&Math.abs(x*v-y*u)<=1e-5*Math.hypot(x,y)*Math.hypot(u,v);
+    };
+    const start=loop.findIndex((b,i)=>!straight(loop[(i+loop.length-1)%loop.length],b,loop[(i+1)%loop.length]));
+    if(start<0)return [];
+    const points=[...loop.slice(start),...loop.slice(0,start+1)],out=[];
+    for(let i=0;i<points.length-1;){
+      let j=i+1;
+      while(j+1<points.length&&straight(points[i],points[j],points[j+1]))j++;
+      const a=points[i],b=points[j],dx=b[0]-a[0],dy=b[1]-a[1];
+      if(Math.hypot(dx,dy)>.5)out.push({id:'outline:'+li+':'+((start+i)%loop.length),outlineWall:true,
+        x:a[0]-1,y:a[1]-1,wallLine:{dx,dy,thickness:outline.thickness??WALL_THICKNESS}});
+      i=j;
+    }
+    return out;
+  });
+}
+
+export function gateLanding(e,floor){
+  const [a,b]=e.col||[];
+  if(!a||!b)return null;
+  const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy);
+  if(!d)return null;
+  const x=e.x+1,y=e.y+1;
+  for(const k of [.47,-.47,.62,-.62,.8,-.8]){
+    const p=[x-dy/d*k,y+dx/d*k];
+    if(floor(...p,.32))return p;
+  }
+  return null;
+}
+
+export const isMapLink=e=>e.t==='door'||(e.gateAssembly&&!!e.wallId&&Number.isInteger(e.to));
+
+export function portalAnchor(e,floor){
+  if(e.t==='door')return [e.x+.5,e.y+.5];
+  return e.wallId.startsWith('outline:')?gateLanding(e,floor):[e.x+1,e.y+1];
+}

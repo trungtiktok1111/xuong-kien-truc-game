@@ -42,3 +42,17 @@ Giữ va chạm sát chân vật và kiểm với kích thước nhân vật. Ch
 | Kiểm tra sau khi đổi bố cục | Nút **Kiểm** kiểm lại sàn, tường và lối đi của các cổng đã lắp, kể cả sau khi sửa sàn hoặc dán vùng. Chế độ Chơi và bản xuất dùng cùng hình học chặn với trình sửa. |
 
 Phím **+ / −** hoặc **Shift + cuộn** đổi cỡ theo bước 10 điểm phần trăm. **T** hoặc **Alt + cuộn** đổi giữa hai hướng hiển thị bằng khung ảnh lật ngang và cập nhật chân trụ theo hướng mới. **Shift** khi đặt bám lưới ¼ ô. Với sprite có chữ hoặc hình bất đối xứng, khung lật sẽ lật cả chi tiết ảnh. Hồ sơ bậc, mái và cầu vẫn cần dữ liệu hình học và cao độ riêng.
+
+
+### Cổng bao và liên kết màn
+
+Có thể lắp cổng vòm lên cạnh thẳng của tường bao, gồm các cạnh nhỏ thẳng hàng liên tiếp. Xưởng yêu cầu đủ chỗ cho hai trụ và khoảng cách tới góc tường. Cổng mở đúng khoảng giữa hai trụ trong hình tường. Nhân vật tiếp cận điểm đứng phía trong bản đồ để chuyển màn.
+
+Chọn cổng trong Đối tượng hoặc tìm cổng ở Màn & cửa rồi đặt **Màn đích của cổng**. Có thể nhập ô đến hoặc để trống để dùng điểm xuất phát. Đây là liên kết một chiều. Có thể cấu hình một cổng hoặc cửa chuyển màn khác để quay lại.
+
+
+## Kết cấu đỡ mái
+
+Mái có hai điểm tựa ở hai phía theo chiều mái. Điểm tựa lấy từ đỉnh hai kết cấu riêng biệt. Tường có nền đỡ, tường bao có cao độ hữu dụng, và cột đã đặt đúng nền được xét. Lỗ mở của cổng không được tính như một đoạn tường nguyên. Mặt mái lấy cao độ từ điểm tựa. Hai đỉnh ngang nhau cho mặt mái ngang.
+
+Bấm Kiểm để tìm mái trong dữ liệu cũ bị thiếu điểm tựa. Sửa điểm tựa hoặc xóa mái trước khi dùng bố cục đó trong game. Quy tắc áp dụng cho đặt mới, sửa kích thước hay hướng, dời, dán bản sao và xóa phần đỡ trong trình 2D.

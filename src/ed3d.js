@@ -1,3 +1,6 @@
+import {WALL_MIN_THICKNESS,WALL_MAX_THICKNESS} from './wall2d.js';
+import {validOutline} from './outlineEditor.js';
+import {outlineMesh3D,disposeOutlineMesh,fitGate3D,outlineMarkers} from './outline3d.js';
 import {guideFor} from './editorHelp.js';
 import * as THREE from 'three';
 import {GLTFExporter} from 'three/examples/jsm/exporters/GLTFExporter.js';
@@ -8,7 +11,7 @@ import {OT3,COLS,defCfg3,newEnt3,entModel} from './ents3d.js';
 import {expandPacks,packBytes,idbDel,$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,ask,askText,yes,zipBrowser,slotsUI,exportGame,fetchBin} from './util.js';
 let GX=48,GZ=48,GY=24;
 import {makeTpl} from './tpl3d.js';
-import {ZK,isBox,isPts,mkBox as zMkBox,mkPts,zHit,zPts,zCenter,zMove,zScale,zRotate,zClone,zHandles,zDragHandle} from './zones.js';
+import {ZK,isBox,isPts,mkBox as zMkBox,mkPts,zHit,zPts,zCenter,zBounds,zMove,zScale,zRotate,zClone,zHandles,zDragHandle} from './zones.js';
 const SHAPES=[['cube','Khối'],['slab','Tấm nửa'],['wedge','Mái dốc'],['pillar','Cột'],['panel','Vách mỏng'],['stairs','Cầu thang'],['arch','Cổng vòm'],['window','Khung cửa sổ'],['rail','Lan can'],['curve','Mái cong']];
 // ===== vật liệu =====
 function rng(s){let a=s;return()=>{a=(a*1664525+1013904223)%4294967296;return a/4294967296;};}
@@ -86,8 +89,10 @@ export function init3D(root){
   const floor=new THREE.Mesh(new THREE.PlaneGeometry(GX,GZ).rotateX(-Math.PI/2).translate(GX/2,0,GZ/2),new THREE.MeshBasicMaterial({color:0x223040,transparent:true,opacity:.0,visible:false}));scene.add(floor);
   const lvlPlane=new THREE.Mesh(new THREE.PlaneGeometry(GX,GZ).rotateX(-Math.PI/2).translate(GX/2,0,GZ/2),new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.13,depthWrite:false}));scene.add(lvlPlane);
   function fitAll(){cam.tx=GX/2;cam.ty=2;cam.tz=GZ/2;cam.az=.785;cam.dist=Math.max(GX,GZ)*1.75;cam.el=1.0;}
-  function gridExt(){let x=0,y=0,z=0;for(const k of V.keys()){const [a,b,c]=k.split(',').map(Number);if(a>x)x=a;if(b>y)y=b;if(c>z)z=c;}for(const p of props||[]){x=Math.max(x,Math.ceil(p.x));z=Math.max(z,Math.ceil(p.z));y=Math.max(y,Math.ceil(p.y||0));}for(const e of ents||[]){x=Math.max(x,e.x);z=Math.max(z,e.z);y=Math.max(y,e.y||0);}return [x+1,y+1,z+1];}
-  function setGrid(gx,gy,gz,force){const ext=force?[0,0,0]:gridExt();gx=Math.max(ext[0],16,Math.min(320,Math.round(gx)||48));gz=Math.max(ext[2],16,Math.min(320,Math.round(gz)||48));gy=Math.max(ext[1],8,Math.min(128,Math.round(gy)||24));
+  function gridExt(){let x=0,y=0,z=0;for(const k of V.keys()){const [a,b,c]=k.split(',').map(Number);if(a>x)x=a;if(b>y)y=b;if(c>z)z=c;}for(const p of props||[]){x=Math.max(x,Math.ceil(p.x));z=Math.max(z,Math.ceil(p.z));y=Math.max(y,Math.ceil(p.y||0));}for(const e of ents||[]){x=Math.max(x,e.x);z=Math.max(z,e.z);y=Math.max(y,e.y||0);}for(const q of cfg.zones||[]){const [, ,right,bottom]=zBounds(q);x=Math.max(x,Math.ceil(right)-1);z=Math.max(z,Math.ceil(bottom)-1);}return [x+1,y+1,z+1];}
+  function setGrid(gx,gy,gz,force){const ext=force?[0,0,0]:gridExt();
+    if(!force)for(const loop of cfg.outline?.loops||[])for(const [x,z] of loop){ext[0]=Math.max(ext[0],Math.ceil(x));ext[2]=Math.max(ext[2],Math.ceil(z));}
+    gx=Math.max(ext[0],16,Math.min(320,Math.round(gx)||48));gz=Math.max(ext[2],16,Math.min(320,Math.round(gz)||48));gy=Math.max(ext[1],8,Math.min(128,Math.round(gy)||24));
     if(gx===GX&&gy===GY&&gz===GZ)return false;GX=gx;GY=gy;GZ=gz;grid.geometry.dispose();grid.geometry=gridGeo();
     for(const m of [floor,lvlPlane]){m.geometry.dispose();m.geometry=new THREE.PlaneGeometry(GX,GZ).rotateX(-Math.PI/2).translate(GX/2,0,GZ/2);}
     if(level>GY-1)level=GY-1;return true;}
@@ -127,12 +132,28 @@ export function init3D(root){
   function snap(){return {v:snapV(),ents:JSON.parse(JSON.stringify(ents)),cfg:Object.assign({},cfg),props:JSON.parse(JSON.stringify(props||[])),grid:[GX,GY,GZ]};}
   function load(a){if(!Array.isArray(a)&&a.grid)setGrid(a.grid[0],a.grid[1],a.grid[2],true);clearAll();const arr=Array.isArray(a)?a:(a.v||[]);if(Array.isArray(a)){ents=[];props=[];}else{ents=JSON.parse(JSON.stringify(a.ents||[]));cfg=Object.assign(defCfg3(),a.cfg||{});props=JSON.parse(JSON.stringify(a.props||[]));}selP=null;for(const [k,s,m,r] of arr){const [x,y,z]=k.split(',').map(Number);setV(x,y,z,s,m,r,true);}refreshVis();syncEnts();syncProps();}
   function pushUndo(){undo.push(snap());if(undo.length>60)undo.shift();redo=[];}
-  let saveT;function changed(){clearTimeout(saveT);saveT=setTimeout(()=>lsSet('thk_proj3d',snap()),600);$('#cnt3')&&($('#cnt3').textContent=V.size+' khối');}
+  const SCENE_KEY='thk_outline_scenes3d';
+  let sceneId='original',sceneName='Cảnh 3D',otherScenes=[],readyToSave=false,outlineGroup=null,renderedOutline;
+  let saveT;
+  function changed(){clearTimeout(saveT);if(readyToSave)saveT=setTimeout(async()=>{
+    const data=snap();
+    if(!await idbSet(SCENE_KEY,{id:sceneId,name:sceneName,data,others:otherScenes})){
+      lsSet('thk_proj3d',data);
+      toast('Không lưu được danh sách màn 3D. Hãy xuất dự án để giữ bản dựng.');
+    }
+  },600);$('#cnt3')&&($('#cnt3').textContent=V.size+' khối');}
   function setV(x,y,z,s,m,r,quiet){if(!inb(x,y,z))return;const k=key(x,y,z);delV(x,y,z,true);V.set(k,{s,m,r});
     const me=new THREE.Mesh(GEO[s],MATS[m].t?dsMats[m]:mats[m]);me.position.set(x+.5,y+.5,z+.5);me.rotation.y=r*Math.PI/2;me.userData={x,y,z};scene.add(me);meshes.set(k,me);if(!quiet)changed();}
   function delV(x,y,z,quiet){const k=key(x,y,z);const me=meshes.get(k);if(me){scene.remove(me);meshes.delete(k);}V.delete(k);if(!quiet)changed();}
   function clearAll(){for(const me of meshes.values())scene.remove(me);meshes.clear();V.clear();}
-  function refreshVis(){for(const [k,me] of meshes)me.visible=!hideUp||me.userData.y<=level;lvlPlane.position.y=level;lvlPlane.visible=true;changed();}
+  function syncOutline(){
+    if(renderedOutline===cfg.outline)return;
+    renderedOutline=cfg.outline;
+    if(outlineGroup){scene.remove(outlineGroup);disposeOutlineMesh(outlineGroup);}
+    outlineGroup=cfg.outline?.loops?.length?outlineMesh3D(cfg.outline):null;
+    if(outlineGroup)scene.add(outlineGroup);
+  }
+  function refreshVis(){syncOutline();for(const [k,me] of meshes)me.visible=!hideUp||me.userData.y<=level;lvlPlane.position.y=level;lvlPlane.visible=true;changed();}
   function doUndo(){if(!undo.length)return;redo.push(snap());load(undo.pop());draw();}
   function doRedo(){if(!redo.length)return;undo.push(snap());load(redo.pop());draw();}
   function syncEnts(){for(const m of eMesh.values())scene.remove(m);eMesh.clear();for(const e of ents){const g=entModel(e);g.position.set(e.x+.5,e.y,e.z+.5);g.userData.entId=e.id;scene.add(g);eMesh.set(e.id,g);}
@@ -303,7 +324,7 @@ export function init3D(root){
     if(ok&&!cam.ortho){const k=1-nd/cam.dist;cam.tx+=(P0.x-cam.tx)*k;cam.ty+=(P0.y-cam.ty)*k;cam.tz+=(P0.z-cam.tz)*k;}cam.dist=nd;},{passive:false});
   let pClip=null,pClipN=0;
   const setTool=k=>{mode=k;tab='build';draw();toast({sel:'Chọn',area:'Chọn vùng',build:'Đặt khối',erase:'Xóa khối',paint:'Tô',pick:'Hút'}[k]);};
-  addEventListener('keydown',e=>{if($('#v3d').style.display==='none')return;const t=e.target;if(t&&((t.tagName==='INPUT'&&!/^(range|checkbox|radio|button)$/.test(t.type))||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(document.querySelector('div[style*="z-index:200"]'))return;
+  addEventListener('keydown',e=>{if($('#v3d').style.display==='none'||document.querySelector('.outline-overlay'))return;const t=e.target;if(t&&((t.tagName==='INPUT'&&!/^(range|checkbox|radio|button)$/.test(t.type))||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(document.querySelector('div[style*="z-index:200"]'))return;
     const k=e.key,K=k.length===1?k.toLowerCase():k,ctrl=e.ctrlKey||e.metaKey,p=selProp();
     if(mode==='sel'&&!p&&selV.size&&!(e.altKey)){
       if(ctrl&&(K==='c'||K==='x')){selToClip(K==='x');e.preventDefault();return;}
@@ -365,13 +386,13 @@ export function init3D(root){
   };
   Object.assign(TPL,makeTpl({setV,delV,fillBox,hollow,roofRing}));
   // ===== xuất =====
-  function boundsInfo(){const b=new THREE.Box3();for(const me of meshes.values())b.expandByObject(me);for(const g of pMesh.values())b.expandByObject(g);return b;}
-  function expGLB(){if(!V.size&&!props.length)return toast('Chưa có khối nào');const groups=new Map();const root=new THREE.Group();
+  function boundsInfo(){const b=new THREE.Box3();for(const me of meshes.values())b.expandByObject(me);for(const g of pMesh.values())b.expandByObject(g);if(outlineGroup)b.expandByObject(outlineGroup);return b;}
+  function expGLB(){if(!V.size&&!props.length&&!outlineGroup)return toast('Chưa có công trình 3D');const groups=new Map();const root=new THREE.Group();
     for(const me of meshes.values()){const g=me.geometry.clone();me.updateMatrix();g.applyMatrix4(me.matrix);const m=V.get(key(me.userData.x,me.userData.y,me.userData.z)).m;const gg=g.index?g.toNonIndexed():g;gg.deleteAttribute('normal');gg.computeVertexNormals();if(!groups.has(m))groups.set(m,[]);groups.get(m).push(gg);}
     for(const [m,arr] of groups){const mg=mergeGeometries(arr);const mm=mats[m].clone();mm.side=THREE.DoubleSide;const mesh=new THREE.Mesh(mg,mm);mesh.name=MATS[m].n;root.add(mesh);}
-    for(const g of pMesh.values())root.add(g.clone(true));
+    for(const g of pMesh.values())root.add(g.clone(true));if(outlineGroup)root.add(outlineGroup.clone(true));
     new GLTFExporter().parse(root,res=>{saveFile('cong_trinh_3d.glb',new Blob([res],{type:'model/gltf-binary'}));},err=>toast('Lỗi xuất GLB'),{binary:true});}
-  function shot(views,size,name){if(!V.size&&!props.length)return toast('Chưa có khối nào');const sbv=selBox&&selBox.visible;if(selBox)selBox.visible=false;const b=boundsInfo();const c=b.getCenter(new THREE.Vector3()),sz=b.getSize(new THREE.Vector3());const rad=Math.max(sz.x,sz.y,sz.z)*.9+1.5;
+  function shot(views,size,name){if(!V.size&&!props.length&&!outlineGroup)return toast('Chưa có công trình 3D');const sbv=selBox&&selBox.visible;if(selBox)selBox.visible=false;const b=boundsInfo();const c=b.getCenter(new THREE.Vector3()),sz=b.getSize(new THREE.Vector3());const rad=Math.max(sz.x,sz.y,sz.z)*.9+1.5;
     const save={...cam},sv=[ghost.visible,grid.visible,lvlPlane.visible];ghost.visible=false;grid.visible=false;lvlPlane.visible=false;renderer.setClearColor(0x000000,0);renderer.setPixelRatio(1);renderer.setSize(size,size,false);
     const out=document.createElement('canvas');out.width=size*views.length;out.height=size;const og=out.getContext('2d');
     views.forEach((az,i)=>{cam.az=az;cam.el=.5236;cam.ortho=true;cam.tx=c.x;cam.ty=c.y;cam.tz=c.z;cam.dist=rad*2.2;oc.left=-rad;oc.right=rad;oc.top=rad;oc.bottom=-rad;oc.updateProjectionMatrix();
@@ -663,7 +684,7 @@ export function init3D(root){
       r2.append(num('Từ tầng',()=>sz.y0||0,v=>{sz.y0=v;},0,1),num('Đến tầng',()=>sz.y1==null?GY:sz.y1,v=>{sz.y1=v;},1,1));box.append(r2);}
     box.append(el('div',{class:'hint'},'VẼ: chọn hình rồi kéo trên mặt phẳng tầng hiện tại (đổi tầng bằng thanh tầng ở trên). Đa giác/Đường gấp khúc: bấm từng điểm, bấm đúp hoặc ✔ Xong để kết thúc. SỬA: bấm vào khối đỏ để chọn; kéo thân = di chuyển; ô vuông trắng = kéo dãn; chấm xanh = xoay; chấm xám giữa cạnh = thêm đỉnh; Alt/Shift+bấm đỉnh = xóa đỉnh. "Từ tầng / Đến tầng" quy định chiều cao vùng chặn (mặc định cao 6 khối từ tầng vẽ). Delete xóa · Enter xong · Esc hủy · Ctrl+Z hoàn tác.'));
     return box;}
-  addEventListener('keydown',e=>{if(mode!=='zone')return;const v=$('#v3d');if(!v||v.style.display==='none')return;const t=e.target;if(t&&/INPUT|TEXTAREA|SELECT/.test(t.tagName))return;const k=(e.key||'').toLowerCase(),m=e.ctrlKey||e.metaKey,sz=zsel&&zget(zsel);let h=true;
+  addEventListener('keydown',e=>{if(mode!=='zone'||document.querySelector('.outline-overlay'))return;const v=$('#v3d');if(!v||v.style.display==='none')return;const t=e.target;if(t&&/INPUT|TEXTAREA|SELECT/.test(t.tagName))return;const k=(e.key||'').toLowerCase(),m=e.ctrlKey||e.metaKey,sz=zsel&&zget(zsel);let h=true;
     if(m&&k==='z'){e.shiftKey?zRedo():zUndo();}else if(m&&k==='y'){zRedo();}
     else if(k==='enter'&&zpend)zFinish();
     else if(k==='escape'){if(zpend){zpend=null;zRebuild();draw();}else if(zsel){zsel=null;zRebuild();draw();}else h=false;}
@@ -672,6 +693,9 @@ export function init3D(root){
     else if(sz&&k.startsWith('arrow')&&!m){zpush();const n=(e.shiftKey?5:1)*(zsnap||.25);zMove(sz,k==='arrowleft'?-n:k==='arrowright'?n:0,k==='arrowup'?-n:k==='arrowdown'?n:0);zRebuild();changed();}
     else h=false;if(h){e.preventDefault();e.stopImmediatePropagation();}},true);
   function draw(){zRebuild();if(mode!=='sel'&&selV.size){selV.clear();updSelV();}if(mode!=='area'&&ar){ar=null;arStep=0;updAr();}if(mode!=='area'&&mode!=='stamp'&&pgH)pgH.visible=false;if(typeof hbDraw==='function')hbDraw();[...tabs.children].forEach(b=>b.classList.toggle('on',b.dataset.t===tab));body.innerHTML='';
+    const scenes=sceneChoices();
+    if(scenes.length)body.append(el('select',{ 'aria-label':'Cảnh 3D đang dựng',onchange:e=>switchScene(e.target.value)},
+      el('option',{value:sceneId},sceneName),...scenes.map(m=>el('option',{value:m.id},m.name))));
     const guide=guideFor('3d',tab==='build'?mode:tab);if(guide)body.append(guide);
     if(tab==='build'){
       body.append(el('div',{class:'row'},[['sel','✋ Chọn'],['area','▭ Vùng'],['build','🧱 Đặt'],['erase','🧽 Xóa'],['paint','🎨 Tô'],['pick','💧 Hút'],['zone','🚧 Chặn']].map(([k,n])=>btn(n,()=>{mode=k;draw();},mode===k?'on':'')),btn('↶',doUndo),btn('↷',doRedo),el('span',{id:'cnt3',class:'lbl'},V.size+' khối')));
@@ -728,8 +752,81 @@ export function init3D(root){
       body.append(el('div',{class:'row'},btn('🎮 Xuất GAME 3D (file HTML)',()=>exportGame(api.gameData(),'Game 3D của tôi'))));
       body.append(el('div',{class:'hint'},'GLB mở được trong Godot, Unity, Blender, three.js. Ảnh isometric/4 hướng là PNG nền trong suốt để dán vào game 2D. App tự lưu trên trình duyệt này.'));}
   }
-  (async()=>{LIB=(await idbGet('m3d_index'))||[];autoBuiltin();for(const c of ((await idbGet('thk_cmats3d'))||lsGet('thk_cmats',[])))await addCustomMat(c.n,c.url,true);const sv=lsGet('thk_proj3d',null);if(sv&&(Array.isArray(sv)?sv.length:(sv.v&&sv.v.length)))load(sv);else{TPL['Đình tứ trụ (võ hiệp)']();refreshVis();}if(Math.max(GX,GZ)>48)fitAll();syncEnts();syncProps();draw();})();
-  draw();
-  const api={cam,show(){run=true;loop();},hide(){run=false;},gameData:()=>{const used=[...new Set(props.map(p=>p.m))],pm={},pt={};for(const id of used){const b=BYTES.get(id);if(b){pm[id]={glb:b64(b.u8),pack:b.pack};pt[b.pack]=b.tex;}}return {kind:'3d',grid:[GX,GY,GZ],voxels:snapV(),ents:JSON.parse(JSON.stringify(ents)),cfg:Object.assign({},cfg),cmats:MATS.slice(BASE_N).map(m=>({n:m.n,url:m.url})),props:JSON.parse(JSON.stringify(props)),pmodels:pm,ptex:pt};},_t:{setV,clearAll,refreshVis,exp:expGLB}};
+  function sceneChoices(){return otherScenes.map(({id,name})=>({id,name}));}
+  function switchScene(id,fresh){
+    const target=fresh||otherScenes.find(m=>m.id===id);
+    if(!target)return;
+    otherScenes=[...otherScenes.filter(m=>m.id!==target.id),{id:sceneId,name:sceneName,data:snap()}];
+    sceneId=target.id;sceneName=target.name;undo=[];redo=[];
+    load(target.data);fitAll();draw();
+  }
+  function outlineGridBounds(level){
+    const [x,,z]=gridExt(),keepOrigin=!level&&!!(V.size||props.length||ents.length||cfg.zones?.length);
+    return {bounds:keepOrigin?[0,0,x,z]:null,keepOrigin};
+  }
+  function outlineSize(w,h,keep){
+    if(![w,h].every(n=>Number.isInteger(n)&&n>=16&&n<=320))throw Error('Lưới 3D cần từ 16 đến 320 ô mỗi chiều.');
+    const [x,,z]=gridExt();
+    if(keep&&(w<x||h<z))throw Error('Khung mới cắt qua phần đã dựng.');
+  }
+  function planScene(outline,w,h,level,origin,keep,collision=true){
+    outlineSize(w,h,keep);
+    if(!outline.loops.length||!validOutline(outline.loops,w,h)||
+       ![outline.front,outline.rear].every(n=>Number.isFinite(n)&&n>=0&&n<=4)||
+       !Number.isFinite(outline.thickness)||outline.thickness<WALL_MIN_THICKNESS||outline.thickness>WALL_MAX_THICKNESS)
+      throw Error('Kiểm tra lại mặt bằng, chiều cao và độ dày tường.');
+    const gates=[];
+    for(const g of outline.gates||[]){
+      const fitted=fitGate3D(outline,[g.x,g.z],g.width,.14);
+      if(!fitted)throw Error('Có cổng mất đoạn tường đỡ. Hãy gỡ rồi lắp lại cổng.');
+      gates.push({...g,...fitted});
+    }
+    const data=keep?snap():{v:[],props:[],ents:[],cfg:defCfg3()};
+    const plan={...outline,gates,floorCollision:collision};
+    const shift=p=>p?.map((v,i)=>v-origin[i]);
+    const markers=outlineMarkers(plan,w,h,{start:shift(level?.start),goal:shift(level?.goal)});
+    data.grid=[w,GY,h];
+    data.cfg={...data.cfg,outline:plan,outlineTemplate:level?.id||(keep?cfg.outlineTemplate:undefined)};
+    if(!data.ents.some(e=>e.t==='start'))data.ents.push(newEnt3('start',markers.start[0],0,markers.start[1]));
+    if(!keep&&!markers.goal)throw Error('Cần hai điểm đứng nối được với nhau để tạo màn chơi.');
+    if(!keep&&markers.goal){
+      data.ents.push(newEnt3('goal',markers.goal[0],0,markers.goal[1]));data.cfg.win='goal';
+    }
+    for(const p of level?.chests||[]){const q=shift(p);if(markers.includes(q)&&![markers.start,markers.goal].some(a=>a?.[0]===q[0]&&a[1]===q[1]))data.ents.push(newEnt3('chest',q[0],0,q[1]));}
+    return data;
+  }
+  function applyPlan(data){pushUndo();load(data);fitAll();draw();}
+  function runtimeScene(data){return {grid:data.grid,voxels:data.v,ents:data.ents,cfg:data.cfg,props:data.props};}
+  function gameData(data=snap()){
+    const pm={},pt={};
+    for(const id of new Set([data,...otherScenes.map(m=>m.data)].flatMap(m=>m.props.map(p=>p.m)))){
+      const b=BYTES.get(id);if(b){pm[id]={glb:b64(b.u8),pack:b.pack};pt[b.pack]=b.tex;}
+    }
+    return {kind:'3d',...runtimeScene(data),sceneId,sceneName,scenes:otherScenes.map(m=>({id:m.id,name:m.name,...runtimeScene(m.data)})),
+      cmats:MATS.slice(BASE_N).map(m=>({n:m.n,url:m.url})),pmodels:pm,ptex:pt};
+  }
+  const ready=(async()=>{
+    LIB=(await idbGet('m3d_index'))||[];autoBuiltin();
+    for(const c of ((await idbGet('thk_cmats3d'))||lsGet('thk_cmats',[])))await addCustomMat(c.n,c.url,true);
+    const saved=await idbGet(SCENE_KEY);
+    if(saved?.data){sceneId=saved.id;sceneName=saved.name;otherScenes=saved.others||[];load(saved.data);}
+    else{
+      const sv=lsGet('thk_proj3d',null);
+      if(sv)load(sv);else{TPL['Đình tứ trụ (võ hiệp)']();refreshVis();}
+    }
+    if(Math.max(GX,GZ)>48)fitAll();syncEnts();syncProps();draw();
+    const used=new Set([snap(),...otherScenes.map(m=>m.data)].flatMap(m=>m.props.map(p=>p.m)));
+    await Promise.allSettled([...used].map(mBytes));
+    readyToSave=true;changed();
+  })();
+  const api={kind:'3d',ready,cam,show(){if(!run){run=true;loop();}},hide(){run=false;},gameData,sceneChoices,
+    map:()=>({w:GX,h:GZ,cfg,name:sceneName}),sheets:()=>[],builtinOutlineSample:()=>null,outlineGridBounds,
+    applyOutline:(o,c,w,h,stamps,origin)=>applyPlan(planScene(o,w,h,null,origin,true,c)),
+    replaceWithOutlineMap:(o,w,h,level,stamps,origin)=>applyPlan(planScene(o,w,h,level,origin,false,o.floorCollision)),
+    newOutlineMap:(o,w,h,level,stamps,origin)=>switchScene(null,{id:crypto.randomUUID(),name:level?.name||'Mặt bằng 3D '+(otherScenes.length+2),data:planScene(o,w,h,level,origin,false,o.floorCollision)}),
+    previewOutlineMap:(o,w,h,level,stamps,origin)=>gameData(planScene(o,w,h,level,origin,!level,o.floorCollision)),
+    resizeOutlineGrid(w,h){outlineSize(w,h,true);pushUndo();setGrid(w,GY,h);fitAll();refreshVis();draw();},
+    clearOutline(){pushUndo();const {outline,outlineTemplate,...rest}=cfg;cfg=rest;refreshVis();draw();},
+    _t:{setV,clearAll,refreshVis,exp:expGLB}};
   return api;
 }

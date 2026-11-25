@@ -1,3 +1,5 @@
+import {isMapLink,portalAnchor} from './wall2d.js';
+import {mapCollision} from './mapCollision.js';
 import {guideBox,appGuides} from './editorHelp.js';
 import {el,ask,yes,pickFile,saveFile,gameHTML,toast,lsGet,lsSet} from './util.js';
 import {check2D} from './check.js';
@@ -13,7 +15,7 @@ function projectChecks(data){
  for(const [i,m] of maps.entries()){
   const name=m.name||'Màn '+(i+1);
   const rows=check2D(m);
-  const exits=m.ents.filter(e=>e.t==='door');
+  const exits=m.ents.filter(isMapLink),geometry=mapCollision(m);
   for(const r of rows){
    if(exits.length&&r.id==='F3'&&!m.ents.some(e=>e.t==='goal'))continue;
    if(r.st==='missing'||r.st==='broken')problems.push(name+' · '+r.txt);
@@ -33,11 +35,12 @@ function projectChecks(data){
    }
   }
   for(const e of exits){
-   if(!reachable.has(e.y*m.w+e.x))problems.push(name+' · không có đường tới cửa '+e.name);
+   const p=portalAnchor(e,(x,y,r)=>geometry.floor?.fits(x,y,r)??geometry.free(x,y,r));
+   if(!p||!reachable.has(Math.floor(p[1])*m.w+Math.floor(p[0])))problems.push(name+' · không có đường tới cửa '+e.name);
    const dest=maps[e.to];
    if(!dest){problems.push(name+' · cửa '+e.name+' trỏ tới màn chưa có');continue;}
    const fallback=dest.ents.find(q=>q.t==='start');
-   const x=e.tx??fallback?.x,y=e.ty??fallback?.y;
+   const fixed=e.tx!=null&&e.ty!=null,x=fixed?e.tx:fallback?.x,y=fixed?e.ty:fallback?.y;
    if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||y<0||x>=dest.w||y>=dest.h||dest.blk[y*dest.w+x])
     problems.push(name+' · điểm đến của cửa '+e.name+' bị chặn hoặc thiếu');
   }
@@ -124,7 +127,8 @@ export function runStudio(data,sheets,{preview=false}={}){
     const start=to.ents.find(e=>e.t==='start');
     save(d.state);
     current.stop(true);
-    launch(d.to,{x:(d.tx??start?.x??0)+.5,y:(d.ty??start?.y??0)+.5,hp:d.hp,score:d.score});
+    const fixed=d.tx!=null&&d.ty!=null;
+    launch(d.to,{x:(fixed?d.tx:start?.x??0)+.5,y:(fixed?d.ty:start?.y??0)+.5,hp:d.hp,score:d.score});
    }});
  }
  function menu(){

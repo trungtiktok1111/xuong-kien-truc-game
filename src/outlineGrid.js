@@ -1,3 +1,4 @@
+import {isMapLink} from './wall2d.js';
 import {mapCollision} from './mapCollision.js';
 import {decoZones,zBounds,zMove} from './zones.js';
 
@@ -56,7 +57,7 @@ export function rebaseOutlineSource(source,w,h,[ox,oy],mapIndex){
  }
  for(const e of m.ents){
   e.x-=ox;e.y-=oy;
-  if(e.t==='door'&&mapIndex!=null&&Number(e.to)===mapIndex){
+  if(isMapLink(e)&&mapIndex!=null&&Number(e.to)===mapIndex){
    if(e.tx!=null)e.tx-=ox;
    if(e.ty!=null)e.ty-=oy;
   }

@@ -2,9 +2,11 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
-## Vật lý mái
-- Mái (lớp **Mái / cửa**, hoặc vật thể mái) không đặt được khi lơ lửng: ô mái phải nằm sát tường, cột hoặc nhà (vươn ra tối đa 2 ô), hoặc bắc ngang giữa hai điểm tựa đối diện cách nhau không quá 12 ô. Xóa phần đỡ làm mái mất tựa thì app báo, không tự xóa mái.
-- Tắt cho cả bản đồ: `cfg.roofPhysics=false`. Đổi nhịp: `cfg.roofSpan`, `cfg.roofOverhang`. Mã ở `src/roofSupport2d.js`, test ở `tests/roofSupport2d.test.js`.
+## Quy tắc dựng mái 2D
+
+- Mái cần hai điểm tựa ở hai phía trên tường hoặc cột có nền đỡ. Cao độ của mái khớp với đỉnh điểm tựa. Hai điểm bằng cao độ cho mặt mái ngang. Có thể đổi chiều mái hoặc chỉnh chiều cao tường để tạo độ dốc.
+- Công cụ Đặt mảnh hiển thị vị trí tựa. Dời hoặc xóa kết cấu khiến mái mất tựa sẽ hủy thao tác. Các mái treo trong bản đồ cũ vẫn có thể chỉnh sửa, hiện viền đỏ và được liệt kê khi bấm Kiểm. Bản chơi bỏ qua những mái này.
+- Các quy tắc lắp ghép kiểm tra hình học của cảnh game. Chúng xác định nền đỡ, điểm tựa và lối qua cổng.
 
 ## V15.7.1
 - **Va chạm (K)** hiện ngay vùng chặn. Bộ đếm ghi rõ số vùng vẽ tay.
@@ -55,6 +57,9 @@ Mẫu 2D, bản đồ, tài nguyên đã nạp lưu trong **trình duyệt** (In
 ## Tính năng chính
 - **Editor 2D**: bản đồ chéo/vuông tới 600×600; 5 lớp (nền, phủ nền, vật thể, mái/cửa, vùng chặn); chọn vùng, sao chép, dán; thêm vật thể kích thước thật (deco).
 - **Mẫu 2D**: kho mẫu có số thứ tự, giữ ảnh gốc, phân loại theo góc camera → nhóm → mẫu; quét dọn (ghép lớp phủ vào mẫu, bỏ trùng/rác).
+- **Đường Bao 3D**: ở chế độ 3D, mở **Đường Bao** để chỉnh mặt bằng XZ rồi áp dụng sàn, lỗ khoét, tường và va chạm vào cảnh. **Vừa lưới** thu khoảng trống. Có thể đặt mẫu, chỉnh điểm, quét/sao chép hình và nối hành lang như trong trình mặt bằng 2D.
+- **Màn mẫu**: thôn trang, thành trấn, bang phái, bến nước, quan ải và vườn đền dùng được ở cả hai chế độ. Các nhãn trên bản vẽ chỉ vị trí khu chức năng.
+- **Cổng tường bao 3D**: tạo màn đích bằng **Tạo bản sao**, chuyển về màn nguồn qua danh sách cảnh 3D, mở **Đường Bao** và chọn **Lắp cổng 3D**. Chọn màn đích rồi bấm cạnh thẳng đủ dài. Khi chơi, đi vào phía trong miệng cổng để sang điểm xuất phát của màn đích. Đặt thêm một cổng ở màn bên kia nếu cần đường về.
 - **Editor 3D voxel**: lưới tới 320×320×128, đặt mô hình GLB.
 - **Chơi thử** 2D/3D: nhân vật, va chạm theo dấu chân, sắp xếp che khuất theo dấu chân.
 

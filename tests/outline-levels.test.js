@@ -8,7 +8,8 @@ test('library includes the original embedded Đá Xoáy map and ten new complex 
  const template=readFileSync('tpl.html','utf8');
  const sample=JSON.parse(template.match(/id="da-xoay-sample"[^>]*>(.*?)<\/script>/s)[1]);
  const levels=levelLibrary(sample);
- assert.equal(levels.length,23);
+ assert.equal(levels.length,29);
+ assert.equal(levels.filter(level=>level.areas?.length).length,6);
  assert.equal(levels.filter(level=>level.group==='Bố cục phức tạp').length,11);
  assert.equal(new Set(levels.map(level=>level.id)).size,levels.length);
  assert.equal(levels[0].sample,sample);

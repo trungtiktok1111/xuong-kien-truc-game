@@ -3,6 +3,8 @@ import {DEFAULT_OUTLINE_WALL_HEIGHT,fitDraftGrid} from './outlineGrid.js';
 import {captureOutlineTiles,placeOutlineTiles} from './outlineMaterials.js';
 import {levelLibrary} from './outlineLevels.js';
 import {play2D} from './play2d.js';
+import {play3D} from './play3d.js';
+import {fitGate3D,inOutline} from './outline3d.js';
 import {combineOutline,ellipseLoop,fitShape,outlineShapes,rectangleLoop,cropOutline,moveOutline,corridorLoop,relatedLoops} from './outlineShapes.js';
 import {guideBox,appGuides} from './editorHelp.js';
 import {el,toast,yes} from './util.js';
@@ -17,7 +19,8 @@ export function validOutline(loops,w,h){
 }
 let outlineClipboard=null;
 export function openOutlineEditor(editor,initialTab='shapes'){
- const map=editor.map();
+ const is3D=editor.kind==='3d';
+ const map=editor.map(),minSide=is3D?16:4,maxSide=is3D?320:MAX_MAP_SIDE;
  const outlineLevels=levelLibrary(editor.builtinOutlineSample());
  let W=map.w,H=map.h,origin=[0,0];
  const copy=loops=>JSON.parse(JSON.stringify(loops));
@@ -25,12 +28,17 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  let loops=copy(original),stamps=[],pending=[],mode='select',picked=-1,drag=null;
  const undo=[],redo=[];
  let placement=null,previewAt=null,selection=null,levelDraft=null,activeTab=initialTab;
+ let cursor=null;
+ let gates=structuredClone(map.cfg.outline?.gates||[]),gatePreview=null;
+ const gateWidth=el('input',{type:'number',min:1.5,max:16,step:.25,value:3,'aria-label':'Bề rộng cổng 3D'});
+ const gateDest=el('select',{'aria-label':'Màn đích của cổng 3D'},el('option',{value:''},'Không chuyển màn'),...(editor.sceneChoices?.()||[]).map(m=>el('option',{value:m.id},m.name)));
  const originLevel=outlineLevels.find(level=>level.id===map.cfg.outlineTemplate)||
   outlineLevels.find(level=>level.sample&&level.w===map.w&&level.h===map.h&&JSON.stringify(level.loops)===JSON.stringify(original));
  const levelTiles=new Map();
  let applyButton,clearButton,restoreLevelButton,createLabel,tryLabel,commitBusy=false;
  const ov=el('section',{class:'outline-overlay',style:'position:fixed;inset:0;z-index:180;background:#101820f5;overflow:auto;display:grid;place-items:center;padding:16px;touch-action:pan-y'});
  const box=el('div',{class:'outline-workspace'});
+ const aim=el('div',{class:'map-aim',hidden:true});
  const canvas=el('canvas',{width:'760',height:'465',style:'display:block;width:100%;height:auto;background:#141d24;border:1px solid #50606a;touch-action:none'});
  const c=canvas.getContext('2d'),status=el('p',{class:'hint'}),toolbar=el('div',{class:'row outline-tools'}),footer=el('div',{class:'row',style:'margin-top:10px'});
  let s,ox,oy,pan=null;
@@ -45,11 +53,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const snap=el('input',{type:'checkbox'});
  const scale=el('select',{'aria-label':'Kích thước mẫu'},el('option',{value:'0.9'},'Lớn'),
   el('option',{value:'0.65'},'Vừa'),el('option',{value:'0.4'},'Nhỏ'),
-  ...[8,16,32,64,128,256,512].map(n=>el('option',{value:''+n},n+' ô')));
+  ...[8,16,32,64,128,256,512].filter(n=>n<=maxSide).map(n=>el('option',{value:''+n},n+' ô')));
  scale.value='0.9';
  const angle=el('input',{type:'number',value:0,step:1,'aria-label':'Góc xoay mẫu',class:'outline-num'});
- const gridWidth=el('input',{type:'number',min:4,max:MAX_MAP_SIDE,value:W,'aria-label':'Rộng bản đồ',class:'outline-num'});
- const gridHeight=el('input',{type:'number',min:4,max:MAX_MAP_SIDE,value:H,'aria-label':'Cao bản đồ',class:'outline-num'});
+ const gridWidth=el('input',{type:'number',min:minSide,max:maxSide,value:W,'aria-label':'Rộng bản đồ',class:'outline-num'});
+ const gridHeight=el('input',{type:'number',min:minSide,max:maxSide,value:H,'aria-label':'Cao bản đồ',class:'outline-num'});
  const sizeLabel=el('span',{class:'hint','aria-live':'polite'});
  const viewLabel=el('span',{class:'hint'});
  const gridNote=el('p',{class:'hint outline-grid-note','aria-live':'polite'});
@@ -59,8 +67,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  function rotateBy(degrees){angle.value=(angleValue()+degrees+360)%360;refreshPreview();}
  angle.oninput=scale.onchange=refreshPreview;
  function resizeDraft(w,h){
-  if(!Number.isInteger(w)||!Number.isInteger(h)||w<4||h<4||w>MAX_MAP_SIDE||h>MAX_MAP_SIDE){
-   gridNote.textContent='Nhập số nguyên từ 4 đến 600 cho mỗi chiều.';return false;
+  if(!Number.isInteger(w)||!Number.isInteger(h)||w<minSide||h<minSide||w>maxSide||h>maxSide){
+   gridNote.textContent='Nhập số nguyên từ '+minSide+' đến '+maxSide+' cho mỗi chiều.';return false;
   }
   if(w===W&&h===H){gridNote.textContent='';return true;}
   if(!validOutline(loops,w,h)){
@@ -73,11 +81,13 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   if(!loops.length){fitGrid();draw();gridNote.textContent='Dựng đường bao trước để tự thu lưới.';return;}
   const {bounds,keepOrigin}=editor.outlineGridBounds(levelDraft);
   const fitted=fitDraftGrid(loops,stamps,origin,W,H,bounds,keepOrigin);
+  fitted.w=Math.max(minSide,fitted.w);fitted.h=Math.max(minSide,fitted.h);
   if(fitted.w!==W||fitted.h!==H||fitted.origin.some((v,i)=>v!==origin[i])){
-   record();({loops,stamps,origin,w:W,h:H}=fitted);
+   record();const dx=origin[0]-fitted.origin[0],dz=origin[1]-fitted.origin[1];
+   gates=gates.map(g=>({...g,x:g.x+dx,z:g.z+dz}));({loops,stamps,origin,w:W,h:H}=fitted);
    resetGridView();picked=-1;select('select');
   }else{fitGrid();previewAt=null;draw();}
-  gridNote.textContent='Lưới vừa phần đã dựng · '+W+' × '+H+' ô'+(keepOrigin?' · Giữ gốc lưới cho cửa liên màn.':'');
+  gridNote.textContent='Lưới vừa phần đã dựng · '+W+' × '+H+' ô'+(keepOrigin?' · Giữ gốc tọa độ của cảnh.':'');
  }
  const readGrid=()=>resizeDraft(+gridWidth.value,+gridHeight.value);
  function zoom(factor,x=380,y=232.5){
@@ -122,14 +132,27 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   for(const [id,tile] of templateTiles)tile.setAttribute('aria-pressed',String(id===placement?.template?.id));
   c.beginPath();
   for(const loop of loops){points(loop);c.closePath();}
-  c.fillStyle='#607c75';c.fill('evenodd');
+  c.fillStyle=levelDraft?.color||map.cfg.outline?.color||'#607c75';c.fill('evenodd');
   for(let i=0;i<loops.length;i++){
    c.beginPath();points(loops[i]);c.closePath();c.strokeStyle=i===picked?'#f5c86e':'#b7d3c5';c.lineWidth=i===picked?2:1;c.stroke();
    if(i===picked)for(const [x,y] of loops[i]){c.fillStyle='#ffda91';c.fillRect(xp(x)-1.5,yp(y)-1.5,3,3);}
   }
+  if(is3D&&(gates.length||mode==='gate'||mode==='ungate')){
+   for(const g of [...gates,...(gatePreview?[gatePreview]:[])]){
+    c.strokeStyle=g===gatePreview?'#f9cb6a':'#76dfbd';c.lineWidth=g===gatePreview?2:4;c.beginPath();
+    c.moveTo(xp(g.x-g.axis[0]*g.width/2),yp(g.z-g.axis[1]*g.width/2));
+    c.lineTo(xp(g.x+g.axis[0]*g.width/2),yp(g.z+g.axis[1]*g.width/2));c.stroke();
+    if(g===gatePreview){c.lineWidth=1;c.setLineDash([3,5]);c.beginPath();
+     c.moveTo(xp(g.x),yp(0));c.lineTo(xp(g.x),yp(H));c.moveTo(xp(0),yp(g.z));c.lineTo(xp(W),yp(g.z));c.stroke();c.setLineDash([]);}
+   }
+  }
+  for(const [label,x,y] of (levelDraft?levelDraft.areas:map.cfg.outline?.areas)||[]){
+    c.font='bold 12px system-ui';c.textAlign='center';c.lineWidth=3;c.strokeStyle='#162028';
+    c.strokeText(label,xp(x-origin[0]),yp(y-origin[1]));c.fillStyle='#f2e2b8';c.fillText(label,xp(x-origin[0]),yp(y-origin[1]));
+   }
   if(levelDraft){
    for(const [p,label,color] of [[levelDraft.start,'A','#a9ecbf'],[levelDraft.goal,'B','#f5c36d']]){
-    const x=xp(p[0]+.5),y=yp(p[1]+.5);
+    const x=xp(p[0]+.5-origin[0]),y=yp(p[1]+.5-origin[1]);
     c.beginPath();c.arc(x,y,9,0,Math.PI*2);c.fillStyle=color;c.fill();
     c.fillStyle='#18252b';c.font='bold 11px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText(label,x,y);
    }
@@ -152,10 +175,25 @@ export function openOutlineEditor(editor,initialTab='shapes'){
     if(preview.length)ghost([preview],operation.value==='cut'&&mode!=='corridor'?'#ed8f8166':'#8abbaa66');
    }
   }
+  aim.hidden=!cursor;
+  if(cursor){
+   const at=gatePreview?[gatePreview.x,gatePreview.z]:cursor;
+   const edge=nearest(at),surface=edge?'Mép tường':inOutline(loops,...at)?'Sàn':'Ngoài sàn';
+   let link='';
+   if(mode==='corridor'&&pending.length===2){
+    const connected=pending.every(q=>inOutline(loops,...q));
+    link=connected?' · Hai đầu bám sàn':' · Còn đầu ngoài sàn';
+   }
+   aim.textContent=(gatePreview?'Bám tường':surface)+' · X '+at[0].toFixed(2)+' · '+(is3D?'Z ':'Y ')+at[1].toFixed(2)+link;
+   const [x,y]=at;
+   c.save();c.strokeStyle='#e8d69e99';c.lineWidth=1;c.setLineDash([3,5]);c.beginPath();
+   c.moveTo(xp(x),yp(0));c.lineTo(xp(x),yp(H));c.moveTo(xp(0),yp(y));c.lineTo(xp(W),yp(y));c.stroke();c.restore();
+  }
   const op=operation.selectedOptions[0].textContent;
   status.textContent=placement?(placement.name+' · '+angleValue()+'° · '+
    (preview.length?'Bấm để đặt. Q/E xoay 15°. Esc để thoát.':'Hình vượt lưới. Hãy chọn cỡ khác, đổi góc hoặc mở rộng lưới.')) :
-   mode==='scan'?'Quét để lấy đường bao và các lớp ô hình, rồi bấm Sao chép hoặc Ctrl+C.':
+   mode==='scan'?(is3D?'Quét phần mặt bằng để sao chép.':'Quét để lấy đường bao và các lớp ô hình, rồi bấm Sao chép hoặc Ctrl+C.'):
+   mode==='gate'?'Bấm cạnh thẳng đủ dài để lắp cổng. Chọn màn đích nếu muốn nối cảnh.':
    mode==='corridor'?'Kéo từ bên trong phòng này tới bên trong phòng kia để nối.':
    mode==='polygon'?op+' · Bấm từng đỉnh, nhấn Enter hoặc bấm Khép đường.':
    mode==='ellipse'||mode==='rect'?op+' · Kéo từ một góc sang góc đối diện, rồi nhả chuột.':
@@ -178,14 +216,14 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   if(mode==='rect')return [a,[b[0],a[1]],b,[a[0],b[1]]];
   return ellipseLoop((a[0]+b[0])/2,(a[1]+b[1])/2,rx,ry);
  }
- function select(next){pending=[];placement=null;previewAt=null;selection=null;mode=next;draw();}
- function draft(previous=loops){return {loops:copy(previous),w:W,h:H,level:levelDraft,stamps,origin,front:front.value,rear:rear.value,thickness:thickness.value,collision:collision.checked};}
+ function select(next){pending=[];placement=null;previewAt=null;selection=null;mode=next;gatePreview=null;draw();}
+ function draft(previous=loops){return {loops:copy(previous),w:W,h:H,level:levelDraft,stamps,origin,gates,front:front.value,rear:rear.value,thickness:thickness.value,collision:collision.checked};}
  function record(previous=loops){undo.push(draft(previous));if(undo.length>40)undo.shift();redo.length=0;}
  function travel(from,to){
   if(!from.length)return;
   to.push(draft());const next=from.pop();
   const resized=next.w!==W||next.h!==H||next.origin!==origin;
-  loops=next.loops;stamps=next.stamps;W=next.w;H=next.h;origin=next.origin;levelDraft=next.level;front.value=next.front;rear.value=next.rear;thickness.value=next.thickness;collision.checked=next.collision;
+  loops=next.loops;stamps=next.stamps;W=next.w;H=next.h;origin=next.origin;gates=next.gates;levelDraft=next.level;front.value=next.front;rear.value=next.rear;thickness.value=next.thickness;collision.checked=next.collision;
   if(resized)resetGridView();
   picked=-1;select('select');
  }
@@ -231,6 +269,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const dy=offset(p[1]-origin[1],Math.min(...ys),Math.max(...ys),H,canSnapY);
   const placed=shape.map(loop=>loop.map(([x,y])=>[x+dx,y+dy]));
   if(!withTiles)return placed;
+  if(is3D)return [];
   const target=editor.sheets();
   const ids=new Map();
   const remap=value=>{
@@ -258,7 +297,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const [a,b]=selection,part=cropOutline(loops,a,b);
   if(!part.length){toast('Vùng quét chưa có sàn để sao chép.');return;}
   return {name:'Vùng đã sao chép',loops:part,origin:[(a[0]+b[0])/2,(a[1]+b[1])/2],
-   cells:captureOutlineTiles(part,levelDraft?null:map,stamps,W,H,origin),sheets:editor.sheets().slice()};
+   cells:is3D?new Map():captureOutlineTiles(part,levelDraft?null:map,stamps,W,H,origin),sheets:is3D?[]:editor.sheets().slice()};
  }
  function copyScan(){
   const captured=scanContents();if(!captured)return;
@@ -302,6 +341,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   return best;
  }
  canvas.onpointerdown=e=>{
+  cursor=point(e);
+  if(is3D&&e.button===0&&(mode==='gate'||mode==='ungate')){gateClick(point(e));return;}
   if(e.button===1){
    e.preventDefault();pan=screen(e);canvas.setPointerCapture?.(e.pointerId);return;
   }
@@ -320,12 +361,20 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   draw();
  };
  canvas.onpointermove=e=>{
+  cursor=point(e);
+  if(is3D&&mode==='gate'&&e.buttons===0){
+   const p=point(e);gatePreview=hitGate(p);
+   const at=gatePreview?[gatePreview.x,gatePreview.z]:p;
+   const gStatus=toolbar.querySelector('#gate-plan-status');
+   if(gStatus)gStatus.textContent=(gatePreview?'Bám tường · ':'Cần cạnh thẳng · ')+'X '+at[0].toFixed(2)+' · Z '+at[1].toFixed(2);
+   draw();return;
+  }
   if(pan){
    const next=screen(e);ox+=next[0]-pan[0];oy+=next[1]-pan[1];pan=next;boundView();draw();return;
   }
   const p=point(e);
   if(placement){previewAt=p;draw();return;}
-  if(!drag)return;
+  if(!drag){draw();return;}
   if(drag.scan){selection=[drag.start,p];draw();return;}
   if(drag.index){
    const [i,j]=drag.index;
@@ -349,7 +398,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   pending=[];const loop=dragLoop(d.start,p);
   if(loop.length)add(mode==='corridor'?cropOutline([loop],[0,0],[W,H]):[loop],mode==='corridor'?'add':operation.value);else draw();
  };
- canvas.onpointerleave=()=>{if(placement){previewAt=null;draw();}};
+ canvas.onpointerleave=()=>{cursor=null;gatePreview=null;if(placement)previewAt=null;draw();};
  canvas.onwheel=e=>{e.preventDefault();zoom(e.deltaY<0?1.25:.8,...screen(e));if(placement)previewAt=point(e);draw();};
  canvas.onpointercancel=()=>{pan=null;if(drag?.old)loops=drag.old;drag=null;pending=[];draw();};
  box.onkeydown=e=>{
@@ -372,7 +421,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const rear=el('input',{type:'number',min:'0',max:'4',step:'.05',value:map.cfg.outline?.rear??DEFAULT_OUTLINE_WALL_HEIGHT,style:'width:68px'});
  const thickness=el('input',{type:'number',min:WALL_MIN_THICKNESS,max:WALL_MAX_THICKNESS,step:'.01',
   value:map.cfg.outline?.thickness??WALL_THICKNESS,style:'width:68px'});
- const collision=el('input',{type:'checkbox'});collision.checked=true;
+ const collision=el('input',{type:'checkbox'});collision.checked=map.cfg.outline?.floorCollision!==false;
  for(const [key,label] of [['select','Chỉnh điểm'],['move','Di chuyển đường'],['polygon','Đa giác'],['rect','Chữ nhật'],['ellipse','Hình elip'],['scan','Quét chọn'],['corridor','Nối hành lang']]){
   const button=B(label,()=>select(key));modeButtons.set(key,button);toolbar.append(button);
  }
@@ -382,6 +431,31 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  scanMapButton=B('Tạo màn từ vùng quét',createScannedMap);
  centerButton=B('Đặt giữa',()=>commitPlacement([W/2,H/2]));
  toolbar.append(copyButton,pasteButton,scanMapButton,corridorWidth,centerButton);
+ if(is3D)toolbar.append(B('Lắp cổng 3D',()=>select('gate')),B('Gỡ cổng 3D',()=>select('ungate')),
+   el('label',{},'Rộng cổng ',gateWidth),gateDest,el('small',{class:'hint',id:'gate-plan-status'}));
+ function hitGate(p){
+  const width=Number(gateWidth.value);
+  if(width<1.5||width>16||!Number.isFinite(width))return null;
+  const g=fitGate3D({loops,thickness:Number(thickness.value)},p,width,Math.min(1.5,10/s));
+  if(!g||gates.some(a=>Math.hypot(a.x-g.x,a.z-g.z)<(a.width+width)/2+.25))return null;
+  return g;
+ }
+ function gateClick(p){
+  if(mode==='ungate'){
+   const g=gates.find(g=>Math.hypot(g.x-p[0],g.z-p[1])<Math.max(.8,g.width/2));
+   if(g){record();gates=gates.filter(a=>a!==g);draw();}
+   return;
+  }
+  const g=hitGate(p);
+  if(!g){
+   const gate=gates.find(a=>Math.hypot(a.x-p[0],a.z-p[1])<Math.min(1.25,8/s));
+   if(gate){record();gates=gates.map(a=>a===gate?{...a,to:gateDest.value||null}:a);draw();toast('Đã cập nhật màn đích của cổng.');}
+   else toast('Chọn cạnh thẳng, đủ dài và cách cổng hiện có.');
+   return;
+  }
+  record();gates=[...gates,{...g,id:crypto.randomUUID(),to:gateDest.value||null}];gatePreview=null;draw();
+ }
+
  const userAngle=el('input',{type:'number',value:15,step:1,'aria-label':'Góc xoay tùy chọn',class:'outline-num'});
  const editShape=el('details',{open:true},el('summary',{},'Chỉnh hình đã chọn'),
   el('p',{class:'hint'},'Bấm mép để chọn hình. Di chuyển, xoay và đổi cỡ giữ cả lỗ bên trong.'),
@@ -393,8 +467,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  undoButton=B('Hoàn tác',()=>travel(undo,redo));redoButton=B('Làm lại',()=>travel(redo,undo));
  const setup=el('div',{class:'row outline-setup'},el('label',{},'Cách đặt ',operation),el('label',{},snap,' Bám 1 ô'),
   undoButton,redoButton,B('Khôi phục lúc mở',()=>{
-   record();loops=copy(original);stamps=[];W=map.w;H=map.h;origin=[0,0];levelDraft=null;
-   front.value=map.cfg.outline?.front??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=map.cfg.outline?.rear??DEFAULT_OUTLINE_WALL_HEIGHT;thickness.value=map.cfg.outline?.thickness??WALL_THICKNESS;collision.checked=true;
+   record();loops=copy(original);stamps=[];gates=structuredClone(map.cfg.outline?.gates||[]);W=map.w;H=map.h;origin=[0,0];levelDraft=null;
+   front.value=map.cfg.outline?.front??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=map.cfg.outline?.rear??DEFAULT_OUTLINE_WALL_HEIGHT;thickness.value=map.cfg.outline?.thickness??WALL_THICKNESS;collision.checked=map.cfg.outline?.floorCollision!==false;
    resetGridView();picked=-1;select('select');
   }));
  const presets=el('select',{'aria-label':'Cỡ lưới nhanh'},el('option',{value:''},'Cỡ nhanh'),
@@ -453,8 +527,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   patterns);
  function loadLevel(level){
   if(!level||commitBusy)return;
-  record();levelDraft=level;loops=copy(level.loops);stamps=[];W=level.w;H=level.h;origin=[0,0];
-  front.value=level.sample?.cfg.outline.front??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=level.sample?.cfg.outline.rear??DEFAULT_OUTLINE_WALL_HEIGHT;thickness.value=level.sample?.cfg.outline.thickness??WALL_THICKNESS;collision.checked=true;
+  record();levelDraft=level;loops=copy(level.loops);stamps=[];gates=[];W=level.w;H=level.h;origin=[0,0];
+  front.value=level.sample?.cfg.outline.front??level.height??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=level.sample?.cfg.outline.rear??level.height??DEFAULT_OUTLINE_WALL_HEIGHT;thickness.value=level.sample?.cfg.outline.thickness??WALL_THICKNESS;collision.checked=true;
   resetGridView();picked=-1;select('select');
  }
  const levelHint=el('p',{class:'hint'},'Bấm một màn để xem bố cục, chơi thử hoặc tạo bản sao.');
@@ -472,7 +546,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   ctx.beginPath();
   for(const loop of level.loops){ctx.moveTo(...project(loop[0]));for(const pt of loop.slice(1))ctx.lineTo(...project(pt));ctx.closePath();}
   const colors={'Hầm ngục':'#7f9aa7','Sân và thành':'#8baa8f','Cầu và lối đi':'#b69978','Bố cục phức tạp':'#85b2a7'};
-  ctx.fillStyle=colors[level.group];ctx.fill('evenodd');ctx.strokeStyle='#d4dedc';ctx.stroke();
+  ctx.fillStyle=level.color||colors[level.group];ctx.fill('evenodd');ctx.strokeStyle='#d4dedc';ctx.stroke();
   for(const [p,color] of [[level.start,'#b0f2bc'],[level.goal,'#ffcc7b']]){
    ctx.beginPath();ctx.arc(...project(p),2.3,0,2*Math.PI);ctx.fillStyle=color;ctx.fill();
   }
@@ -493,7 +567,10 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  setTab(initialTab);
  footer.append(el('label',{},'Tường trước ',front),el('label',{},'Tường sau ',rear),el('label',{},'Độ dày tường bao ',thickness,' ô'),el('label',{},collision,' Cập nhật vùng chặn'));
  const buttons=el('div',{class:'row outline-actions'});
- const outlineData=()=>({loops:copy(loops),front:+front.value,rear:+rear.value,thickness:+thickness.value});
+ const outlineData=()=>({loops:copy(loops),front:+front.value,rear:+rear.value,thickness:+thickness.value,
+  areas:((levelDraft?levelDraft.areas:map.cfg.outline?.areas)||[]).map(([n,x,y])=>[n,x-origin[0],y-origin[1]]),
+  color:levelDraft?.color||map.cfg.outline?.color,
+  ...(is3D?{gates:copy(gates),floorCollision:collision.checked}:{})});
  async function runAction(action,close){
   if(commitBusy||!readGrid())return;
   commitBusy=true;
@@ -518,12 +595,12 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const scan=scanContents();if(!scan)return;
   const pts=scan.loops.flat(),xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
   const dx=2-Math.floor(Math.min(...xs)),dy=2-Math.floor(Math.min(...ys));
-  const w=Math.min(MAX_MAP_SIDE,Math.ceil(Math.max(...xs))+dx+2);
-  const h=Math.min(MAX_MAP_SIDE,Math.ceil(Math.max(...ys))+dy+2);
+  const w=Math.max(minSide,Math.min(maxSide,Math.ceil(Math.max(...xs))+dx+2));
+  const h=Math.max(minSide,Math.min(maxSide,Math.ceil(Math.max(...ys))+dy+2));
   const placed=moveOutline(scan.loops,dx,dy,w,h);
   const actualX=placed[0][0][0]-scan.loops[0][0][0],actualY=placed[0][0][1]-scan.loops[0][0][1];
   const stamp=placeOutlineTiles(scan.cells,placed,{x:0,y:0,dx:actualX,dy:actualY,c:1,s:0},w,h,v=>v);
-  return runAction(()=>editor.newOutlineMap({...outlineData(),loops:placed},w,h,null,[stamp],[0,0],false),true);
+  return runAction(()=>editor.newOutlineMap({...outlineData(),gates:[],loops:placed},w,h,null,[stamp],[0,0],false),true);
  }
  function createDraft(){
   return runAction(async()=>{
@@ -536,16 +613,16 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    const data=await editor.previewOutlineMap(outlineData(),W,H,levelDraft,stamps,origin);
    const back=()=>{ov.hidden=false;ov.style.display='grid';box.focus();};
    ov.hidden=true;ov.style.display='none';
-   try{play2D({...data,escapeExit:true,onExit:back});}
+   try{(is3D?play3D:play2D)({...data,escapeExit:true,onExit:back});}
    catch(e){back();throw e;}
   },false);
  }
  createLabel=B('Tạo màn mới từ hình này',createDraft);
  tryLabel=B('Chơi thử bản nháp',playDraft);
- clearButton=B('Bỏ lớp đường bao',async()=>{if(!map.cfg.outline||!await yes('Bỏ lớp tường và mép cong của màn hiện tại?'))return;editor.clearOutline();ov.remove();});
+ clearButton=B('Bỏ lớp đường bao',async()=>{if(!map.cfg.outline||!await yes('Bỏ tường bao, mép cong và những cổng gắn vào tường bao của màn hiện tại?'))return;if(editor.clearOutline()!==false)ov.remove();});
  buttons.append(applyButton,createLabel,tryLabel,clearButton,B('Đóng',()=>ov.remove()));
- box.append(el('h2',{},'Đường bao bản đồ'),guideBox('outline',appGuides.outline),setup,toolbar,
-  el('div',{class:'outline-layout'},el('div',{},gridSetup,gridNote,viewTools,canvas,status),library),
+ box.append(el('h2',{},(is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ')),guideBox('outline',appGuides.outline),setup,toolbar,
+  el('div',{class:'outline-layout'},el('div',{},gridSetup,gridNote,viewTools,el('div',{class:'outline-canvas-wrap',style:'position:relative'},canvas,aim),status),library),
   editShape,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons);
  ov.append(box);document.body.append(ov);draw();
 }

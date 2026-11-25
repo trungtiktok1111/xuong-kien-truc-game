@@ -1,5 +1,5 @@
 import {toggleShortcutHelp} from './editorHelp.js';
-import {el} from './util.js';
+import {el,toast} from './util.js';
 import {openOutlineEditor} from './outlineEditor.js';
 import {openStudio,runStudio,saveProjectFile} from './studio.js';
 import {$,SELF,guessTile} from './util.js';window.__guess=guessTile;import('./anim.js').then(x=>{window.__fg=x.findGrid;});
@@ -22,16 +22,30 @@ if(G){
 const e2=init2D($('#v2d'),A);window.__e2=e2;let e3=null,cur='2d';
 function go(v){cur=v;$('#v2d').style.display=v==='2d'&&$('#xuong-startup')?.hidden!==false?'flex':'none';$('#v3d').style.display=v==='3d'?'flex':'none';
   document.querySelectorAll('.tabbtn[data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
-  if(v==='3d'){if(!e3)e3=init3D($('#v3d'));window.__e3=e3;e3.show();}else{e3&&e3.hide();e2.show();}}
+  if(v==='3d'){
+    try{if(!e3)e3=init3D($('#v3d'));window.__e3=e3;e3.show();}
+    catch(e){console.error(e);go('2d');toast('Không mở được chế độ 3D. Hãy kiểm tra WebGL trên trình duyệt.');}
+  }else{e3&&e3.hide();e2.show();}}
 document.querySelectorAll('.tabbtn[data-v]').forEach(b=>b.onclick=()=>go(b.dataset.v));
 $('#playbtn').onclick=()=>{
   if(cur==='2d'){const d=e2.gameData();(async()=>{if(d.cfg&&d.cfg.proj==='angle')await ensureAngle(e2.sheets());playGame({M:d,sheets:e2.sheets(),onExit:()=>{}});})();}
-  else{e3.hide();play3D(Object.assign({onExit:()=>e3.show()},e3.gameData()));}};
+  else{(async()=>{
+    await e3.ready;
+    if(cur!=='3d')return;
+    try{e3.hide();play3D({onExit:()=>e3.show(),...e3.gameData()});}
+    catch(e){e3.show();toast('Không mở được chế độ chơi 3D.');console.error(e);}
+  })();}};
 const gd=k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData();
 $('#chkbtn').onclick=()=>openCheck({kind:cur,getData:gd});
 $('#relbtn').onclick=()=>openRelease({kind:cur,sheets:()=>e2.sheets(),exportMapPNG:e2.exportPNG,getData:k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData()});
-$('#outlinebtn').onclick=()=>{go('2d');if(e2.map())openOutlineEditor(e2);};
-$('#levelbtn').onclick=()=>{go('2d');if(e2.map())openOutlineEditor(e2,'levels');};
+async function openPlan(tab){
+  const editor=cur==='3d'?e3:e2;
+  if(!editor||document.querySelector('.outline-overlay'))return;
+  await editor.ready;
+  if(editor===(cur==='3d'?e3:e2)&&editor.map()&&!document.querySelector('.outline-overlay'))openOutlineEditor(editor,tab);
+}
+$('#outlinebtn').onclick=()=>openPlan('shapes');
+$('#levelbtn').onclick=()=>openPlan('levels');
 $('#studiobtn').onclick=()=>{go('2d');if(e2.map())openStudio(e2);};
 function shortcutHelp(){toggleShortcutHelp($(cur==='2d'?'#pn2':'#pn3'));}
 $('#helpbtn').onclick=shortcutHelp;

@@ -1,4 +1,5 @@
-import {constructionContext,gateIssue,wallIssue} from './constructionRules2d.js';
+import {outlineCollision3D} from './outline3d.js';
+import {constructionContext,gateIssue,wallIssue,isRoof,roofPlacementProblems} from './constructionRules2d.js';
 import {mapCollision} from './mapCollision.js';
 import {guideBox,appGuides} from './editorHelp.js';
 import {zRaster,decoZones} from './zones.js';
@@ -36,11 +37,18 @@ export function check2D(d0){
       const oth=bad(E.filter(e=>e.t==='npc'||e.t==='chest'));out.push(oth.length?R('F6','broken',oth.length+' NPC/rương nằm vùng không tới được'):R('F6','pass','NPC và rương đều tới được'));
     }else out.push(R('F4','not_assessed','Chưa kiểm đường tới đích','cần điểm xuất phát hợp lệ'));
     const onBlk=E.filter(e=>e.t!=='start'&&e.t!=='deco'&&d.blk[cell(e)]);out.push(onBlk.length?R('F7','broken',onBlk.length+' đối tượng nằm trong ô bị chặn'):R('F7','pass','Không đối tượng nào nằm trong ô bị chặn'));
-    out.push(E.some(e=>{const dx=e.placedProp?1:0,x=e.x+dx,y=e.y+dx;return x<0||y<0||x>=W||y>=H;})?R('F8','broken','Có đối tượng nằm ngoài bản đồ'):R('F8','pass','Mọi đối tượng nằm trong bản đồ'));
+    out.push(E.some(e=>{const dx=e.placedProp?1:0,x=e.x+dx,y=e.y+dx;return x<0||y<0||(e.wallId?.startsWith('outline:')?(x>W||y>H):(x>=W||y>=H));})?R('F8','broken','Có đối tượng nằm ngoài bản đồ'):R('F8','pass','Mọi đối tượng nằm trong bản đồ'));
   }
   const gates=E.filter(e=>e.gateAssembly);
   const walls=E.filter(e=>e.wallLine);
-  const context=(walls.length||gates.length)?constructionContext(d0):null;
+  const roofs=E.filter(isRoof);
+  const context=(walls.length||gates.length||roofs.length)?constructionContext(d0):null;
+  if(roofs.length){
+    const bad=roofPlacementProblems(d0,context);
+    out.push(bad.length?R('ROOF','broken',bad.length+'/'+roofs.length+' mái thiếu điểm tựa',
+      bad.slice(0,5).map(e=>(e.name||'Mái')+' · X '+(e.x+1).toFixed(2)+' · Y '+(e.y+1).toFixed(2)).join(' | ')):
+      R('ROOF','pass','Các mái có hai điểm tựa đúng cao độ'));
+  }
   if(walls.length){
     const invalid=walls.filter(e=>wallIssue(e,{...context,objects:context.objects.filter(z=>!context.gates.some(g=>g.wallId===e.id&&g.id===z.deco)),gates:context.gates.filter(g=>g.wallId!==e.id)}));
     out.push(invalid.length?R('WALL','broken',invalid.length+' đoạn tường cần chỉnh','Kiểm tra sàn đỡ và các vùng chặn dọc chân tường.'):
@@ -50,7 +58,7 @@ export function check2D(d0){
     const lost=gates.map(e=>[e,gateIssue(e,context)]).filter(([,issue])=>issue);
     out.push(lost.length?R('GATE','broken',lost.length+'/'+gates.length+' cổng cần chỉnh',
       lost.slice(0,5).map(([e,why])=>(e.name||'Cổng')+' ('+(e.x+1).toFixed(1)+', '+(e.y+1).toFixed(1)+') · '+why).join(' | ')):
-      R('GATE','pass','Tất cả cổng có tường và lối đi hai phía'));
+      R('GATE','pass','Tất cả cổng có tường và lối tiếp cận'));
   }
   logicRows(out,cf,E);
   paramRows(out,cf,['hp','spd','dmg','rng']);
@@ -58,15 +66,16 @@ export function check2D(d0){
 
 // ---------- 3D ----------
 function mk3(d){const V=new Map();for(const [k,s,m,r] of d.voxels||[])V.set(k,{s,m,r});
+  const grid=d.grid||[48,24,48],planAllows=outlineCollision3D(d.cfg?.outline,grid);
   const vox=(x,y,z)=>V.get(x+','+y+','+z);
   function topAt(v,fx,fz){const s=v.s;if(s==='arch')return -1;if(s==='slab')return .5;if(s==='wedge'||s==='stairs'||s==='curve'){const th=v.r*Math.PI/2,lx=fx-.5,lz=fz-.5,c=Math.cos(th),sn=Math.sin(th);const lz2=lx*sn+lz*c;const t=Math.min(1,Math.max(0,.5-lz2));return s==='wedge'?t:s==='curve'?t*t:Math.min(1,Math.floor(t*4)/4+.25);}return SOLID[s]?1:-1;}
-  function ground(x,z,y,step){const cx=Math.floor(x),cz=Math.floor(z);for(let cy=Math.min(23,Math.floor(y+step));cy>=0;cy--){const v=vox(cx,cy,cz);if(!v)continue;const h=topAt(v,x-cx,z-cz);if(h>=0)return cy+h;}return 0;}
-  function okAt(x,z,y,step){const Rr=.25;for(const [a,b] of [[-Rr,-Rr],[Rr,-Rr],[-Rr,Rr],[Rr,Rr],[0,0]]){const px=x+a,pz=z+b,g=ground(px,pz,y,step);if(g>y+step+.01)return false;const y0=Math.max(g,y),cx=Math.floor(px),cz=Math.floor(pz);
+  function ground(x,z,y,step){const cx=Math.floor(x),cz=Math.floor(z);for(let cy=Math.min(grid[1]-1,Math.floor(y+step));cy>=0;cy--){const v=vox(cx,cy,cz);if(!v)continue;const h=topAt(v,x-cx,z-cz);if(h>=0)return cy+h;}return 0;}
+  function okAt(x,z,y,step){const Rr=.25;if(!planAllows(x,z,y,Rr))return false;for(const [a,b] of [[-Rr,-Rr],[Rr,-Rr],[-Rr,Rr],[Rr,Rr],[0,0]]){const px=x+a,pz=z+b,g=ground(px,pz,y,step);if(g>y+step+.01)return false;const y0=Math.max(g,y),cx=Math.floor(px),cz=Math.floor(pz);
     for(let cy=Math.floor(y0+.05);cy<=Math.floor(y0+1.7)&&cy<((d.grid&&d.grid[1])||24);cy++){const v=vox(cx,cy,cz);if(!v)continue;const h=topAt(v,px-cx,pz-cz);if(h>=0&&cy+h>y0+.05)return false;}}return true;}
-  return {ground,okAt,V};}
+  return {ground,okAt,V,grid};}
 // BFS trên lưới 0.5; step=.55 là đi bộ, step=1.2 là có nhảy (nhảy cao = 7.5²/(2·22) ≈ 1.28)
 function reach3(P,sx,sz,sy,step){const seen=new Map(),key=(i,j,h)=>i+','+j+','+h;const gx=Math.round(sx*2),gz=Math.round(sz*2);const q=[[gx,gz,sy]];seen.set(key(gx,gz,Math.round(sy*2)),1);let n=0;
-  while(q.length&&n++<200000){const [i,j,y]=q.pop();for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=i+a,nj=j+b;if(ni<0||nj<0||ni>47||nj>47)continue;const x=ni/2,z=nj/2;if(!P.okAt(x,z,y,step))continue;const g=P.ground(x,z,y,step);if(g>y+step+.01)continue;const k=key(ni,nj,Math.round(g*2));if(seen.has(k))continue;seen.set(k,1);q.push([ni,nj,g]);}}
+  while(q.length&&n++<200000){const [i,j,y]=q.pop();for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]]){const ni=i+a,nj=j+b;if(ni<0||nj<0||ni>=P.grid[0]*2||nj>=P.grid[2]*2)continue;const x=ni/2,z=nj/2;if(!P.okAt(x,z,y,step))continue;const g=P.ground(x,z,y,step);if(g>y+step+.01)continue;const k=key(ni,nj,Math.round(g*2));if(seen.has(k))continue;seen.set(k,1);q.push([ni,nj,g]);}}
   return seen;}
 // có trạng thái đứng được gần đối tượng (cùng cột ±1 ô, chênh cao < dy)
 function near3(seen,e,dy){const ci=Math.round((e.x+.5)*2),cj=Math.round((e.z+.5)*2);for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)for(let h=Math.round((e.y-dy)*2);h<=Math.round((e.y+dy)*2);h++)if(seen.has((ci+a)+','+(cj+b)+','+h))return true;return false;}
@@ -74,7 +83,8 @@ export function check3D(d){
   const out=[],E=d.ents||[],cf=d.cfg||{};
   const st=E.find(e=>e.t==='start'),goals=E.filter(e=>e.t==='goal'),en=E.filter(e=>e.t==='enemy');
   out.push(R('V1','pass' ,(d.voxels||[]).length?('Công trình có '+d.voxels.length+' khối'):'','') );
-  if(!(d.voxels||[]).length){out[0]=R('V1','missing','Chưa dựng khối nào');}
+  if(cf.outline?.loops?.length)out[0]=R('V1','pass','Có mặt bằng Đường Bao 3D');
+  else if(!(d.voxels||[]).length)out[0]=R('V1','missing','Chưa dựng khối nào');
   if(!E.length){out.push(R('F1','not_assessed','Chưa đặt đối tượng nào: game 3D chỉ để dạo quanh','không có dữ liệu để kiểm xuất phát/đích; vào tab 🎯 Đối tượng để đặt'));}
   else{
     out.push(st?R('F1','pass','Có điểm xuất phát'):R('F1','missing','Chưa có 🚩 Xuất phát','người chơi sẽ ở vị trí mặc định'));

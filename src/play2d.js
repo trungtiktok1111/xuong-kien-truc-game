@@ -1,6 +1,7 @@
-import {builtWallFaces} from './wall2d.js';
+import {constructionContext,isRoof,roofBearing} from './constructionRules2d.js';
+import {builtWallFaces,isMapLink,portalAnchor} from './wall2d.js';
 import {gateWalls} from './gate2d.js';
-import {paintedGroups} from './placement2d.js';
+import {paintedPieces,sceneEntityLayer} from './placement2d.js';
 import {tileFoot} from './spriteFoot.js';
 import {mapCollision} from './mapCollision.js';
 import {outline2D,clipOutline,stoneBackdrop,stoneWall,drawFloorCollision} from './outline2d.js';
@@ -13,7 +14,13 @@ import {slab,shore,tile192,mirF} from './isoslab.js';
 import {bakeLayer0,noiseOverlay,paintSlab,drawFog} from './groundfx.js';
 const HERO=88,FOES=[108,109,120,121,122,111,110],TD=2;
 export function play2D(o){
-  const M=o.M,W=M.w,H=M.h,sheets=o.sheets;const CF=Object.assign({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:TD,idx:HERO},win:'auto'},M.cfg||{});const EN=(M.ents||[]).map(e=>e.door?Object.assign({},e,{door:Object.assign({},e.door)}):e),legacy=!EN.length;const VW=CF.view||'rpg',SIDE=VW==='side',ISO=VW==='iso',ANG=ISO&&CF.proj==='angle',DCL=EN.filter(e=>e.t==='deco');
+  const M=o.M,W=M.w,H=M.h,sheets=o.sheets;const CF=Object.assign({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:TD,idx:HERO},win:'auto'},M.cfg||{});const EN=(M.ents||[]).map(e=>e.door?Object.assign({},e,{door:Object.assign({},e.door)}):e),legacy=!EN.length;const VW=CF.view||'rpg',SIDE=VW==='side',ISO=VW==='iso',ANG=ISO&&CF.proj==='angle',decos=EN.filter(e=>e.t==='deco');
+  const build=decos.some(isRoof)?constructionContext(M):null;
+  const DCL=decos.flatMap(e=>{
+    if(!isRoof(e))return [e];
+    const support=roofBearing(e,build);
+    return support?[{...e,roofBase:support.base,roofRise:support.rise}]:[];
+  });
   const ov=el('div',{style:'position:fixed;inset:0;z-index:100;background:#10161d;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden'});
   const cv=document.createElement('canvas');cv.style.cssText='width:100%;height:100%;display:block';ov.append(cv);const cx=cv.getContext('2d');
   const msg=el('div',{style:'position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000a;color:#fff;font:700 26px system-ui;text-align:center'});
@@ -43,6 +50,7 @@ export function play2D(o){
   document.body.append(ov);if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
   const AN=makeAnims(CF,sheets);
   const collision=mapCollision(M);
+  const portalFloor=CF.outline?.loops?.length?mapCollision({...M,cfg:{...CF,outline:{...CF.outline,floorCollision:true}}}).floor:null;
   const ZP=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(EN.filter(e=>!e.door))],DRS=EN.filter(e=>e.t==='deco'&&e.door);let ZS=ZP,ZR=zRaster(ZS,W,H);
   /* cửa hai trạng thái: tìm đường coi cửa là đi qua được (ZP); va chạm thật (ZS) theo trạng thái hiện tại */
   const setDoor=(e,st)=>{const v=e.door.v&&e.door.v[st];if(!v||e.door.st===st)return;e.door.st=st;if(v.tile)e.tile=v.tile;e.col=v.col&&v.col.length?v.col:undefined;rebuildZ();};
@@ -69,8 +77,12 @@ export function play2D(o){
       if(!f)g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,CQ,CQ);else{g.save();g.translate(dx+h2,dy+h2);if(f&4){g.rotate(Math.PI/2);g.scale(1,-1);}if(f&1)g.scale(-1,1);if(f&2)g.scale(1,-1);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-h2,-h2,CQ,CQ);g.restore();}}}if(SM)noiseOverlay(g,W,H,CQ);return c;}
   const base=ISO?null:mk(false),top=ISO?null:mk(true),gnd=ISO?mk(2):null;
   const SL=[];if(ISO){for(const l of [0,1])for(let i=0;i<W*H;i++){const v=M.layers[l][i];if(!v)continue;const t=(v-1)>>3,sid=t>>12,sh=sheets[sid];if(sh&&sh.img&&sh.iso&&!(SMG&&l===0&&bakedOk(v)))SL.push({x:i%W,y:(i/W)|0,sid,idx:t&4095,l,f:(v-1)&7});}SL.sort(ANG?((a,b)=>(a.y-b.y)||(a.x-b.x)||a.l-b.l):((a,b)=>(a.x+a.y)-(b.x+b.y)||a.l-b.l));}
-  const mkG=l=>ISO?paintedGroups(M.layers[l],W,H).map(group=>{
-    const {x0,y0,x1,y1,cells}=group,c=el('canvas',{width:(x1-x0)*CQ,height:(y1-y0)*CQ}),g=c.getContext('2d');
+  const images=new Map();
+  const mkG=l=>ISO?paintedPieces(M.layers[l],W,H).map(group=>{
+    const {x0,y0,cells}=group,value=M.layers[l][cells[0]];
+    const cached=images.get(value);
+    if(cached)return {...group,c:cached,a:1};
+    const c=el('canvas',{width:CQ,height:CQ}),g=c.getContext('2d');
     g.imageSmoothingEnabled=CQ>16;
     for(const i of cells){
       const n=M.layers[l][i]-1,f=n&7,t=n>>3,sh=sheets[t>>12],idx=t&4095;
@@ -82,7 +94,7 @@ export function play2D(o){
       g.scale(f&1?-1:1,f&2?-1:1);
       g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-CQ/2,-CQ/2,CQ,CQ);g.restore();
     }
-    return {...group,c,a:1};
+    images.set(value,c);return {...group,c,a:1};
   }):[];
   const GR=mkG(2),OVG=mkG(3);
   function ico(k,x,y,s){cx.save();cx.translate(x,y);
@@ -107,7 +119,11 @@ export function play2D(o){
     if(!best){best=[0,0];}
     const sp=ENTRY;P={x:sp?sp.x:best[0]+.5,y:sp?sp.y:best[1]+.5,hp:CF.hp,inv:0,face:1,atkT:0,hitT:0};score=0;said=null;
     if(sp&&sp.hp!=null&&!sp.used){P.hp=Math.max(1,Math.min(CF.hp,sp.hp));score=sp.score||0;sp.used=1;}
-    DR=EN.filter(e=>e.t==='door').map(e=>({x:e.x+.5,y:e.y+.5,to:e.to,tx:e.tx,ty:e.ty,armed:Math.hypot(e.x+.5-P.x,e.y+.5-P.y)>.9}));
+    DR=EN.filter(isMapLink).flatMap(e=>{
+      const anchor=portalAnchor(e,(x,y,r)=>portalFloor?.fits(x,y,r)??collision.free(x,y,r));
+      if(!anchor)return [];
+      const [x,y]=anchor;return [{x,y,to:e.to,tx:e.tx,ty:e.ty,gate:e.gateAssembly,gx:e.x+1,gy:e.y+1,armed:Math.hypot(x-P.x,y-P.y)>.9}];
+    });
     items=[];over=0;msg.style.display='none';E=[];NP=[];CH=[];GL=null;HID=new Map();ov.querySelectorAll('.dlgbox').forEach(x=>x.remove());if(L&&L.hud)L.hud.remove();L=createLogic(CF,EN,host,ov);
     if(legacy){
       const seen=new Uint8Array(W*H),q=[best[1]*W+best[0]],reach=[];seen[q[0]]=1;
@@ -255,7 +271,7 @@ export function play2D(o){
     const k=Math.max(2,Math.round(Math.min(w,h)/160)),CEN=camMode?{x:W/2,y:H/2}:P;let s=16*k*zm;if(camMode)s=ANG?Math.min(w*.94/(W*1.5),h*.9/(H*1.5*ANG_R+2.5)):ISO?Math.min(w*.94/((W+H)*.75),h*.8/((W+H)*.375+2.5)):Math.min(w*.94/W,h*.94/H);let ox=w/2-CEN.x*s,oy=h/2-CEN.y*s;
     if(W*s<=w)ox=(w-W*s)/2;else ox=Math.min(0,Math.max(w-W*s,ox));if(H*s<=h)oy=(h-H*s)/2;else oy=Math.min(0,Math.max(h-H*s,oy));
     let pX=()=>0,pY=()=>0;
-    const geo=ISO&&outline2D(CF.outline,ANG);
+    const geo=ISO&&outline2D(CF.outline,ANG,EN);
     if(ANG){const cw=s*1.5,ch=cw*ANG_R,ox0=w/2-CEN.x*cw,oy0=h/2-CEN.y*ch,hw=cw/2;pX=(x,y)=>ox0+x*cw;pY=(x,y)=>oy0+y*ch;VIEW={iso:1,ang:1,ox0,oy0,cw,ch};if(geo){stoneBackdrop(cx,w,h);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
       cx.save();cx.transform(cw/CQ,0,0,ch/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();
       for(const q of SL){const X=pX(q.x,q.y),Y=pY(q.x,q.y);if(X>w||X<-cw||Y>h||Y<-2*cw)continue;const sh=sheets[q.sid];if(sh&&sh.A)tileAng(cx,sh.A,q.idx,X,Y,cw);}
@@ -272,7 +288,9 @@ export function play2D(o){
     const RC=ISO?DCL.filter(d=>!d.flat&&d.zb).map(d=>{const z=d.zb,x0=d.x+1+z[0],y0=d.y+1+z[1];return {x0,y0,x1:x0+z[2],y1:y0+z[3],K:d.x+d.y+2};}):[];
     const kk=(x,y)=>{let k=ANG?y:x+y;if(ANG||!RC.length)return k;for(const r of RC){if(x<r.x0-2||x>r.x1+2||y<r.y0-2||y>r.y1+2)continue;const fr=x>=r.x1||y>=r.y1,bh=x<=r.x0||y<=r.y0;if(fr&&!bh)k=Math.max(k,r.K+.001);else if(bh&&!fr)k=Math.min(k,r.K-.001);}return k;};
     const builtWalls=[...builtWallFaces(DCL,ANG||!ISO),...DCL.flatMap(e=>gateWalls(e,ANG||!ISO))].map(wall=>({wall,k:wall.k,y:(wall.a[1]+wall.b[1])/2}));
-    const ents=[...builtWalls,...(geo?geo.walls.map(wall=>({wall,k:wall.k})):[]),{y:P.y,x:P.x,p:1,k:kk(P.x,P.y)},...E.map(e=>({y:e.y,x:e.x,e,k:kk(e.x,e.y)})),...NP.map(n=>({y:n.y,x:n.x,n,k:kk(n.x,n.y)})),...CH.map(c=>({y:c.y,x:c.x,c,k:kk(c.x,c.y)})),...(GL?[{y:GL.y,x:GL.x,g:GL,k:kk(GL.x,GL.y)}]:[]),...(ISO?GR.map(g=>({y:g.yb,x:g.xc,grp:g})):[]),...DCL.filter(d=>!d.wallLine).map(d=>({y:d.flat?-1e4+d.y:d.y,x:d.flat?-1e4+d.x:d.x+1,dc:d,k:d.placedProp?(ANG?d.y+1:d.x+d.y+2):ANG?(d.flat?-1e4+d.y:depthAng(d)):undefined}))].sort(ISO?((a,b)=>(a.k!=null?a.k:a.x+a.y)-(b.k!=null?b.k:b.x+b.y)):((a,b)=>a.y-b.y));
+    const covers=DCL.filter(d=>d.placedProp&&sceneEntityLayer(d)===3&&isRoof(d));
+    const coverSet=new Set(covers);
+    const ents=[...builtWalls,...(geo?geo.walls.map(wall=>({wall,k:wall.k})):[]),{y:P.y,x:P.x,p:1,k:kk(P.x,P.y)},...E.map(e=>({y:e.y,x:e.x,e,k:kk(e.x,e.y)})),...NP.map(n=>({y:n.y,x:n.x,n,k:kk(n.x,n.y)})),...CH.map(c=>({y:c.y,x:c.x,c,k:kk(c.x,c.y)})),...(GL?[{y:GL.y,x:GL.x,g:GL,k:kk(GL.x,GL.y)}]:[]),...(ISO?GR.map(g=>({y:g.yb,x:g.xc,grp:g})):[]),...DCL.filter(d=>!d.wallLine&&!coverSet.has(d)).map(d=>({y:d.flat?-1e4+d.y:d.y,x:d.flat?-1e4+d.x:d.x+1,dc:d,k:d.placedProp?(ANG?d.y+1:d.x+d.y+2):ANG?(d.flat?-1e4+d.y:depthAng(d)):undefined}))].sort(ISO?((a,b)=>(a.k!=null?a.k:a.x+a.y)-(b.k!=null?b.k:b.x+b.y)):((a,b)=>a.y-b.y));
     const ox1=ox,oy1=oy,TC=[];
     const grounded=!!geo;
     function actorShadow(q){
@@ -294,8 +312,15 @@ export function play2D(o){
       else{const e=n.e;cx.globalAlpha=e.fl>0?.5:1;if(!(e.anim&&AN.drawChar(cx,e,e.anim,ox+e.x*s,oy+e.y*s,s,t,{iso:ISO,ang:ANG,grounded,pk:q.pkT>0,hit:e.fl>0,atk:Math.hypot(P.x-e.x,P.y-e.y)<.8})))fbk(e,ox+(e.x-.5)*s,actorTop(e,e.tl.sid,e.tl.idx),s,e.x<P.x);cx.globalAlpha=1;cx.fillStyle='#000a';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7,3);cx.fillStyle='#e74c3c';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7*Math.max(0,e.hp)/e.mhp,3);}}
     for(const q of TC){const d=q.d,zb=d.zb||[-(d.fx||1),-(d.fy||1),d.fx||1,d.fy||1],x0=d.x+1+zb[0]-.7,y0=d.y+1+zb[1]-.7,ins=P.x>x0&&P.x<x0+zb[2]+1.4&&P.y>y0&&P.y<y0+zb[3]+1.4;d._a=(d._a==null?1:d._a)+((ins?.3:1)-(d._a==null?1:d._a))*.2;const sh=sheets[d.cv.sid];if(!sh||!sh.img)continue;const sx=(d.cv.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(d.cv.idx/sh.cols)*(sh.tw+sh.margin);cx.globalAlpha=d._a;cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,q.X-q.ws/2+(d.ox||0)*q.ws,q.Y-q.ws+(d.oy||0)*q.ws,q.ws,q.ws);cx.globalAlpha=1;}
     if(ISO)for(const g of OVG){const ins=P.x>g.x0-.4&&P.x<g.x1+.4&&P.y>g.y0-.4&&P.y<g.y1+.4;g.a+=((ins?.35:1)-g.a)*.18;const k2=s*.95/CQ,wp=g.c.width*k2,hp=g.c.height*k2;cx.globalAlpha=g.a;cx.drawImage(g.c,pX(g.xc,g.yb)-wp/2,pY(g.xc,g.yb)-hp,wp,hp);cx.globalAlpha=1;}
+    for(const d of covers){
+      const project=ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s];
+      const inside=Math.max(Math.abs(P.x-d.x-1),Math.abs(P.y-d.y-1))<d.sc/.95/2+.2;
+      cx.globalAlpha=inside?.4:1;
+      drawPlacedProp(cx,d,sheets[d.tile.sid],placedPropFrame(d,project,s,ANG?'angle':ISO?'iso':'top'));
+    }
+    cx.globalAlpha=1;
     if(ISO&&FOG)drawFog(cx,w,h,FOG,t,(P.x-P.y)*s*.75,(P.x+P.y)*s*.375);
-    ox=ox1;oy=oy1;for(const d of DR){if(ISO){ox=pX(d.x,d.y)-d.x*s;oy=pY(d.x,d.y)-d.y*s;}cx.font=(s*.8)+'px serif';cx.textAlign='center';ico('door',ox+d.x*s,oy+d.y*s,s*1.2);}
+    ox=ox1;oy=oy1;for(const d of DR){if(d.gate)continue;if(ISO){ox=pX(d.x,d.y)-d.x*s;oy=pY(d.x,d.y)-d.y*s;}cx.font=(s*.8)+'px serif';cx.textAlign='center';ico('door',ox+d.x*s,oy+d.y*s,s*1.2);}
     if(!ISO)cx.drawImage(top,ox,oy,W*s,H*s);
     if(window.__dbg){window.__P=P;window.__Z=ZS;}
     if(dbgMode||window.__dbg){cx.save();const Tq=ISO?((x,y)=>[pX(x,y),pY(x,y)]):((x,y)=>[ox1+x*s,oy1+y*s]);
@@ -330,7 +355,10 @@ export function play2D(o){
   addEventListener('keydown',kd);addEventListener('keyup',ku);
   atk.addEventListener('pointerdown',e=>{e.stopPropagation();e.preventDefault();attack();});
   let clk=null;cv.addEventListener('pointerdown',e=>{clk={x:e.clientX,y:e.clientY,t:performance.now(),id:e.pointerId};},true);
-  cv.addEventListener('pointerup',e=>{if(!clk||e.pointerId!==clk.id)return;const c=clk;clk=null;if(SIDE||Math.hypot(e.clientX-c.x,e.clientY-c.y)>10||performance.now()-c.t>400)return;const q=toPlane(e.clientX,e.clientY);if(q)goTo(q.x,q.y);},true);
+  cv.addEventListener('pointerup',e=>{if(!clk||e.pointerId!==clk.id)return;const c=clk;clk=null;if(SIDE||Math.hypot(e.clientX-c.x,e.clientY-c.y)>10||performance.now()-c.t>400)return;const q=toPlane(e.clientX,e.clientY);if(q){
+    const gate=o.onDoor&&DR.find(d=>d.gate&&Math.hypot(d.gx-q.x,d.gy-q.y)<.85);
+    if(gate)goTo(gate.x,gate.y);else goTo(q.x,q.y);
+  }},true);
   cv.addEventListener('pointerdown',e=>{if(stick||e.clientX>innerWidth*.62)return;cv.setPointerCapture(e.pointerId);stick={id:e.pointerId,ox:e.clientX,oy:e.clientY,x:0,y:0};});
   cv.addEventListener('pointermove',e=>{if(!stick||e.pointerId!==stick.id)return;let dx=e.clientX-stick.ox,dy=e.clientY-stick.oy;const d=Math.hypot(dx,dy),mx=44;if(d>mx){dx*=mx/d;dy*=mx/d;}stick.x=dx/mx;stick.y=dy/mx;});
   const up=e=>{if(stick&&e.pointerId===stick.id)stick=null;};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);

@@ -7,27 +7,30 @@ const complex = /cửa|door|gate|arch|cổng|bậc|stairs|stair|ramp|cầu|bridg
 const round = /cây|tree|cột|column|pillar|đèn|lamp|barrel|thùng tròn|bình|urn/i;
 const thin = /tường|wall|fence|hàng rào|rail/i;
 
-export function paintedGroups(layer, width, height) {
-  const visited = new Uint8Array(width * height), result = [];
-  if (!layer) return result;
-  for (let i = 0; i < visited.length; i++) {
-    if (!layer[i] || visited[i]) continue;
-    let x0 = width, y0 = height, x1 = 0, y1 = 0;
-    const cells = [i];
-    visited[i] = 1;
-    for (let j = 0; j < cells.length; j++) {
-      const n = cells[j], x = n % width, y = Math.floor(n / width);
-      x0 = Math.min(x0,x); y0 = Math.min(y0,y);
-      x1 = Math.max(x1,x+1); y1 = Math.max(y1,y+1);
-      for (const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]) {
-        const nx=x+dx, ny=y+dy, next=ny*width+nx;
-        if (nx<0 || nx>=width || ny<0 || ny>=height || !layer[next] || visited[next]) continue;
-        visited[next]=1;cells.push(next);
-      }
-    }
-    result.push({cells,x0,y0,x1,y1,xc:(x0+x1)/2,yb:y1});
+// A painted tile has a fixed anchor. Adjacent tiles may overlap visually without sharing an anchor.
+export function paintedPieces(layer, width, height) {
+  const result=[];
+  if(!layer)return result;
+  for(let i=0;i<width*height;i++){
+    if(!layer[i])continue;
+    const x=i%width,y=Math.floor(i/width);
+    result.push({cells:[i],x0:x,y0:y,x1:x+1,y1:y+1,xc:x+.5,yb:y+1});
   }
   return result;
+}
+
+export function sceneEntityLayer(entity) {
+  if(entity.t!=='deco')return 5;
+  if(entity.wallLine)return 2;
+  if(entity.sceneLayer===3||entity.wallId||entity.gateAssembly||entity.door)return 3;
+  return entity.flat?1:2;
+}
+
+export function roofTextureDirection(name, rectangular) {
+  if(!rectangular)return null;
+  const match=String(name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .match(/(?:^|[^a-z])(?:roof|mai[-_ ]?(?:nha|che|ngoi)?)(?:[-_ ]?([nesw]))?(?=$|[^a-z])/i);
+  return match?(match[1]?.toUpperCase()||'E'):null;
 }
 
 export function paintFamily(name, type, behavior) {
@@ -83,7 +86,7 @@ export function automaticPaintZones(map, lookup, groups) {
   if (map.cfg?.autoObjectCollision===false) return [];
   const layer=map.layers?.[2];
   const result=[];
-  for (const group of groups || paintedGroups(layer,map.w,map.h)) for (const i of group.cells) {
+  for (const group of groups || paintedPieces(layer,map.w,map.h)) for (const i of group.cells) {
     const profile=lookup(layer[i]);
     if (!profile) continue;
     const parts=Array.isArray(profile)?profile:[profile];
@@ -155,6 +158,7 @@ export function resizeProp(e,factor){
 
 // The alternate facing of an upright 2D sprite is its mirrored frame.
 export function turnProp(e){
+  if(e.roofDirection){const turns={E:'N',N:'W',W:'S',S:'E'};e.roofDirection=turns[e.roofDirection]||'E';return;}
   const iso=e.propProjection==='iso';
   const flip=([x,y])=>iso?[y,x]:[-x,y];
   e.spriteFlip=(e.spriteFlip||0)^1;

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {automaticPaintZones,daXoayArchProfiles,estimateContact,indexPaintZones,makePaintProfile,paintedGroups,paintFamily,propContact,resizeProp} from '../src/placement2d.js';
+import {automaticPaintZones,daXoayArchProfiles,estimateContact,indexPaintZones,makePaintProfile,paintedPieces,paintFamily,propContact,resizeProp,roofTextureDirection,sceneEntityLayer,turnProp} from '../src/placement2d.js';
+import {drawPlacedProp,placedPropBounds,placedPropFrame} from '../src/proj.js';
 import {mapCollision} from '../src/mapCollision.js';
 
 test('painted props choose foot profile by role and keep open or unknown multipart assets clear',()=>{
@@ -24,8 +25,8 @@ test('sprite contact ignores faint shadows and follows flips from the displayed 
 test('derived geometry is fractional, reused by runtime and removable with the painted image',()=>{
   const layer=Array(36).fill(0);layer[14]=8;layer[15]=16;
   const map={w:6,h:6,blk:Array(36).fill(0),cfg:{view:'iso'},layers:[[],[],layer,[]]};
-  const groups=paintedGroups(layer,6,6);
-  assert.equal(groups.length,1);
+  const groups=paintedPieces(layer,6,6);
+  assert.equal(groups.length,2);
   const profile=makePaintProfile('round',{u:.5,v:1,width:.2});
   const zones=automaticPaintZones(map,v=>v===8?profile:null,groups);
   assert.equal(zones.length,1);
@@ -95,4 +96,52 @@ test('freely placed arches keep their contact pixels aligned with both posts whe
     assert.ok(Math.hypot(c.x,c.y)>c.r);
   }
   assert.deepEqual([e.x,e.y,e.sizeBase],[5.25,8.625,3.4]);
+});
+
+test('placing or erasing a neighboring tile preserves the earlier anchor and footprint',()=>{
+  const layer=Array(36).fill(0);
+  const map={w:6,h:6,cfg:{view:'iso'},layers:[[],[],layer,[]]};
+  const profile=makePaintProfile('solid',{u:.5,v:1,width:.3});
+  layer[14]=8;
+  const before=paintedPieces(layer,6,6).find(p=>p.cells[0]===14);
+  const [foot]=automaticPaintZones(map,()=>profile);
+  layer[13]=layer[15]=layer[20]=8;
+  assert.deepEqual(paintedPieces(layer,6,6).find(p=>p.cells[0]===14),before);
+  assert.deepEqual(automaticPaintZones(map,()=>profile).find(z=>z.id==='painted:14'),foot);
+  layer[15]=0;
+  assert.deepEqual(automaticPaintZones(map,()=>profile).find(z=>z.id==='painted:14'),foot);
+});
+
+test('deletion groups distinguish roofs, mounted gates, field objects and actors',()=>{
+  const fixtures=[
+    [{t:'deco',flat:true},1],
+    [{t:'deco',placedProp:true},2],
+    [{t:'deco',wallLine:{dx:1,dy:0}},2],
+    [{t:'deco',sceneLayer:3},3],
+    [{t:'deco',wallId:'outline:0:0'},3],
+    [{t:'door'},5],
+    [{t:'npc'},5],
+    [{t:'chest'},5]
+  ];
+  for(const [item,group] of fixtures)assert.equal(sceneEntityLayer(item),group);
+});
+
+test('roof textures use a sloped, elevated surface and cycle facing without moving the anchor',()=>{
+  assert.equal(roofTextureDirection('roof_E-1.png',true),'E');
+  assert.equal(roofTextureDirection('roof_E-1.png',false),null);
+  assert.equal(roofTextureDirection('floor_1.png',true),null);
+  const e={x:3,y:4,sc:.95,tile:{idx:0},roofDirection:'E',spriteBounds:[.2,.1,.8,.9]};
+  const project=(x,y)=>[20*(x-y),10*(x+y)];
+  const frame=placedPropFrame(e,project,20/.75,'iso');
+  assert.ok(frame.roof);
+  const [a,b,c]=frame.roof;
+  assert.notEqual(b[1]-a[1],c[1]-a[1]);
+  assert.ok(placedPropBounds(frame,e.spriteBounds)[3]<project(4,5)[1]);
+  assert.equal(placedPropFrame(e,project,20,'top').roof,undefined);
+  const calls=[];
+  const ctx={save(){},restore(){},transform(...args){calls.push(args);},drawImage(...args){calls.push(args.slice(1));}};
+  drawPlacedProp(ctx,e,{img:{},tw:100,cols:1},frame);
+  assert.deepEqual(calls[1].map(n=>Math.round(n)),[20,10,60,80,0,0,1,1]);
+  for(const facing of ['N','W','S','E']){turnProp(e);assert.equal(e.roofDirection,facing);}
+  assert.deepEqual([e.x,e.y],[3,4]);
 });

@@ -101,3 +101,26 @@ test('wall thickness is saved in footprint collisions and rejects a pinched gate
  m.ents=[thick];
  assert.match(gateIssue(mountGate(arch(),[thick]),constructionContext(m)),/thông thoáng/);
 });
+
+import {outlineSupports,isMapLink,portalAnchor} from '../src/wall2d.js';
+import {outline2D} from '../src/outline2d.js';
+
+test('boundary gate joins subdivided straight sides, makes a rendering gap and links from inside the floor',()=>{
+ const m=map(),outline={loops:[[[1,1],[1,4],[1,8],[1,12],[14,12],[14,1]]],floorCollision:true};
+ m.cfg.outline=outline;
+ const supports=outlineSupports(outline);
+ assert.equal(supports.length,4);
+ const gate=mountGate({...arch(1.12,7),to:1},supports);
+ assert.ok(gate.wallId.startsWith('outline:'));
+ assert.equal(gate.x+1,1);
+ m.ents=[gate];
+ const ctx=constructionContext(m);
+ assert.equal(gateIssue(gate,ctx),'');
+ assert.ok(isMapLink(gate));
+ const [x,y]=portalAnchor(gate,ctx.floor);
+ assert.ok(x>1&&ctx.floor(x,y,.32));
+ assert.equal(isMapLink({...gate,to:null}),false);
+ assert.ok(outline2D(outline).walls.some(w=>w.a[0]===1&&w.a[1]<=7&&w.b[1]>=7));
+ assert.ok(!outline2D(outline,false,[gate]).walls.some(w=>w.a[0]===1&&w.a[1]<=7&&w.b[1]>=7));
+ assert.equal(mountGate(arch(1,1.02),supports),null);
+});
