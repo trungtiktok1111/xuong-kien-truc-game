@@ -1,4 +1,4 @@
-import {actorFootprint,actorHeights,bodyHeight,fitsUnderRoof,lowestCeiling,roofPlane} from './headroom2d.js';
+import {actorFootprint,actorHeights,bodyHeight,fitsUnderRoof,lowestCeiling,roofPlane,roofBlockedFootprint} from './headroom2d.js';
 import {constructionContext,isRoof,roofBearing,headroomIssue} from './constructionRules2d.js';
 import {builtWallFaces,isMapLink,portalAnchor} from './wall2d.js';
 import {gateWalls} from './gate2d.js';
@@ -371,6 +371,16 @@ export function play2D(o){
         cx.strokeStyle=q.estimated===false?'#ff8a8a':'#ffbd69';
         zPath(cx,q,Tq);cx.fill();cx.stroke();
       }
+      cx.save();if(collision.floor)clipOutline(cx,collision.floor,Tq);
+      cx.fillStyle='rgba(255,64,64,.45)';cx.strokeStyle='#ff9792';
+      for(const roof of ceilings){
+        const blocked=roofBlockedFootprint(roof,postureHeight(P),.28);
+        if(!blocked)continue;
+        const [l,t,r,b]=blocked;
+        cx.beginPath();for(const q of [[l,t],[r,t],[r,b],[l,b]])cx.lineTo(...Tq(...q));
+        cx.closePath();cx.fill();cx.stroke();
+      }
+      cx.restore();
       cx.restore();}
     if(showGrid||showReach){const TQ=ISO?((x,y)=>[pX(x,y),pY(x,y)]):((x,y)=>[ox1+x*s,oy1+y*s]);cx.save();
       if(showReach&&REACH){cx.save();if(collision.floor)clipOutline(cx,collision.floor,TQ);for(let i=0;i<W*H;i++){const f=REACH[i],fl=M.layers[0][i];if(!f&&!fl)continue;const x=i%W,y=(i/W)|0;cx.fillStyle=f?'rgba(60,220,110,'+(.16+.26*f)+')':'rgba(255,150,40,.3)';cx.beginPath();for(const [a,b] of [[x,y],[x+1,y],[x+1,y+1],[x,y+1]]){const q=TQ(a,b);cx.lineTo(q[0],q[1]);}cx.closePath();cx.fill();}cx.restore();}

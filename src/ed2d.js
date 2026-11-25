@@ -1,4 +1,5 @@
-import {actorHeights,bodyHeight,roofPlane} from './headroom2d.js';
+import {alignmentGuides,measureJoin,roofHeightAt,seamHeightDifference,JOIN_EPSILON} from './pieceAlignment.js';
+import {actorHeights,bodyHeight,bodyFootprint,roofPlane} from './headroom2d.js';
 import {usedGridBounds,rebaseOutlineSource} from './outlineGrid.js';
 import {builtWallFaces,mountGate,outlineSupports,isMapLink,projectSegment,wallThickness,WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS} from './wall2d.js';
 import {gateWalls,gateZones} from './gate2d.js';
@@ -961,6 +962,7 @@ export function init2D(root,A){
     }
     return cards;
   }
+  let snapPieces=false;
   const propSizes=new Map(),propTurns=new Map(),propAnchorIds=new Map();
   let propCache=null,ruleContext=null;
   function gateKind(value){
@@ -1064,11 +1066,85 @@ export function init2D(root,A){
       if(best>snapTolerance){piece=at?{...probe,...at}:null;support=null;}
     }
     if(!piece)return null;
+    let alignment=pieceAlignment(piece,support);
+    if(snapPieces&&!p.free&&alignment?.guides.some(g=>Math.abs(g.delta)>1e-6)){
+      const next={...piece};
+      for(const guide of alignment.guides)next[guide.axis?'y':'x']+=guide.delta;
+      const bearing=roof?roofBearing(next,ctx):null;
+      if(inb(next.x+1,next.y+1)&&(!roof||bearing)&&!constructionIssue(next)){
+        piece=next;support=bearing;alignment=pieceAlignment(piece,support);
+      }
+    }
     const stacked=M.ents.some(e=>e.placedProp&&!e.wallLine&&sceneEntityLayer(e)===sceneEntityLayer(piece)&&
       Math.hypot(e.x-piece.x,e.y-piece.y)<.035&&e.roofDirection===piece.roofDirection);
     const issue=stacked?'Vị trí này đã có mảnh cùng lớp. Dời điểm đặt hoặc xóa mảnh cũ.':
       roof&&!support?roofIssue:constructionIssue(piece);
-    return {piece,support,issue};
+    return {piece,support,issue,alignment};
+  }
+  function pieceAlignment(piece,support){
+    const roof=isRoof(piece),tolerance=Math.min(.5,9/Math.max(1,CELL*view.z));
+    const plane=roof?roofPlane(piece,support||{base:piece.roofDirection?piece.sc:0,rise:piece.roofDirection ? .64*piece.sc : 0}):null;
+    const bounds=plane?.bounds||bodyFootprint(piece);
+    let best=null;
+    const pieces=[...M.ents,...(roof&&ISOQ()?isoBuild().legacyRoofs:[])];
+    for(const ref of pieces){
+      if(!ref.placedProp||ref.wallLine||ref.gateAssembly||isRoof(ref)!==roof||!vis[sceneEntityLayer(ref)])continue;
+      const bearing=roof?roofBearing(ref,ruleCtx()):null;
+      if(roof&&!bearing)continue;
+      const refPlane=bearing?roofPlane(ref,bearing):null,other=refPlane?.bounds||bodyFootprint(ref);
+      const join=measureJoin(bounds,other);
+      if(join.distance>tolerance*3)continue;
+      const score=join.kind==='overlap'?-Math.min(...join.overlap):join.distance;
+      if(best&&best.score<=score)continue;
+      const guides=alignmentGuides(bounds,other,tolerance);
+      const height=plane&&support&&refPlane&&join.kind!=='gap'?seamHeightDifference(plane,refPlane):0;
+      best={plane,refPlane,bounds,other,join,guides,height,score};
+    }
+    return best;
+  }
+  function alignmentLabel(a){
+    if(!a)return '';
+    const z=a.height>JOIN_EPSILON?' · Lệch Z '+coord.format(a.height)+' ô':'';
+    const {kind,overlap,distance}=a.join;
+    if(kind==='overlap')return 'Chồng mép '+overlap.map(v=>coord.format(v)).join(' × ')+' ô'+z;
+    if(kind==='edge')return 'Chạm mép'+z;
+    if(kind==='corner')return 'Chạm góc'+z;
+    return (a.guides.some(g=>Math.abs(g.delta)<=JOIN_EPSILON)?'Thẳng hàng · ':'')+'Hở '+coord.format(distance)+' ô';
+  }
+  function drawPieceAlignment(a){
+    if(!a)return;
+    const scale=ISOQ()?CELL*view.z:0;
+    const project=(x,y,plane)=>{
+      const p=g2s(x,y);
+      return [p[0],p[1]-(plane?scale*roofHeightAt(plane,x,y):0)];
+    };
+    const path=([l,t,r,b],plane)=>{
+      cx.beginPath();
+      cx.moveTo(...project(l,t,plane));
+      for(const [x,y] of [[r,t],[r,b],[l,b]])cx.lineTo(...project(x,y,plane));
+      cx.closePath();
+    };
+    const {kind}=a.join,overlap=kind==='overlap';
+    const color=overlap||a.height>JOIN_EPSILON?'#ff917f':kind==='gap'?'#80cdff':'#72efbf';
+    cx.save();cx.strokeStyle=color;cx.lineWidth=1.6;
+    path(a.other,a.refPlane);cx.stroke();
+    const intersection=a.bounds.map((v,i)=>i<2?Math.max(v,a.other[i]):Math.min(v,a.other[i]));
+    if(overlap){
+      path(intersection,a.plane);cx.fillStyle='#ff766658';cx.fill();cx.stroke();
+    }else if(kind==='edge'||kind==='corner'){
+      const [l,t,r,b]=intersection;
+      const start=project(l,t,a.refPlane),end=project(r,b,a.refPlane);
+      cx.lineWidth=3;cx.beginPath();cx.moveTo(...start);cx.lineTo(...end);cx.stroke();
+      if(kind==='corner'){cx.fillStyle=color;cx.beginPath();cx.arc(...start,4,0,Math.PI*2);cx.fill();}
+    }
+    cx.setLineDash([5,4]);cx.strokeStyle='#8edbff';
+    for(const guide of a.guides){
+      const i=guide.axis,j=1-i;
+      const lo=Math.min(a.bounds[j],a.other[j])-.45,hi=Math.max(a.bounds[j+2],a.other[j+2])+.45;
+      const pts=i?[[lo,guide.value],[hi,guide.value]]:[[guide.value,lo],[guide.value,hi]];
+      cx.beginPath();cx.moveTo(...project(...pts[0],a.refPlane));cx.lineTo(...project(...pts[1],a.refPlane));cx.stroke();
+    }
+    cx.restore();
   }
   function nearbyBearingHeights(ctx,p){
     const scale=CELL*view.z,reach=Math.max(scale*5,36);
@@ -1190,13 +1266,15 @@ export function init2D(root,A){
     }
     const title=(name?name+' · ':'')+anchorTitle+' · '+location;
     if(aimTitle.textContent!==title)aimTitle.textContent=title;
-    if(aimHint.textContent!==line)aimHint.textContent=line;
+    const relation=alignmentLabel(target?.alignment),hint=[relation,line].filter(Boolean).join(' · ');
+    if(aimHint.textContent!==hint)aimHint.textContent=hint;
     aimHud.dataset.state=issue?'invalid':aim.join?'joined':'ready';
     aimHud.hidden=false;
     if(!wallTool&&!target&&!['draw','rect','fill','paste'].includes(tool))return;
     const color=issue?'#ff8a88':aim.join?'#6aefc9':'#ffd66d';
     if(target&&!mounting){
       const frame=propDisplayFrame(target.piece,target.support);
+      drawPieceAlignment(target.alignment);
       cx.save();
       for(const a of anchorChoices(target.piece,frame)){
         const selected=a.id===anchorOrigin(target.piece);
@@ -1513,6 +1591,9 @@ export function init2D(root,A){
         el('div',{class:'row'},el('button',{class:'b',type:'button','data-prop-turn':'','aria-pressed':String(propTurns.has(current)),
           onclick:()=>{transformProp('turn');cv.focus({preventScroll:true});}},'Đổi hướng · T')),
         anchorMode(prop)==='gate'?null:anchorPicker(prop,current),
+        anchorMode(prop)==='gate'?null:el('label',{class:'row'},el('input',{
+          type:'checkbox',...(snapPieces?{checked:''}:{}),onchange:e=>{snapPieces=e.target.checked;dirty=true;}
+        }),'Bám mép / góc'),
         el('div',{class:'hint','data-placement-rule':note,role:'status'},note));
     }
     const ids=visibleBuildSheets(layer),groups=new Map();

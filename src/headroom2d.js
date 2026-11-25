@@ -82,3 +82,21 @@ export function wallCeiling(roofs,e){
   }
   return ceiling;
 }
+
+// Region where the player's centre is blocked, using the same footprint and
+// headroom allowance as movement. A sloped roof can block just its low end.
+export function roofBlockedFootprint(roof,topZ,radius=0){
+  const limit=topZ+HEADROOM_MARGIN;
+  const {base,rise,direction}=roof,[x0,y0,x1,y1]=roof.bounds;
+  if(limit<=Math.min(base,base+rise))return null;
+  const bounds=roof.bounds.slice();
+  if(rise&&limit<=Math.max(base,base+rise)){
+    const u=Math.max(0,Math.min(1,(limit-base)/rise));
+    const [low,high,fraction]=direction==='W'?[0,2,1-u]:direction==='N'?[1,3,1-u]:
+      direction==='S'?[1,3,u]:[0,2,u];
+    const cut=bounds[low]+(bounds[high]-bounds[low])*fraction;
+    const reversed=direction==='W'||direction==='N';
+    bounds[(rise>0)!==reversed?high:low]=cut;
+  }
+  return bounds.map((v,i)=>v+(i<2?-radius:radius));
+}
