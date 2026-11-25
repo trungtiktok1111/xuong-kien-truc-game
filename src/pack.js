@@ -116,16 +116,21 @@ const VN=(a,k,s)=>{const b=NAMEVI[a.group||s.base]||a.name||s.base;return b+(s.v
 
 /* ---------- dựng bộ nền + bộ vật từ zip ---------- */
 export async function readZip(u8,fname){
-  const files=unzipSync(u8,{filter:e=>!/(^|\/)(__MACOSX|\._)/.test(e.name)&&!e.name.endsWith('/')&&/\.(png|json|md)$/i.test(e.name)});
+  let hasImages=false;
+  const files=unzipSync(u8,{filter:e=>{
+    if(/(^|\/)(__MACOSX|\._)/.test(e.name)||e.name.endsWith('/'))return false;
+    if(/\.(png|webp|jpe?g|gif)$/i.test(e.name))hasImages=true;
+    return /\.(png|json|md)$/i.test(e.name);
+  }});
   /* chuẩn hoá đường dẫn: bỏ thư mục bọc ngoài nếu có */
   const names=Object.keys(files);let pre='';const pj=names.find(n=>/(^|\/)pack\.json$/i.test(n)),lg=names.find(n=>/(^|\/)manifest\.json$/i.test(n));
-  const mp=pj||lg;if(!mp)return {error:'Không thấy pack.json (xuong-pack-1) hoặc Du-Lieu/manifest.json trong zip. Gói cần có tệp khai báo để app biết từng mảnh là gì.'};
+  const mp=pj||lg;if(!mp)return {hasImages,error:'Không thấy pack.json (xuong-pack-1) hoặc Du-Lieu/manifest.json trong zip. Gói cần có tệp khai báo để app biết từng mảnh là gì.'};
   const root=mp.replace(/(pack\.json|manifest\.json)$/i,'');
   /* ảnh có thể ở cạnh pack.json hoặc ở thư mục cha của Du-Lieu/ */
   const base=pj?root:root.replace(/[^/]*\/$/,'');
   let raw;try{raw=JSON.parse(new TextDecoder().decode(files[mp]));}catch(e){return {error:'Không đọc được '+mp+': '+e.message};}
   let man=raw.format==='xuong-pack-1'?raw:(raw.formatVersion===1&&raw.assets?fromLegacy(raw):null);
-  if(!man)return {error:'Tệp khai báo không đúng định dạng: cần "format":"xuong-pack-1" hoặc manifest Thiếu Lâm (formatVersion 1).'};
+  if(!man)return {hasImages,error:'Tệp khai báo không đúng định dạng: cần "format":"xuong-pack-1" hoặc manifest Thiếu Lâm (formatVersion 1).'};
   const fm={};for(const a of Object.values(man.assets||{})){const p=a.png;if(!p)continue;fm[p]=files[base+p]||files[p]||null;}
   if(man.legacy){const cm=names.find(n=>/(^|\/)canh-mau\.json$/i.test(n));if(cm){try{const r=rulesFromSample(JSON.parse(new TextDecoder().decode(files[cm])));if(r){man.rules=Object.assign(man.rules||{},r);man.rulesFrom='canh-mau.json';}}catch(e){}}}
   man.id=man.id||raw.id||String(fname||'goi').replace(/\.zip$/i,'').replace(/^[0-9a-f]{8}-/i,'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'goi';

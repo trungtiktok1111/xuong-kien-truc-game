@@ -19,7 +19,7 @@ import {ANG_R,ensureAngle,sprOf,tileAng,depthAng} from './proj.js';
 import {genRule,RULES,RULE_TEXT,SHAPES,SB_KIEU,loadProfiles} from './genrule.js';
 import {build,GEN_KINDS,GEN_KIND_PACK,GEN_KIND_VAT,GEN_VIEWS} from './gen2d.js';
 import {slab,shore,tile192,mirF,derim} from './isoslab.js';
-import {nenIndex,nenPack,nenTag,vatIndex,vatPack,registerPack,unregisterPack,customPackIds} from './nen.js';
+import {nenIndex,nenPack,nenTag,vatIndex,vatPack,registerPack,customPackRecords} from './nen.js';
 import {readZip,buildPack,ROLES,FAMILIES,exportPackZip} from './pack.js';
 import {decoZones,ZK,isBox,isPts,mkBox,mkPts,zHit,zPts,zBounds,zCenter,zMove,zScale,zRotate,zClone,zHandles,zDragHandle,zPath,toLocal} from './zones.js';
 export function init2D(root,A){
@@ -981,11 +981,11 @@ export function init2D(root,A){
     q.addEventListener('input',()=>{S.q=q.value;S.focus=true;clearTimeout(S.t);S.t=setTimeout(reset,250);});
     const imports=el('details',{},el('summary',{},'Nhập tài nguyên'),
       el('div',{class:'row'},btn('Ảnh rời…',addSheet),btn('Ảnh ô lưới…',addGridSheet),
-       btn('Ảnh trong ZIP/RAR…',addZip),btn('Gói Xưởng ZIP…',addPackZip)),
+       btn('Ảnh trong ZIP/RAR…',()=>addZip()),btn('Gói Xưởng ZIP…',addPackZip)),
       el('p',{class:'hint'},'Chọn Gói Xưởng ZIP cho tệp có pack.json. Chọn Ảnh trong ZIP/RAR để tự chọn ảnh trong gói.'),
       packReport());
-    if(packRep)imports.open=true;
-    body.append(imports,q,el('details',{},el('summary',{},'Quản lý tài nguyên'),
+    if(packResults.length)imports.open=true;
+    body.append(imports,installedPackList(),q,el('details',{},el('summary',{},'Quản lý tài nguyên'),
       el('div',{class:'row'},btn('Xóa từng bộ hình…',manageSheets),btn('Xóa tất cả tài nguyên…',wipeAll))));
     const chipRow=(lbl,arr,key,idxMode)=>el('div',{class:'row'},el('span',{class:'lbl'},lbl),btn('Tất cả',()=>{S[key]=null;reset();},S[key]==null?'on':''),arr.map((n,i)=>{const v=idxMode?i:n;return btn(n,()=>{S[key]=S[key]===v?null:v;reset();},S[key]===v?'on':'');}));
     body.append(chipRow('Lớp: ',RL,'L',true),chipRow('Loại: ',RT,'T',false),chipRow('Tác dụng: ',RF,'F',false));
@@ -1103,7 +1103,7 @@ export function init2D(root,A){
     if(ISOL.length){const T2=128,GC=16,cv=document.createElement('canvas');cv.width=GC*T2;cv.height=Math.ceil(ISOL.length/GC)*T2;const cg=cv.getContext('2d');cg.imageSmoothingQuality='high';
       ISOL.forEach((q,k)=>{const bw=q.b[2]-q.b[0],bh=q.b[3]-q.b[1];const kx=T2/bw;let ky=(T2/2)/q.iso.Ht;if(bh*ky>T2)ky=T2/bh;cg.drawImage(q.bm,q.b[0],q.b[1],bw,bh,(k%GC)*T2,Math.floor(k/GC)*T2,T2,bh*ky);});
       const is={name:('Iso-'+Date.now().toString(36).slice(-4)),url:cv.toDataURL('image/png'),tw:T2,margin:0,iso:1};await loadSheet(is);sheets.push(is);uniqNames(sheets);ISOL.forEach((_,k)=>{TG.tiles[is.name+'#'+k]={type:'Đường',layer:0,fn:'Đi được'};});sheetsMade++;}
-    TG.hashes=[...HS].slice(-60000);tgSave();after();draw();curSheet=sheets.length-1;toast('Đã nạp '+objs+' vật mới'+(GR.length?' + '+GR.length+' ô NỀN':'')+(ISOL.length?' + '+ISOL.length+' ô ISO (phiến hình thoi)':'')+' ('+sheetsMade+' tileset). Bỏ '+dupI+' ảnh trùng + '+dupO+' vật trùng'+(dupW?', loại '+dupW+' ảnh NỀN TRẮNG (lỗi, không dùng được)':'')+(dupX?', loại '+dupX+' ảnh CHỤP MÀN HÌNH/ẢNH NỀN LỚN (không phải sprite)':'')+'.');}
+    TG.hashes=[...HS].slice(-60000);tgSave();after();draw();curSheet=sheets.length-1;toast('Đã nạp '+objs+' vật mới'+(GR.length?' + '+GR.length+' ô NỀN':'')+(ISOL.length?' + '+ISOL.length+' ô ISO (phiến hình thoi)':'')+' ('+sheetsMade+' tileset). Bỏ '+dupI+' ảnh trùng + '+dupO+' vật trùng'+(dupW?', loại '+dupW+' ảnh NỀN TRẮNG (lỗi, không dùng được)':'')+(dupX?', loại '+dupX+' ảnh CHỤP MÀN HÌNH/ẢNH NỀN LỚN (không phải sprite)':'')+'.');return sheetsMade;}
   async function addMany(items){if(!items.length)return;if(items.length>40&&!(await yes('Thêm '+items.length+' ảnh làm tileset? Nhiều ảnh có thể làm đầy bộ nhớ tự lưu của trình duyệt.')))return;
     const g=await guessTile(items[0].url);const tw=+(await ask((g?'Ảnh đầu tiên: app đoán ô '+g.tw+' px, khe '+g.m+' px. ':'')+'Kích thước mỗi ô (px) — áp dụng cho cả '+items.length+' ảnh?',g?String(g.tw):'16'));if(!tw)return;const m=+(await ask('Khoảng cách giữa các ô (px)?',g?String(g.m):'0'))||0;let first=-1,n=0;
     for(const it of items){const s={name:it.name.replace(/\.\w+$/,'').slice(0,24),url:it.url,tw,margin:m};await loadSheet(s);sheets.push(s);uniqNames(sheets);if(first<0)first=sheets.length-1;n++;}
@@ -1133,32 +1133,96 @@ export function init2D(root,A){
       toast('Đã nạp '+nt+' tileset ô nền + '+na+' atlas'+(skip?' (bỏ '+skip+' gói trùng)':'')+'. Sprites/lớp phủ bỏ qua để nhẹ.');};
     inp.click();}
   /* ---- Gói xuong-pack (.zip): app tự đọc pack.json, sinh bộ nền + bộ vật, báo vai trò/họ bố cục ---- */
-  let packRep=null;
+  let packResults=[],importingPacks=false,packRegistryReady=Promise.resolve();
+  const savedPackIds=new Set();
   let VIDX=[];async function refreshProfiles(){VIDX=await vatIndex();loadProfiles(VIDX);}
-  async function savePacks(){const out=[];for(const id of customPackIds()){const v=await vatPack(id),n=await nenPack(id).catch(()=>null);out.push({id,vat:v,nen:n&&n.id===id?n:null});}await idbSet('xuong_packs',out);}
-  function packReport(){const R=packRep;if(!R)return el('div');const d=el('div',{style:'margin-top:8px;border:1px solid '+(R.ok?'#4a7a5a':'#a5532f')+';border-radius:10px;padding:8px;background:#141a17'});
-    d.append(el('div',{class:'lbl',style:'color:'+(R.ok?'#9fe0b0':'#ff9b8a')},(R.ok?'✅ Đã nạp gói: ':'⚠ Chưa nạp được gói: ')+R.name));
-    for(const e of R.errors)d.append(el('div',{class:'hint',style:'color:#ff9b8a'},'✘ '+e));
-    if(R.ok){d.append(el('div',{class:'hint'},R.nItems+' mảnh · '+R.nGround+' ô nền · vai trò: '+R.roles.map(r=>(ROLES[r]||r)).join(', ')));
-      for(const f of R.families)d.append(el('div',{class:'hint',style:'color:'+(f.ok?'#9fe0b0':'#e8c08a')},(f.ok?'✔ Dựng được: ':'✘ Chưa dựng được: ')+f.name+(f.ok?'':' — thiếu vai trò '+f.miss.join(', '))));
-      const w=R.warns.slice(0,12);for(const x of w)d.append(el('div',{class:'hint',style:'color:#e8c08a'},'⚠ '+x));if(R.warns.length>12)d.append(el('div',{class:'hint',style:'color:#e8c08a'},'⚠ …và '+(R.warns.length-12)+' cảnh báo nữa'));}
-    return d;}
-  async function addPackZip(){pickFiles('.zip,application/zip',async files=>{const fl=files.map(x=>x.file).filter(Boolean);if(!fl.length)return;let ok=0,bad=[];
-      for(let i=0;i<fl.length;i++){const f=fl[i];toast('Đang đọc gói '+(i+1)+'/'+fl.length+'…');
-      try{const u8=new Uint8Array(await f.arrayBuffer());const rz=await readZip(u8,f.name);
-        if(rz.error){bad.push(f.name+': '+rz.error);packRep={ok:false,name:f.name,errors:[rz.error],warns:[]};continue;}
-        const ck=rz.check;if(!ck.ok){bad.push(f.name+': '+ck.errors[0]);packRep={ok:false,name:rz.man.name||f.name,errors:ck.errors,warns:ck.warns};continue;}
-        const b=await buildPack(rz.man,rz.files,t=>toast(t));registerPack(b);
-        window.__lastPack={id:rz.man.id,man:rz.man};
-        packRep={ok:true,name:rz.man.name+' ('+rz.man.id+')',errors:[],warns:ck.warns,nItems:b.nItems,nGround:b.nGround,roles:b.roles,families:b.families};
-        ok++;}catch(e){console.error(e);bad.push(f.name+': '+(e&&e.message||e));packRep={ok:false,name:f.name,errors:['Lỗi đọc gói: '+(e&&e.message||e)],warns:[]};}}
-      if(ok){await savePacks();await refreshProfiles();try{const r=await ensureNen(window.__lastPack.id);curSheet=r.sid;}catch(e){}}
-      draw();toast('Đã nạp '+ok+'/'+fl.length+' gói'+(bad.length?' — lỗi: '+bad[0]:''));},false);}
+  function packReport(){
+    if(!packResults.length)return null;
+    const count=status=>packResults.filter(p=>p.status===status).length;
+    const labels={busy:'Đang xử lý',queued:'Đang chờ',ok:'Đã nạp',existing:'Đã có',image_done:'Đã nhập ảnh',images:'Cần chọn ảnh',error:'Không nạp được'};
+    const summary=['ok','existing','image_done','images','error','busy','queued'].filter(k=>count(k)).map(k=>labels[k]+' '+count(k)).join(' · ');
+    const box=el('section',{class:'pack-results','aria-label':'Kết quả nạp gói'},
+      el('strong',{},'Kết quả nạp '+packResults.length+' tệp'),el('p',{class:'hint',role:'status'},summary));
+    for(const p of packResults){
+      const row=el('details',{class:'pack-result','data-result':p.status},
+        el('summary',{},labels[p.status]+' · '+p.file.name));
+      if(p.status==='ok'){
+        row.append(el('p',{class:'hint'},p.name+' · '+p.nItems+' mảnh · '+p.nGround+' ô nền'),
+          el('p',{class:'hint'},savedPackIds.has(p.id)?'Đã lưu trong trình duyệt này.':'Chỉ có trong phiên này. Trình duyệt chưa lưu được gói.'),
+          el('p',{class:'hint'},'Vai trò: '+p.roles.map(r=>ROLES[r]||r).join(', ')));
+      }
+      for(const e of p.errors||[])row.append(el('p',{class:'hint'},e));
+      for(const f of p.families||[])row.append(el('p',{class:'hint'},f.name+' · '+(f.ok?'Dựng được':'Thiếu '+f.miss.join(', '))));
+      for(const warning of (p.warns||[]).slice(0,12))row.append(el('p',{class:'hint'},warning));
+      if(p.status==='images')row.append(btn('Chọn ảnh trong ZIP này',()=>addZip([p.file],async items=>{
+        try{
+          const count=await addWhole(items);
+          if(count){p.status='image_done';p.errors=[count+' bộ hình mới. Xem trong mục Ô hình.'];}
+        }catch(e){p.errors=['Không nhập được ảnh: '+(e.message||e)];}
+        draw();
+      })));
+      row.open=p.status==='images'||p.status==='error';
+      box.append(row);
+    }
+    return box;
+  }
+  function installedPackList(){
+    const packs=customPackRecords();
+    return el('details',{class:'installed-packs'},
+      el('summary',{},'Gói đã nạp ('+packs.length+')'),
+      packs.length?el('ul',{},packs.map(({id,vat,nen})=>el('li',{},
+        el('strong',{},vat.name),el('p',{class:'hint'},
+          (vat.sourceFile?vat.sourceFile+' · ':'')+vat.items.length+' mảnh · '+(nen?.sourceCount??new Set(Object.values(nen?.idx||{})).size)+' ô nền · '+
+          (savedPackIds.has(id)?'Đã lưu trong trình duyệt':'Chỉ có trong phiên này'))))):
+        el('p',{class:'hint'},'Chưa có gói Xưởng nào trong trình duyệt này.'));
+  }
+  function addPackZip(){
+    if(importingPacks){toast('Đang nạp gói. Hãy đợi lượt hiện tại hoàn tất.');return;}
+    const input=el('input',{type:'file',accept:'.zip,application/zip',multiple:''});
+    input.onchange=()=>importPackFiles([...input.files]);
+    input.click();
+  }
+  async function importPackFiles(files){
+    if(importingPacks||!files.length)return;
+    importingPacks=true;
+    packResults=files.map(file=>({file,status:'queued'}));draw();
+    try{
+      await packRegistryReady;
+      const ids=new Set(customPackRecords().map(p=>p.id));
+      for(const p of packResults){
+        p.status='busy';draw();
+        try{
+          const r=await readZip(new Uint8Array(await p.file.arrayBuffer()),p.file.name);
+          if(r.error){p.status=r.hasImages?'images':'error';p.errors=[r.error];continue;}
+          if(!r.check.ok){p.status='error';p.errors=r.check.errors;continue;}
+          if(ids.has(r.man.id)){
+            p.status='existing';p.errors=['Đã có gói '+r.man.name+' ('+r.man.id+'). Đã giữ lại gói đang dùng.'];continue;
+          }
+          const built=await buildPack(r.man,r.files,toast);
+          built.vat.sourceFile=p.file.name;
+          if(built.nen)built.nen.sourceCount=built.nGround;
+          registerPack(built);ids.add(r.man.id);
+          window.__lastPack={id:r.man.id,man:r.man};
+          Object.assign(p,{status:'ok',id:r.man.id,name:r.man.name,nItems:built.nItems,nGround:built.nGround,
+            roles:built.roles,families:built.families,warns:r.check.warns});
+        }catch(e){p.status='error';p.errors=['Lỗi đọc gói: '+(e.message||e)];}
+      }
+      const added=packResults.filter(p=>p.status==='ok');
+      if(added.length){
+        const packs=customPackRecords();
+        if(await idbSet('xuong_packs',packs))for(const {id} of packs)savedPackIds.add(id);
+        void refreshProfiles().catch(()=>{});
+        const lastGround=added.slice().reverse().find(p=>p.nGround);
+        if(lastGround)void ensureNen(lastGround.id).then(r=>{curSheet=r.sid;after();draw();}).catch(()=>{});
+      }
+      toast('Đã nạp '+added.length+'/'+files.length+' tệp. Xem chi tiết trong Tài nguyên.');
+    }finally{importingPacks=false;draw();}
+  }
   window.__exportRoundTrip=async(u8,nm)=>{const rz=await readZip(u8,nm);const z=exportPackZip(rz.man,rz.files);return z;};
   window.__vatIndexEntry=async id=>(await vatIndex()).find(o=>o.id===id);
   window.__vatPack=vatPack;window.__nenPack=nenPack;
   window.__addPackU8=async(u8,nm)=>{const rz=await readZip(u8,nm);if(rz.error||!rz.check.ok)return {err:rz.error||rz.check.errors};const b=await buildPack(rz.man,rz.files);registerPack(b);return {id:rz.man.id,roles:b.roles,families:b.families,nItems:b.nItems,warns:rz.check.warns};};
-  function addZip(){zipBrowser((u,n)=>addWhole([{url:u,name:n}]),addWhole);}
+  function addZip(files,receive=addWhole){zipBrowser((url,name)=>receive([{url,name}]),receive,Array.isArray(files)?files:undefined);}
   function addGridZip(){zipBrowser(addSheetUrl,addMany);}
   function exportPNG(k){const c=document.createElement('canvas');c.width=M.w*CELL*k;c.height=M.h*CELL*k;const g=c.getContext('2d');g.imageSmoothingEnabled=false;const sv=vis.slice();rebuild();g.drawImage(mc,0,0,c.width,c.height);c.toBlob(b=>saveFile('ban_do_2d.png',b));}
   function proj(){return {tags:TG,format:'thk-map-1',cell:CELL,w:M.w,h:M.h,layerNames:LAYN,layers:M.layers,collision:M.blk,ents:M.ents,cfg:M.cfg,sheets:sheets.map(s=>({name:s.name,tw:s.tw,margin:s.margin,iso:s.iso||0,cy:s.cy||0,wat:s.wat||null,phaseBrush:s.phaseBrush,cols:s.cols,rows:s.rows,url:s.url})),note:'Giá trị ô v>0: n=v-1; flip=n&7 (1=ngang,2=dọc,4=chéo); t=n>>3; sheet=t>>12; tile=t&4095; tile (col,row)=(tile%cols, floor(tile/cols)); nguồn ảnh: sx=col*(tw+margin), sy=row*(tw+margin)'};}
@@ -1190,7 +1254,16 @@ export function init2D(root,A){
     stamp={w:1,h:1,multi:false,tiles:[0]};if(desktop())act=0;draw();
     // Optional network packs must not delay the first usable map.
     void (async()=>{
-      try{const pk=await idbGet('xuong_packs');if(Array.isArray(pk))for(const p of pk)registerPack({nen:p.nen,vat:p.vat,nGround:p.nen?Object.keys(p.nen.idx).length:0,thumb:''});}catch(e){}
+      packRegistryReady=(async()=>{
+        const packs=await idbGet('xuong_packs');
+        if(!Array.isArray(packs))return;
+        for(const {vat,nen} of packs){
+          if(!vat?.id||!Array.isArray(vat.items))continue;
+          registerPack({nen,vat,nGround:nen?.sourceCount??Object.keys(nen?.idx||{}).length});
+          savedPackIds.add(vat.id);
+        }
+      })();
+      await packRegistryReady;draw();
       try{await refreshProfiles();draw();}catch(e){}
       if(window.__gn==null)window.__gn='kenney-dia-lao';
       try{const r=await ensureNen(window.__gn);curSheet=r.sid;}catch(e){}

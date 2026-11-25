@@ -74,13 +74,12 @@ export function pickFiles(accept,cb,asText=false){const i=document.createElement
   i.onchange=async()=>{const fs=[...i.files];if(!fs.length)return;const out=[];for(const f of fs)out.push(await new Promise(r=>{const rd=new FileReader();rd.onload=()=>r({url:rd.result,file:f,name:f.name});asText?rd.readAsText(f):rd.readAsDataURL(f);}));cb(out);};i.click();}
 /* Chọn một hoặc nhiều gói .zip → duyệt ảnh bên trong (xem trước 1 ảnh, hoặc tích chọn nhiều/tất cả)
    onPick(dataURL, tênFile) cho 1 ảnh; onMany([{url,name}]) cho nhiều ảnh (nếu có) */
-export function zipBrowser(onPick,onMany){
-  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='.zip,.rar,application/zip,application/x-zip-compressed';
-  inp.onchange=async()=>{let fs=[...inp.files];if(!fs.length)return;fs=await expandPacks(fs);if(!fs.length)return;toast('Đang đọc '+fs.length+' gói…');
+export function zipBrowser(onPick,onMany,selectedFiles){
+  const show=async files=>{let fs=[...files];if(!fs.length)return;fs=await expandPacks(fs);if(!fs.length)return;toast('Đang đọc '+fs.length+' gói…');
     const datas=[],list=[];
-    for(let z=0;z<fs.length;z++){try{const data=await packBytes(fs[z]);datas.push(data);const pre=fs.length>1?fs[z].name.replace(/\.(zip|rar)$/i,'')+'/':'';
+    for(let z=0;z<fs.length;z++){const first=list.length;try{const data=await packBytes(fs[z]);datas[z]=data;const pre=fs.length>1?fs[z].name.replace(/\.(zip|rar)$/i,'')+'/':'';
       unzipSync(data,{filter:e=>{if(/\.(png|webp|jpe?g|gif)$/i.test(e.name)&&!/(^|\/)(__MACOSX|\._)/.test(e.name))list.push({n:pre+e.name,e:e.name,z,s:e.originalSize});return false;}});}
-      catch(er){datas.push(null);toast('Không đọc được '+fs[z].name);}}
+      catch(er){list.length=first;datas[z]=null;toast('Không đọc được '+fs[z].name);}}
     if(!list.length){toast('Không có ảnh png/webp/jpg trong zip');return;}
     list.sort((a,b)=>a.n.localeCompare(b.n));
     const ov=el('div',{style:'position:fixed;inset:0;z-index:50;background:#0d141bf2;display:flex;flex-direction:column;padding:10px;gap:8px'});
@@ -108,6 +107,10 @@ export function zipBrowser(onPick,onMany){
     const bar0=el('div',{style:'display:flex;gap:8px;flex-wrap:wrap;align-items:center'},el('span',{class:'lbl'},'Lọc theo dung lượng:'),fb('Tất cả',()=>{minKB=0;}),fb('≥ 20 KB',()=>{minKB=20;}),fb('≥ 100 KB',()=>{minKB=100;}),fb('≥ 300 KB',()=>{minKB=300;}),fb('⇅ Lớn nhất trước',()=>{big=!big;}));
     const bar=onMany?el('div',{style:'display:flex;gap:8px;flex-wrap:wrap;align-items:center'},el('button',{class:'btn',style:btnCss,onclick:()=>{filtered().forEach(e=>picked.add(e.n));render();upd();}},'☑ Chọn tất cả'+'(đang lọc)'),el('button',{class:'btn',style:btnCss,onclick:()=>{picked.clear();render();upd();}},'☐ Bỏ chọn'),el('button',{class:'btn',style:btnCss,onclick:()=>{for(const e of filtered())if(/(^|\/)layers\/|-cover\.|-base\./i.test(e.n))picked.delete(e.n);render();upd();}},'✂ Bỏ ảnh tách lớp (layers/cover)'),cnt):'';
     ov.append(q,bar0,bar,box,pv,info,el('div',{style:'display:flex;gap:8px;flex-wrap:wrap'},many,use,cancel));document.body.append(ov);};
+  if(selectedFiles)return show(selectedFiles);
+  const inp=document.createElement('input');inp.type='file';inp.multiple=true;
+  inp.accept='.zip,.rar,application/zip,application/x-zip-compressed';
+  inp.onchange=()=>show(inp.files);
   inp.click();}
 
 /* Dự án đặt tên (lưu nhiều bản trong trình duyệt) */

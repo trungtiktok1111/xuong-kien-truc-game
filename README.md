@@ -2,6 +2,9 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
+## V15.4
+- Báo kết quả riêng cho từng ZIP, liệt kê gói đã lưu và mở trực tiếp ZIP có ảnh khi thiếu tệp khai báo.
+
 ## V15.3
 - **Tệp** tập trung vào mở, lưu dự án và trạng thái tự lưu. Các cảnh cũ đã được bỏ khỏi mục này. Nhập ảnh/gói qua **Tài nguyên**, đổi kích thước trong **Màn & cửa**, và xuất PNG trong **Xuất**.
 

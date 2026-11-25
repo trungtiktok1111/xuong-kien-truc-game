@@ -138,6 +138,10 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
  .outline-workspace>*{grid-column:2;min-width:0}
  .outline-workspace canvas{grid-column:1;grid-row:1/span 12;max-height:calc(100vh - 28px);align-self:start}
 }
+.pack-results,.installed-packs{margin:8px 0;padding:8px;border:1px solid #34485a;border-radius:8px;overflow-wrap:anywhere}
+.pack-result{padding:6px 0;border-top:1px solid #34485a}
+.pack-result[data-result="ok"] summary,.pack-result[data-result="existing"] summary{color:#9fe0b0}
+.pack-result[data-result="images"] summary,.pack-result[data-result="error"] summary{color:#ffba97}
 </style></head><body><div id="app">
 <div id="bar"><h1>Xưởng Kiến Trúc Game</h1><button class="tabbtn" data-v="2d">🗺 2D</button><button class="tabbtn" data-v="3d">🧱 3D</button><button id="outlinebtn" class="tabbtn">Đường bao</button><button id="levelbtn" class="tabbtn">Màn mẫu</button><button id="studiobtn" class="tabbtn">Dự án game</button><button id="playbtn" class="tabbtn" style="background:#2e8b57;color:#fff">🎮 Chơi</button><button id="chkbtn" class="tabbtn" style="background:#3a6ea5;color:#fff">✅ Kiểm</button><button id="helpbtn" class="tabbtn" title="Phím tắt F1">Phím tắt</button><button id="relbtn" class="tabbtn" style="background:#b8742a;color:#fff">🚀 Xuất</button></div>
 <section id="xuong-startup" aria-label="Trạng thái khởi động">
