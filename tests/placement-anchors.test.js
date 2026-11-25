@@ -37,3 +37,16 @@ test('sprite anchors use visible bounds and adapt to the object dimensions',()=>
   assert.equal(placementAnchors(make(2),[.1,.1,.9,.9]).length,9);
   assert.deepEqual(placementAnchors(make(2),undefined,'gate'),[{id:4,point:iso(5,8)}]);
 });
+
+test('roof thickness adds visible faces above the bearing without shifting the underside',()=>{
+  const thin=placedPropFrame({...roof,roofThickness:.1},iso,32,'iso');
+  const thick=placedPropFrame({...roof,roofThickness:.3},iso,32,'iso');
+  assert.equal(thin.roofSides.length,2);
+  assert.equal(placedPropFrame(roof,iso,32,'angle').roofSides.length,1);
+  assert.equal(placedPropFrame(roof,iso,32,'top').roofSides,undefined);
+  for(let i=0;i<3;i++){
+    assert.equal(thin.roof[i][0],thick.roof[i][0]);
+    assert.ok(Math.abs(thin.roof[i][1]+thin.roofDepth-thick.roof[i][1]-thick.roofDepth)<1e-9);
+  }
+  assert.ok(Math.abs(placementAnchors(thin)[4].point[1]-placementAnchors(thick)[4].point[1]-4.8)<1e-9);
+});

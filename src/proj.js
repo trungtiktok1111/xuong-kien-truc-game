@@ -24,6 +24,8 @@ export function tileAng(cx,A,idx,X,Y,cw){if(!A||!A.img)return;const k=cw/A.tw,sx
 /* độ sâu vẽ của vật thể trong Angle: mép trước của khung chân (xa camera = nhỏ) */
 export const depthAng=d=>{const z=d.zb;return d.y+1+(z&&(z[2]||z[3])?z[1]+z[3]:0);};
 
+export const roofThickness=e=>Number.isFinite(e.roofThickness)?Math.max(.02,Math.min(.8,e.roofThickness)):.16;
+
 // A placed prop uses the same frame, scale and ground anchor in the preview and the game.
 export function placedPropFrame(e,project,unit,projection){
   const [x,y]=project(e.x+1,e.y+1),size=e.sc*unit;
@@ -31,13 +33,17 @@ export function placedPropFrame(e,project,unit,projection){
   if(e.roofDirection&&projection!=='top'){
     const side=e.sc/.95;
     const rise=e.roofRise==null?.48*size:e.roofRise*unit*.75;
-    const eaves=e.roofBase==null?.75*size:e.roofBase*unit*.75;
+    const underside=e.roofBase==null?.75*size:e.roofBase*unit*.75;
+    const depth=roofThickness(e)*unit*.75;
     const corners=[[-.5,-.5],[.5,-.5],[-.5,.5]].map(([u,v])=>{
       const [px,py]=project(e.x+1+side*u,e.y+1+side*v);
       const height={E:.5+u,W:.5-u,N:.5-v,S:.5+v}[e.roofDirection]??0;
-      return [px,py-eaves-rise*height];
+      return [px,py-underside-rise*height-depth];
     });
     frame.roof=corners;
+    const [a,b,c]=corners,d=[b[0]+c[0]-a[0],b[1]+c[1]-a[1]];
+    frame.roofDepth=depth;
+    frame.roofSides=projection==='angle'?[[c,d,.73,true]]:[[c,d,.73,true],[b,d,.54,false]];
     return frame;
   }
   if(!e.gateAssembly||!e.propProjection||(e.propProjection===projection&&!e.gateArt))return frame;
@@ -62,7 +68,7 @@ export function placedPropBounds(frame,bounds){
   if(frame.roof){
     const [a,b,c]=frame.roof,points=[a,b,c,[b[0]+c[0]-a[0],b[1]+c[1]-a[1]]];
     const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);
-    return [Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
+    return [Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)+(frame.roofDepth||0)];
   }
   if(frame.edge){
     const {feet,height,halfWidth}=frame.edge,[a,b]=feet;
@@ -96,8 +102,26 @@ export function drawPlacedProp(ctx,e,sheet,frame){
   ctx.save();
   if(frame.roof){
     const [a,b,c]=frame.roof,[l,t,r,d]=e.spriteBounds||[0,0,1,1];
+    const left=sx+l*tw,top=sy+t*tw,width=(r-l)*tw,height=(d-t)*tw;
+    for(const [p,q,light,horizontal] of frame.roofSides||[]){
+      const strip=Math.min(width,height,Math.max(1,tw*.06));
+      ctx.save();
+      ctx.transform(q[0]-p[0],q[1]-p[1],0,frame.roofDepth,p[0],p[1]);
+      if(typeof ctx.filter==='string'){
+        ctx.filter='brightness('+light+')';
+        if(horizontal)ctx.drawImage(sheet.img,left,top+height-strip,width,strip,0,0,1,1);
+        else{
+          ctx.transform(0,1,1,0,0,0);
+          ctx.drawImage(sheet.img,left+width-strip,top,strip,height,0,0,1,1);
+        }
+      }else{
+        ctx.fillStyle=horizontal?'#805733':'#634128';
+        ctx.fillRect(0,0,1,1);
+      }
+      ctx.restore();
+    }
     ctx.transform(b[0]-a[0],b[1]-a[1],c[0]-a[0],c[1]-a[1],a[0],a[1]);
-    ctx.drawImage(sheet.img,sx+l*tw,sy+t*tw,(r-l)*tw,(d-t)*tw,0,0,1,1);
+    ctx.drawImage(sheet.img,left,top,width,height,0,0,1,1);
     ctx.restore();
     return;
   }

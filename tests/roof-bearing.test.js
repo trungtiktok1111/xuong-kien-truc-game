@@ -27,8 +27,8 @@ test('two grounded walls set the roof surface to their actual heights',()=>{
     assert.equal(bearing.base+bearing.rise*((p.x-(roof.x+1))/4+.5),p.height);
   }
   const f=placedPropFrame({...roof,roofBase:bearing.base,roofRise:bearing.rise},project,32,'iso');
-  assert.equal(f.roof[0][1],project(6,6)[1]-bearing.base*24);
-  assert.equal(f.roof[1][1],project(10,6)[1]-(bearing.base+bearing.rise)*24);
+  assert.ok(Math.abs(f.roof[0][1]-(project(6,6)[1]-(bearing.base+.16)*24))<1e-9);
+  assert.ok(Math.abs(f.roof[1][1]-(project(10,6)[1]-(bearing.base+bearing.rise+.16)*24))<1e-9);
   assert.equal(roofBearing(roof,constructionContext(map([left,wall('same',9.5,1.25)]))).rise,0);
 });
 

@@ -23,7 +23,7 @@ import {$,el,toast,saveFile,lsGet,lsSet,pickFile,pickFiles,idbSet,idbGet,idbDel,
 const CELL=16,LAYN=['Nền','Phủ nền','Vật thể','Mái / cửa'];
 const enc=(sid,idx,f=0)=>((sid*4096+idx)*8+f)+1;
 const dec=v=>{const n=v-1;const f=n&7,t=n>>3;return {sid:t>>12,idx:t&4095,f};};
-import {placedPropFrame,placedPropBounds,drawPlacedProp,placementAnchors,placementAnchorNames,placementAnchorOffset,ANG_R,ensureAngle,sprOf,tileAng,depthAng} from './proj.js';
+import {placedPropFrame,placedPropBounds,drawPlacedProp,roofThickness,placementAnchors,placementAnchorNames,placementAnchorOffset,ANG_R,ensureAngle,sprOf,tileAng,depthAng} from './proj.js';
 import {genRule,RULES,RULE_TEXT,SHAPES,SB_KIEU,loadProfiles} from './genrule.js';
 import {build,GEN_KINDS,GEN_KIND_PACK,GEN_KIND_VAT,GEN_VIEWS} from './gen2d.js';
 import {slab,shore,tile192,mirF,derim} from './isoslab.js';
@@ -198,7 +198,8 @@ export function init2D(root,A){
       isoHB.push({e,r:[p[0]-sz/2,p[1]-sz*.85,p[0]+sz/2,p[1]+S*.1],f:[e.x,e.y,e.x+1,e.y+1]});}
     for(const g of B.OV){const k2=sc*.95/B.CQ,wp=AG?g.c.width*2*S/B.CQ:g.c.width*k2,hp=AG?g.c.height*2*S*ANG_R/B.CQ:g.c.height*k2,p=g2s(g.xc,g.yb);cx.imageSmoothingEnabled=true;cx.drawImage(g.c,p[0]-wp/2,p[1]-hp,wp,hp);cx.imageSmoothingEnabled=false;}
     for(const c of COV){const sh=sheets[c.cv.sid];if(!sh||!sh.img)continue;const sx=(c.cv.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(c.cv.idx/sh.cols)*(sh.tw+sh.margin);cx.imageSmoothingEnabled=true;cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,c.rx,c.ry,c.ws,c.ws);cx.imageSmoothingEnabled=false;}
-    for(const e of [...B.legacyRoofs,...roofs])drawIndependentProp(e);
+    const depth=e=>e.y+(AG?0:e.x);
+    for(const e of [...B.legacyRoofs,...roofs].sort((a,b)=>depth(a)-depth(b)))drawIndependentProp(e);
     drawFog(cx,w,h,fogLv(),0,-view.x,-view.y);}
   let anC=null,anK='';function isoAN(){const k=((M.cfg.anims||[]).length)+'|'+sheets.filter(q=>q&&q.img).length;if(anC&&anK===k)return anC;anK=k;return anC=makeAnims(M.cfg,sheets);}
   function tileG0(v,x,y,s){drawTile(cx,v,x,y,s);}
@@ -963,7 +964,7 @@ export function init2D(root,A){
     return cards;
   }
   let snapPieces=false;
-  const propSizes=new Map(),propTurns=new Map(),propAnchorIds=new Map();
+  const propThicknesses=new Map(),propSizes=new Map(),propTurns=new Map(),propAnchorIds=new Map();
   let propCache=null,ruleContext=null;
   function gateKind(value){
     const {sid,idx}=dec(value),sheet=sheets[sid];
@@ -1083,7 +1084,11 @@ export function init2D(root,A){
   }
   function pieceAlignment(piece,support){
     const roof=isRoof(piece),tolerance=Math.min(.5,9/Math.max(1,CELL*view.z));
-    const plane=roof?roofPlane(piece,support||{base:piece.roofDirection?piece.sc:0,rise:piece.roofDirection ? .64*piece.sc : 0}):null;
+    const surface=(e,bearing)=>{
+      const plane=roofPlane(e,bearing);
+      return {...plane,base:plane.base+(e.roofDirection?roofThickness(e):0)};
+    };
+    const plane=roof?surface(piece,support||{base:piece.roofDirection?piece.sc:0,rise:piece.roofDirection ? .64*piece.sc : 0}):null;
     const bounds=plane?.bounds||bodyFootprint(piece);
     let best=null;
     const pieces=[...M.ents,...(roof&&ISOQ()?isoBuild().legacyRoofs:[])];
@@ -1091,7 +1096,7 @@ export function init2D(root,A){
       if(!ref.placedProp||ref.wallLine||ref.gateAssembly||isRoof(ref)!==roof||!vis[sceneEntityLayer(ref)])continue;
       const bearing=roof?roofBearing(ref,ruleCtx()):null;
       if(roof&&!bearing)continue;
-      const refPlane=bearing?roofPlane(ref,bearing):null,other=refPlane?.bounds||bodyFootprint(ref);
+      const refPlane=bearing?surface(ref,bearing):null,other=refPlane?.bounds||bodyFootprint(ref);
       const join=measureJoin(bounds,other);
       if(join.distance>tolerance*3)continue;
       const score=join.kind==='overlap'?-Math.min(...join.overlap):join.distance;
@@ -1261,7 +1266,7 @@ export function init2D(root,A){
       location=xy(point);
       if(target.support){
         const t={E:u,W:1-u,N:1-v,S:v}[e.roofDirection];
-        location+=' · Z '+coord.format(target.support.base+target.support.rise*t);
+        location+=' · Z '+coord.format(target.support.base+target.support.rise*t+roofThickness(e));
       }
     }
     const title=(name?name+' · ':'')+anchorTitle+' · '+location;
@@ -1321,6 +1326,17 @@ export function init2D(root,A){
         pushUndo();obj[key]=n;
         if(acceptStructure())after();
         draw();
+      }});
+    return el('label',{},label+' ',input,' ô');
+  }
+  function roofThicknessField(value,change){
+    const label='Độ dày tấm mái';
+    const input=el('input',{type:'number',min:.02,max:.8,step:.01,class:'num',value,
+      'aria-label':label,style:'width:76px',onchange:()=>{
+        if(!Number.isFinite(input.valueAsNumber)){input.value=value;return;}
+        const thickness=roofThickness({roofThickness:input.valueAsNumber});
+        input.value=thickness;
+        change(thickness);
       }});
     return el('label',{},label+' ',input,' ô');
   }
@@ -1395,7 +1411,7 @@ export function init2D(root,A){
     }
     const prop=propCache.prop,choice=propAnchorIds.get(value)??4;
     const available=anchorChoices(prop,propDisplayFrame({...prop,x:0,y:0})).some(a=>a.id===choice);
-    return {...prop,anchorId:available?choice:4};
+    return {...prop,anchorId:available?choice:4,...(prop.roofDirection?{roofThickness:propThicknesses.get(value)??roofThickness(prop)}:{})};
   }
   function legacyPropAt(p,layer=2){
     if(!ISOQ()||!vis[layer])return null;
@@ -1587,6 +1603,10 @@ export function init2D(root,A){
     if(prop){
       const note=isRoof(prop)?'Đặt mái sao cho hai phía tựa lên đỉnh tường hoặc cột. Dấu xanh hiện điểm tựa hợp lệ.':prop.gateAssembly?'Rê cổng lên đoạn tường bao hoặc tuyến tường thẳng. Xưởng mở khoảng giữa hai trụ.':
         prop.gateUncalibrated?constructionIssue(prop):'';
+      if(prop.roofDirection)panel.append(roofThicknessField(roofThickness(prop),value=>{
+        propThicknesses.set(current,value);
+        dirty=true;
+      }));
       panel.append(propSizeField(propSizes.get(current)||100,n=>{propSizes.set(current,n);refreshAnchorPicker();dirty=true;}),
         el('div',{class:'row'},el('button',{class:'b',type:'button','data-prop-turn':'','aria-pressed':String(propTurns.has(current)),
           onclick:()=>{transformProp('turn');cv.focus({preventScroll:true});}},'Đổi hướng · T')),
@@ -1785,6 +1805,7 @@ export function init2D(root,A){
           el('div',{class:'lbl',style:'margin-bottom:4px'},OT[e.t][0]+' '+OT[e.t][1]+' · '+(e.placedProp?'Điểm chân ('+(e.x+1).toFixed(2)+', '+(e.y+1).toFixed(2)+')':'Ô ('+e.x+', '+e.y+')')),
           e.t!=='start'&&e.t!=='goal'?fld('Tên',e,'name'):'',
           bodyHeight(e,M.cfg)>0&&e.t!=='start'&&!isRoof(e)?physicalHeightField('Chiều cao vật',e,'bodyHeight',bodyHeight(e,M.cfg)):null,
+          e.roofDirection?roofThicknessField(roofThickness(e),value=>editPlacedProp(e,next=>{next.roofThickness=value;})):null,
           e.t==='chest'?physicalHeightField('Phần nắp nâng thêm',e,'lidRise',bodyHeight(e,M.cfg,true)-bodyHeight(e,M.cfg)):null,
           ...(e.t==='enemy'?[fld('Máu',e,'hp','number',{min:1,max:99}),fld('Sát thương',e,'dmg','number',{min:0,max:9}),fld('Tốc độ (ô/s)',e,'spd','number',{min:0,max:8,step:.1}),fld('Tầm phát hiện',e,'chase','number',{min:1,max:20}),
             el('div',{class:'row'},el('span',{class:'lbl'},'Hành vi'),(()=>{const s=el('select',{class:'num'},AIL.map(([v,n])=>el('option',{value:v},n)));s.value=e.ai;s.onchange=()=>{e.ai=s.value;after();};return s;})())]:[]),

@@ -139,9 +139,9 @@ test('roof textures use a sloped, elevated surface and cycle facing without movi
   assert.ok(placedPropBounds(frame,e.spriteBounds)[3]<project(4,5)[1]);
   assert.equal(placedPropFrame(e,project,20,'top').roof,undefined);
   const calls=[];
-  const ctx={save(){},restore(){},transform(...args){calls.push(args);},drawImage(...args){calls.push(args.slice(1));}};
+  const ctx={save(){},restore(){},fillRect(){},transform(...args){calls.push(args);},drawImage(...args){calls.push(args.slice(1));}};
   drawPlacedProp(ctx,e,{img:{},tw:100,cols:1},frame);
-  assert.deepEqual(calls[1].map(n=>Math.round(n)),[20,10,60,80,0,0,1,1]);
+  assert.deepEqual(calls.at(-1).map(n=>Math.round(n)),[20,10,60,80,0,0,1,1]);
   for(const facing of ['N','W','S','E']){turnProp(e);assert.equal(e.roofDirection,facing);}
   assert.deepEqual([e.x,e.y],[3,4]);
 });
