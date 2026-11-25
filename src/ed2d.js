@@ -1,3 +1,6 @@
+import {drawSettlementBridge} from './settlementBridge.js';
+import {settlementIssues} from './settlementChecks.js';
+import {settlementCriteria} from './settlementCriteria.js';
 import {alignmentGuides,measureJoin,roofHeightAt,seamHeightDifference,JOIN_EPSILON} from './pieceAlignment.js';
 import {actorHeights,bodyHeight,bodyFootprint,roofPlane} from './headroom2d.js';
 import {usedGridBounds,rebaseOutlineSource} from './outlineGrid.js';
@@ -6,6 +9,9 @@ import {gateWalls,gateZones} from './gate2d.js';
 import {constructionContext,gateIssue,propIssue,wallIssue,isRoof,isBearingColumn,roofBearing,roofIssue,wallHasFoundation,headroomIssue} from './constructionRules2d.js';
 import {automaticPaintZones, daXoayArchProfiles, estimateContact, makePaintProfile, paintedPieces, paintFamily, roofTextureDirection, sceneEntityLayer, propContact, resizeProp, turnProp} from './placement2d.js';
 import {openArchivePicker} from './archivePicker.js';
+import {tiledDepth} from './tiledScene.js';
+import {generateScene,openScenePack,reconstructPack} from './scenePacks.js';
+import {settlementProfiles} from './settlementLayout.js';
 import {DA_XOAY_LEVEL} from './outlineLevels.js';
 import {mapCollision,rasterOutline} from './mapCollision.js';
 import {outline2D,clipOutline,stoneBackdrop,stoneWall,wallSurface,drawFloorCollision} from './outline2d.js';
@@ -171,16 +177,18 @@ export function init2D(root,A){
     for(const q of B.SL){const p=g2s(q.x,q.y);if(p[0]>w+S||p[0]<-2*S||p[1]>h||p[1]<-2*S)continue;tileG(q.v,q.x,q.y);}
     if(!AG){const wc=B.SL.filter(q=>(dec(q.v).f&4));if(wc.length)shore(cx,wc,(x,y)=>g2s(x,y),S);}
     if(geo)cx.restore();
+    const bridge=M.cfg.settlement?.plan?.bridge;
+    if(vis[2])drawSettlementBridge(cx,bridge,g2s,S);
     const items=geo&&vis[2]?geo.walls.map(wall=>({k:wall.k,wall})):[];
     if(vis[2])for(const wall of builtWallFaces(renderWallEnts(),AG))items.push({k:wall.k,wall});
     for(const g of B.GR)items.push({k:AG?g.yb:g.yb+g.xc,g});
-    for(const e of M.ents){if(e.wallLine||(e.t==='deco'&&!vis[sceneEntityLayer(e)]))continue;for(const wall of gateWalls(e,AG))items.push({k:wall.k,wall});items.push({k:e.placedProp?(AG?e.y+1:e.x+e.y+2):AG?(e.t==='deco'?(e.flat?-1e4+e.y:depthAng(e)):e.y+.5):(e.t==='deco'?(e.flat?-1e4+e.x+e.y:e.x+e.y+1):e.x+e.y+1),e});}
+    for(const e of M.ents){if(e.wallLine||(e.t==='deco'&&!vis[sceneEntityLayer(e)]))continue;for(const wall of gateWalls(e,AG))items.push({k:wall.k,wall});items.push({k:e.tiledLayer===undefined?(e.placedProp?(AG?e.y+1:e.x+e.y+2):AG?(e.t==='deco'?(e.flat?-1e4+e.y:depthAng(e)):e.y+.5):(e.t==='deco'?(e.flat?-1e4+e.x+e.y:e.x+e.y+1):e.x+e.y+1)):tiledDepth(e,M.w,M.h,AG),e});}
     items.sort((a,b)=>a.k-b.k);isoHB=[];const COV=[],roofs=[];const cur=tool==='obj'||tool==='zone';
     for(const it of items){
       if(it.wall){stoneWall(cx,it.wall,g2s,S,w,h,geo);continue;}
       if(it.g){const g=it.g,k2=sc*.95/B.CQ,wp=AG?g.c.width*2*S/B.CQ:g.c.width*k2,hp=AG?g.c.height*2*S*ANG_R/B.CQ:g.c.height*k2,p=g2s(g.xc,g.yb);cx.imageSmoothingEnabled=true;cx.drawImage(g.c,p[0]-wp/2,p[1]-hp,wp,hp);cx.imageSmoothingEnabled=false;continue;}
       const e=it.e,sel=e.id===selId;
-      if(e.placedProp){if(isRoof(e))roofs.push(e);else drawIndependentProp(e);continue;}
+      if(e.placedProp){if(isRoof(e)||e.tiledLayer!==undefined&&e.sceneLayer===3)roofs.push(e);else drawIndependentProp(e);continue;}
       if(e.t==='deco'&&e.flat&&!vis[1])continue;
       if(e.t==='deco'){const sh0=e.tile&&sheets[e.tile.sid],sp=sprOf(e,sh0,AG),ws=((sp?sp.sc:e.sc)||3)*sc,p=AG?g2s(e.x+.5,e.y+1):g2s(e.x+1,e.y+1);
         const rx=p[0]-ws/2+(e.ox||0)*ws,ry=p[1]-ws+((sp?sp.oy:e.oy)||0)*ws;
@@ -198,8 +206,9 @@ export function init2D(root,A){
       isoHB.push({e,r:[p[0]-sz/2,p[1]-sz*.85,p[0]+sz/2,p[1]+S*.1],f:[e.x,e.y,e.x+1,e.y+1]});}
     for(const g of B.OV){const k2=sc*.95/B.CQ,wp=AG?g.c.width*2*S/B.CQ:g.c.width*k2,hp=AG?g.c.height*2*S*ANG_R/B.CQ:g.c.height*k2,p=g2s(g.xc,g.yb);cx.imageSmoothingEnabled=true;cx.drawImage(g.c,p[0]-wp/2,p[1]-hp,wp,hp);cx.imageSmoothingEnabled=false;}
     for(const c of COV){const sh=sheets[c.cv.sid];if(!sh||!sh.img)continue;const sx=(c.cv.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(c.cv.idx/sh.cols)*(sh.tw+sh.margin);cx.imageSmoothingEnabled=true;cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,c.rx,c.ry,c.ws,c.ws);cx.imageSmoothingEnabled=false;}
-    const depth=e=>e.y+(AG?0:e.x);
+    const depth=e=>e.tiledLayer===undefined?e.y+(AG?0:e.x):tiledDepth(e,M.w,M.h,AG);
     for(const e of [...B.legacyRoofs,...roofs].sort((a,b)=>depth(a)-depth(b)))drawIndependentProp(e);
+    if(vis[2])drawSettlementBridge(cx,bridge,g2s,S,true);
     drawFog(cx,w,h,fogLv(),0,-view.x,-view.y);}
   let anC=null,anK='';function isoAN(){const k=((M.cfg.anims||[]).length)+'|'+sheets.filter(q=>q&&q.img).length;if(anC&&anK===k)return anC;anK=k;return anC=makeAnims(M.cfg,sheets);}
   function tileG0(v,x,y,s){drawTile(cx,v,x,y,s);}
@@ -1610,7 +1619,7 @@ export function init2D(root,A){
       'Chọn mảnh, rồi bấm vị trí trên bản đồ.';
     panel.append(el('div',{class:'build-heading'},el('h2',{},'Dựng cảnh'),btn(showPieceNames?'Ẩn tên trên bản đồ':'Hiện tên trên bản đồ',()=>{
       showPieceNames=!showPieceNames;lsSet('thk_piece_names',showPieceNames);dirty=true;draw();
-    }),btn('Nhập ZIP/RAR',chooseArchiveFiles)),
+    }),btn('Kho gói có sẵn',()=>chooseTab('res')),btn('Nhập ZIP/RAR',chooseArchiveFiles)),
       el('div',{class:'row'},btn('Dựng tuyến tường · W',()=>useTool('wall'),tool==='wall'?'on':''),
         btn('Lắp cổng vào tường',chooseGateBrush),
         tool==='wall'&&wallChain?btn('Kết thúc tuyến',()=>{wallChain=null;dirty=true;draw();}):null),
@@ -2092,6 +2101,7 @@ export function init2D(root,A){
        el('p',{class:'hint'},'Các thao tác dưới đây chỉ áp dụng cho bản đồ đang mở.'),
        el('div',{class:'row'},
         btn('Nhập bản đồ 2D…',()=>pickFile('.json,application/json',importMapFile)),
+        btn('Dựng bản đồ gốc từ ZIP…',chooseTiledArchives),
         btn('Xuất bản đồ 2D (.json)',exportJSON),
         btn('Sao chép JSON',copyJSON),
         btn('Dán JSON…',async()=>{const value=await askText('Dán JSON của một bản đồ 2D:');if(value)await importMapFile(value);})),
@@ -2218,11 +2228,11 @@ export function init2D(root,A){
     q.addEventListener('input',()=>{S.q=q.value;S.focus=true;clearTimeout(S.t);S.t=setTimeout(reset,250);});
     const imports=el('details',{},el('summary',{},'Nhập tài nguyên'),
       el('div',{class:'row'},btn('Ảnh rời…',addSheet),btn('Ảnh ô lưới…',addGridSheet),
-       btn('Nhập gói ZIP/RAR…',chooseArchiveFiles,'on')),
+       btn('Nhập gói ZIP/RAR…',chooseArchiveFiles,'on'),btn('Dựng bản đồ gốc từ ZIP…',chooseTiledArchives)),
       el('p',{class:'hint'},'Gói Xưởng được nạp tự động. Với gói ảnh thông thường, app mở danh sách để bạn xem và chọn ảnh cần dùng.'),
       packReport(),archiveReport());
     if(packResults.length||archiveResults.length)imports.open=true;
-    body.append(imports,installedPackList(),q,el('details',{},el('summary',{},'Quản lý tài nguyên'),
+    body.append(builtinArchivePanel(),imports,installedPackList(),q,el('details',{},el('summary',{},'Quản lý tài nguyên'),
       el('div',{class:'row'},btn('Xóa từng bộ hình…',manageSheets),btn('Xóa tất cả tài nguyên…',wipeAll))));
     const chipRow=(lbl,arr,key,idxMode)=>el('div',{class:'row'},el('span',{class:'lbl'},lbl),btn('Tất cả',()=>{S[key]=null;reset();},S[key]==null?'on':''),arr.map((n,i)=>{const v=idxMode?i:n;return btn(n,()=>{S[key]=S[key]===v?null:v;reset();},S[key]===v?'on':'');}));
     body.append(chipRow('Lớp: ',RL,'L',true),chipRow('Loại: ',RT,'T',false),chipRow('Tác dụng: ',RF,'F',false));
@@ -2327,7 +2337,9 @@ export function init2D(root,A){
       if(it.frame){
         const {width:w,height:h}=it.decoded;
         const {kind,x,y}=it.frame;
-        if(kind==='terrain'){
+        if(kind==='groundTexture'){
+          GR.push(it.decoded);
+        }else if(kind==='terrain'){
           ISOL.push({bm:it.decoded,b:[0,0,w,h],iso:{Ht:w/2}});
         }else{
           const tag=autoClass(it.path,{w,h,mean:1});
@@ -2432,6 +2444,200 @@ export function init2D(root,A){
           (vat.sourceFile?vat.sourceFile+' · ':'')+vat.items.length+' mảnh · '+(nen?.sourceCount??new Set(Object.values(nen?.idx||{})).size)+' ô nền · '+
           (savedPackIds.has(id)?'Đã lưu trong trình duyệt':'Chỉ có trong phiên này'))))):
         el('p',{class:'hint'},'Chưa có gói Xưởng nào trong trình duyệt này.'));
+  }
+  let stockArchiveIndex=null, stockArchiveRequest=null, stockArchiveGroup='', stockArchiveFile='', stockArchiveOpen=false;
+  async function openStockArchive(pack){
+    const rows=[pack];
+    if(pack.name==='SBS - Isometric Town Pack.rar'){
+      const recipes=stockArchiveIndex.find(item=>item.name==='SBS - Isometric Town Examples.rar');
+      if(recipes)rows.push(recipes);
+    }
+    await openImagesFor(await Promise.all(rows.map(fetchStockArchive)));
+  }
+  async function fetchStockArchive(pack){
+    const parts=await Promise.all((pack.parts||[pack.file]).map(async file=>{
+      const response=await fetch('packs/'+file);
+      if(!response.ok)throw new Error('Không tải được '+pack.name);
+      return response.blob();
+    }));
+    return new File(parts,pack.name.replace(/\.rar$/i,'.zip'),{type:'application/zip'});
+  }
+  function builtinArchivePanel(){
+    const box=el('details',{class:'installed-packs'});
+    if(stockArchiveOpen)box.open=true;
+    box.append(el('summary',{},'Kho gói có sẵn'+(stockArchiveIndex?' ('+stockArchiveIndex.length+')':'')));
+    box.addEventListener('toggle',()=>{
+      stockArchiveOpen=box.open;
+      if(!box.open||stockArchiveIndex||stockArchiveRequest)return;
+      stockArchiveRequest=fetch('packs/index.json').then(response=>{
+        if(!response.ok)throw new Error('Không tải được danh sách gói.');
+        return response.json();
+      }).then(index=>{
+        stockArchiveIndex=index;
+        if(tab==='res')keepScroll(draw);
+      }).catch(error=>{
+        box.append(el('p',{class:'hint',role:'status'},error.message+' Đóng rồi mở lại để thử.'));
+      }).finally(()=>{stockArchiveRequest=null;});
+    });
+    if(!stockArchiveIndex)return box;
+    const families=[...new Set(stockArchiveIndex.map(pack=>pack.family))];
+    if(!families.includes(stockArchiveGroup))stockArchiveGroup=families[0];
+    const rows=stockArchiveIndex.filter(pack=>pack.family===stockArchiveGroup);
+    const current=rows.find(pack=>pack.file===stockArchiveFile)||rows[0];
+    const family=el('select',{class:'num inventory-select','aria-label':'Nhóm gói có sẵn',onchange:()=>{
+      stockArchiveGroup=family.value;
+      keepScroll(draw);
+    }},families.map(name=>el('option',{value:name},name)));
+    family.value=stockArchiveGroup;
+    const choose=el('select',{class:'num inventory-select','aria-label':'Gói tài nguyên có sẵn',onchange:()=>{
+      stockArchiveFile=choose.value;
+      keepScroll(draw);
+    }},rows.map(pack=>el('option',{value:pack.file},pack.name+' · '+pack.images+' ảnh'+(pack.reference?' nguồn':'') )));
+    choose.value=current.file;
+    const browse=btn('Xem và nhập ảnh',async()=>{
+      browse.disabled=true;
+      browse.textContent='Đang tải gói…';
+      try{await openStockArchive(current);}catch(error){toast(error.message);}
+      finally{browse.disabled=false;browse.textContent='Xem và nhập ảnh';}
+    },'on');
+    box.append(family,choose,el('div',{class:'row'},btn('Dựng bản đồ gốc',()=>buildStockOriginal(current)),
+      btn('Tạo bản đồ mới…',()=>openSceneGenerator(current),'on'),btn('Tiêu chí dựng cảnh',showSettlementRules),current.images?browse:null,
+      current.parts?btn('Tải gói ZIP',async()=>{
+        try{const zip=await fetchStockArchive(current);saveFile(zip.name,zip);}
+        catch(error){toast(error.message);}
+      }):el('a',{href:'packs/'+current.file,download:'',class:'b'},'Tải gói ZIP')));
+    if(current.reference)box.append(el('p',{class:'hint'},current.name.startsWith('tree_')?
+      'Mô hình cây có ở 3D → Mô hình. Ảnh trong gói này là vật liệu nguồn.':'Gói này chứa tư liệu, vật liệu nguồn hoặc dữ liệu ghép ảnh.'));
+    return box;
+  }
+  const townPack=p=>p.file?.startsWith('sbs-isometric-town-');
+  async function readStockScenePack(p){
+    const file=await fetchStockArchive(p);
+    return openScenePack(p.name,new Uint8Array(await file.arrayBuffer()));
+  }
+  const readTown=()=>Promise.all(stockArchiveIndex.filter(townPack).map(readStockScenePack));
+  let assemblingScene=false;
+  async function assembleScene(build){
+    if(assemblingScene)return;
+    assemblingScene=true;
+    toast('Đang dựng bản đồ…');
+    try{
+      const scenes=await build(),updated=sheets.slice(),maps=[],notes=[];
+      for(const {w,h,name,sheets:source,ents,blocked,ground,links,gaps,summary} of scenes){
+        const ids=[];
+        for(const sheet of source)ids.push(await loadBuiltinSheet(sheet,updated));
+        const remap=tile=>{if(tile)tile.sid=ids[tile.sid];};
+        for(const e of ents){
+          if(e.door){
+            for(const v of Object.values(e.door.v))v.tile={...v.tile};
+            for(const v of Object.values(e.door.v))remap(v.tile);
+          }
+          remap(e.tile);
+        }
+        const map=newMap(w,h);
+        Object.assign(map,{name,ents,cfg:{...map.cfg,view:'iso',proj:'iso',smooth:false,win:'goal',...(summary?{settlement:summary}:{})}});
+        if(blocked)map.blk=blocked;
+        if(ground)map.layers[0]=ground.map(sid=>sid==null?enc(0,0):enc(ids[sid],0));
+        if(links)map.links=links;
+        maps.push(map);
+        if(summary?.draft){const issue=settlementIssues(map)[0];notes.push('Bản nháp · '+issue.name+' · X '+issue.x+' · Y '+issue.y+'. Mở Kiểm để xem.');}
+        if(summary)notes.push(summary.buildings+' nhà, '+summary.groves+' cụm cây, '+summary.bridges+' cầu.');
+        notes.push(...(gaps||[]));
+      }
+      const first=MAPS.length;
+      for(const [i,map] of maps.entries()){
+        if(map.links&&maps.length===2){
+          const other=i===0?1:0;
+          const entry=map.links[i],exit=maps[other].links[other];
+          map.ents.push({id:'link-'+i,t:'door',name:'Đổi tầng',x:Math.floor(entry[0]),y:Math.floor(entry[1]),
+            to:first+other,tx:Math.floor(exit[0]),ty:Math.floor(exit[1])});
+        }
+        delete map.links;
+      }
+      syncCur();sheets.push(...updated.slice(sheets.length));MAPS.push(...maps);
+      useTool('draw');switchMap(MAPS.length-maps.length);
+      if(!scenes[0].ground&&M.ents.length){
+        const xs=M.ents.map(e=>e.x),ys=M.ents.map(e=>e.y);
+        sel={x0:Math.min(...xs)-2,y0:Math.min(...ys)-2,x1:Math.max(...xs)+2,y1:Math.max(...ys)+2};
+        selFocus();sel=null;
+      }
+      toast('Đã dựng '+maps.length+' màn mới · '+scenes.map(scene=>scene.name).join(', ')+(notes.length?' · '+notes.join(' '):''));
+    }catch(error){toast('Chưa dựng được bản đồ: '+error.message);}
+    finally{assemblingScene=false;}
+  }
+  function buildStockOriginal(pack){
+    void assembleScene(async()=>reconstructPack(townPack(pack)?await readTown():[await readStockScenePack(pack)],{sample:townPack(pack)}));
+  }
+  function chooseTiledArchives(){
+    const input=el('input',{type:'file',accept:'.zip',multiple:''});
+    input.onchange=()=>{
+      const files=[...input.files];
+      if(files.length)void assembleScene(async()=>reconstructPack(await Promise.all(files.map(async file=>
+        openScenePack(file.name,new Uint8Array(await file.arrayBuffer()))))));
+    };
+    input.click();
+  }
+  function showSettlementRules(){
+    let number=0;
+    const dialog=el('dialog',{class:'asset-import','aria-label':'Tiêu chí dựng cảnh'});
+    dialog.append(el('header',{},el('h2',{},'Tiêu chí dựng cảnh 2D'),
+      el('button',{class:'b',onclick:()=>dialog.close()},'Đóng')));
+    for(const [title,rules] of settlementCriteria){
+      dialog.append(el('details',{open:''},el('summary',{},title),...rules.map(([status,rule])=>
+        el('p',{class:'hint'},(++number)+'. '+rule+' · '+status))));
+    }
+    dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+    document.body.append(dialog);dialog.showModal();
+  }
+  function openSceneGenerator(current){
+    const dialog=el('dialog',{class:'asset-import','aria-label':'Tạo bản đồ mới'});
+    const choose=(label,selected)=>{
+      const field=el('select',{class:'num inventory-select','aria-label':label},
+        stockArchiveIndex.map(p=>el('option',{value:p.file},p.name)));
+      field.value=selected;return field;
+    };
+    const terrain=/bases|landscape|overworld|pathways|textures-floor/.test(current.file);
+    const ground=choose('Gói nền',terrain?current.file:'kenney-isometric-roads.zip');
+    const props=choose('Đạo cụ sân',terrain||townPack(current)?'sbs-isometric-crates-pack-128x128.zip':current.file);
+    const localGround=el('input',{type:'file',accept:'.zip','aria-label':'ZIP nền từ máy'});
+    const localProps=el('input',{type:'file',accept:'.zip','aria-label':'ZIP vật thể từ máy'});
+    const newSeed=()=>crypto.getRandomValues(new Uint32Array(1))[0].toString(36).toUpperCase();
+    const seed=el('input',{type:'text',maxlength:40,value:newSeed(),class:'num inventory-select',required:''});
+    const profile=el('select',{class:'num inventory-select','aria-label':'Kiểu màn'},
+      Object.entries(settlementProfiles).map(([value,name])=>el('option',{value},name)));
+    const length=(value,label)=>el('input',{type:'number',class:'num',min:18,max:64,step:1,value,required:'','aria-label':label});
+    const width=length(34,'Chiều rộng'),height=length(28,'Chiều cao');
+    const landscape=el('select',{class:'num inventory-select','aria-label':'Địa hình'},
+      [['river','Khu dân cư ven sông'],['creek','Làng bên suối'],['land','Khu dân cư nội địa']].map(([value,name])=>el('option',{value},name)));
+    const form=el('form',{onsubmit:ev=>{
+      ev.preventDefault();
+      const pick=field=>stockArchiveIndex.find(p=>p.file===field.value);
+      const g=pick(ground),p=pick(props),seedValue=seed.value.trim()||newSeed(),w=width.valueAsNumber,h=height.valueAsNumber;
+      const gFile=localGround.files[0],pFile=localProps.files[0],style=landscape.value,levelProfile=profile.value;
+      const read=async(f,p)=>f?openScenePack(f.name,new Uint8Array(await f.arrayBuffer())):readStockScenePack(p);
+      dialog.close();
+      void assembleScene(async()=>{
+        const nativeRoads=stockArchiveIndex.find(item=>item.file==='kenney-isometric-roads.zip');
+        const treeResponse=await fetch('scenery/Settlement-Trees.zip');
+        if(!treeResponse.ok)throw Error('Không nạp được bộ cây.');
+        const [network,original,trees]=await Promise.all([readStockScenePack(nativeRoads),
+          readTown().then(packs=>reconstructPack(packs,{sample:true})),
+          treeResponse.arrayBuffer().then(bytes=>openScenePack('Tree Pack',new Uint8Array(bytes)))]);
+        const floor=!gFile&&g===nativeRoads?network:await read(gFile,g);
+        const objects=!gFile&&!pFile&&g===p?floor:await read(pFile,p);
+        return [await generateScene({ground:floor,objects,seed:seedValue,w,h,town:original[0],network,trees,style,profile:levelProfile})];
+      });
+    }},
+      el('label',{},'Kiểu màn',profile),el('label',{},'Địa hình',landscape),el('label',{},'Gói nền',ground),el('label',{},'Đạo cụ sân',props),
+      el('p',{class:'hint'},'Xưởng tạo mạng đường cho kiểu màn đã chọn, chia lô theo tuyến và ghép tường, mái SBS Town theo kích thước từng lô.'),
+      el('details',{},el('summary',{},'Dùng gói ZIP trên máy'),el('div',{class:'row'},el('label',{},'Nền ',localGround),el('label',{},'Vật thể ',localProps))),
+      el('div',{class:'row'},el('label',{},'Mã bố cục',seed),el('button',{type:'button',class:'b',onclick:()=>{seed.value=newSeed();}},'Đổi mã')),
+      el('p',{class:'hint'},'Nhập lại cùng mã và các lựa chọn để dựng lại bố cục.'),
+      el('div',{class:'row'},el('label',{},'Rộng ',width),el('label',{},'Cao ',height),'ô'),
+      el('button',{type:'submit',class:'b on'},'Dựng màn mới'));
+    dialog.append(el('header',{},el('h2',{},'Tạo bản đồ mới'),btn('Đóng',()=>dialog.close())),form);
+    dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+    document.body.append(dialog);dialog.showModal();
   }
   function chooseArchiveFiles(){
     if(importingPacks){toast('Đang nạp gói. Hãy đợi lượt hiện tại hoàn tất.');return;}

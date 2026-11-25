@@ -257,7 +257,7 @@ export async function openArchivePicker(files, receive, publishResults) {
               const cell = el('canvas',{width:w,height:h});
               cell.getContext('2d').drawImage(canvas,x,y,w,h,0,0,w,h);
               return [{url:cell.toDataURL('image/png'),path:entry.path,name:basename(entry.path).replace(/\.[^.]+$/,'')+' '+(i+1),
-                decoded:cell,frame:{kind:entry.kind, x:recipe.x||0, y:recipe.y||0}}];
+                decoded:cell,frame:{kind:recipe.groundTexture?'groundTexture':entry.kind, x:recipe.x||0, y:recipe.y||0}}];
             });
           } else {
             raw.getContext('2d').drawImage(image,0,0);

@@ -1,3 +1,4 @@
+import {settlementIssues} from './settlementChecks.js';
 import {actorFootprint,actorHeights,bodyFootprint,bodyHeight,fitsUnderRoof} from './headroom2d.js';
 import {outlineCollision3D} from './outline3d.js';
 import {constructionContext,gateIssue,wallIssue,isRoof,roofPlacementProblems,headroomIssue} from './constructionRules2d.js';
@@ -69,6 +70,12 @@ export function check2D(d0){
       lost.slice(0,5).map(([e,why])=>(e.name||'Cổng')+' ('+(e.x+1).toFixed(1)+', '+(e.y+1).toFixed(1)+') · '+why).join(' | ')):
       R('GATE','pass','Tất cả cổng có tường và lối tiếp cận'));
   }
+  if(cf.settlement?.plan){
+    const violations=settlementIssues(d0);
+    out.push(violations.length?R('CANH','broken',violations.length+' vi phạm dựng cảnh',
+      violations.slice(0,8).map(v=>v.rule+' · '+v.name+' · X '+v.x.toFixed(2)+' · Y '+v.y.toFixed(2)).join(' | ')):
+      R('CANH','pass','Mạng đường, lối tiếp cận, cầu và khoảng trống hiển thị đạt kiểm tra cảnh'));
+  }else if(cf.settlement)out.push(R('CANH','not_assessed','Cảnh cũ chưa lưu dữ liệu đối chiếu để kiểm tra tuyến và cầu'));
   logicRows(out,cf,E);
   paramRows(out,cf,['hp','spd','dmg','rng']);
   common(out,'2d');return out;}

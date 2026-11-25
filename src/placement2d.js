@@ -22,6 +22,7 @@ export function paintedPieces(layer, width, height) {
 export function sceneEntityLayer(entity) {
   if(entity.t!=='deco')return 5;
   if(entity.wallLine)return 2;
+  if(entity.tiledLayer!==undefined)return entity.sceneLayer;
   if(entity.sceneLayer===3||entity.wallId||entity.gateAssembly||entity.door)return 3;
   return entity.flat?1:2;
 }

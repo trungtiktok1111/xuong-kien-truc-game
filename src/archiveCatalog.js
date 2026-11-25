@@ -32,6 +32,7 @@ export function readTileset(path, xml) {
 function sbsKind(pack) {
   const name = pack.toLowerCase();
   if (!name.includes('sbs - isometric')) return '';
+  if (name.includes('textures - floor')) return 'terrain';
   if (name.includes('textures')) return 'material';
   if (/grid pack|tile toolkit|town examples/.test(name)) return 'reference';
   if (/pathways|overworld/.test(name)) return 'terrain';
@@ -49,17 +50,23 @@ export function classifyArchiveImage(pack, path, own, related) {
   let kind = sbs || 'other';
   if (/(?:^|\/)layers?\/|[-_](?:cover|base)\.[^.]+$/i.test(key) || /\/roof tiles\//.test('/' + key)) kind = 'layer';
   if (/(?:^|\/)(?:masks?|previews?|examples?)\/|(?:demo|contact[-_ ]?sheet)\.[^.]+$/.test(key)) kind = 'reference';
-  if (/tree_pack/i.test(pack) && /\/textures\/tree\d+\./.test('/'+key)) kind = 'model';
-  if (/tree_pack/i.test(pack) && /\/textures\/bush\d+\./.test('/'+key)) kind = 'object';
+  if (/tree_pack/i.test(pack) && /\/textures\/(?:tree|bush)\d+\./.test('/'+key)) kind = 'model';
+  if (/^pak_perspective/i.test(pack)||/^kenney_/.test(pack)&&/^(?:preview[^/]*|sample)\./i.test(key)) kind = 'reference';
   const matching = specs => specs.filter(spec => spec.path === key);
   let recipes = matching(own);
   if (!recipes.length && /sbs - isometric town pack/i.test(pack)) {
     recipes = related.filter(spec => townAlias(spec.path) === basename(key));
   }
+  const drSize=/^dr_master_tiles\((16|32|64|128)\)\.png$/.exec(key);
+  if(drSize){
+    const side=Number(drSize[1]);
+    recipes=[{width:side,height:side,margin:0,spacing:0,name:'Lưới DR Master Tiles'}];
+    kind='object';
+  }
   const match = key.match(/(\d+)x(\d+)\.[^.]+$/);
   const size = match ? [Number(match[1]), Number(match[2])] : null;
   if (!recipes.length && sbs && !heldArchiveKinds.has(kind) && size) {
-    recipes = [{width:size[0], height:size[1], margin:0, spacing:0, name:'Theo tên tệp SBS', inferred:true}];
+    recipes = [{width:size[0], height:size[1], margin:0, spacing:0, name:'Theo tên tệp SBS', inferred:true, groundTexture:/textures - floor/i.test(pack)}];
   }
   return {kind, recipes, size: recipes.length ? [recipes[0].width, recipes[0].height] : null};
 }

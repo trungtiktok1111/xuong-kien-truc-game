@@ -1,3 +1,5 @@
+import {bridgeHeight,bridgeRails,drawSettlementBridge,pickBridge} from './settlementBridge.js';
+import {tiledDepth} from './tiledScene.js';
 import {actorFootprint,actorHeights,bodyHeight,fitsUnderRoof,lowestCeiling,roofPlane,roofBlockedFootprint} from './headroom2d.js';
 import {constructionContext,isRoof,roofBearing,headroomIssue} from './constructionRules2d.js';
 import {builtWallFaces,isMapLink,portalAnchor} from './wall2d.js';
@@ -16,6 +18,7 @@ import {bakeLayer0,noiseOverlay,paintSlab,drawFog} from './groundfx.js';
 const HERO=88,FOES=[108,109,120,121,122,111,110],TD=2;
 export function play2D(o){
   const M=o.M,W=M.w,H=M.h,sheets=o.sheets;const CF=Object.assign({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:TD,idx:HERO},win:'auto'},M.cfg||{});const EN=(M.ents||[]).map(e=>e.door?Object.assign({},e,{door:Object.assign({},e.door)}):e),legacy=!EN.length;const VW=CF.view||'rpg',SIDE=VW==='side',ISO=VW==='iso',ANG=ISO&&CF.proj==='angle',decos=EN.filter(e=>e.t==='deco');
+  const bridge=CF.settlement?.plan?.bridge;
   const build=decos.some(isRoof)?constructionContext(M):null;
   const ceilings=build?.headroom()||[],playerSize=actorHeights(CF);
   const DCL=decos.flatMap(e=>{
@@ -23,10 +26,10 @@ export function play2D(o){
     const support=roofBearing(e,build);
     return support?[{...e,roofBase:support.base,roofRise:support.rise,ceiling:roofPlane(e,support)}]:[];
   });
-  const coverDepth=e=>e.y+(ANG?0:e.x);
-  const covers=DCL.filter(d=>d.placedProp&&sceneEntityLayer(d)===3&&isRoof(d)).sort((a,b)=>coverDepth(a)-coverDepth(b));
+  const coverDepth=e=>e.tiledLayer===undefined?e.y+(ANG?0:e.x):tiledDepth(e,W,H,ANG);
+  const covers=DCL.filter(d=>d.placedProp&&sceneEntityLayer(d)===3&&(isRoof(d)||d.tiledLayer!==undefined)).sort((a,b)=>coverDepth(a)-coverDepth(b));
   const coverSet=new Set(covers);
-  const fitsAt=(x,y,r,top)=>fitsUnderRoof(ceilings,actorFootprint(x,y,r),top);
+  const fitsAt=(x,y,r,top)=>fitsUnderRoof(ceilings,actorFootprint(x,y,r),top+bridgeHeight(bridge,x,y));
   const postureHeight=e=>e===P?(P.crouching?playerSize.crouching:playerSize.standing):(e.height||1.2);
   const ov=el('div',{style:'position:fixed;inset:0;z-index:100;background:#10161d;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden'});
   const cv=document.createElement('canvas');cv.style.cssText='width:100%;height:100%;display:block';ov.append(cv);const cx=cv.getContext('2d');
@@ -60,7 +63,7 @@ export function play2D(o){
   const AN=makeAnims(CF,sheets);
   const collision=mapCollision(M);
   const portalFloor=CF.outline?.loops?.length?mapCollision({...M,cfg:{...CF,outline:{...CF.outline,floorCollision:true}}}).floor:null;
-  const ZP=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(DCL.filter(e=>!e.door))],DRS=DCL.filter(e=>e.door);let ZS=ZP,ZR=zRaster(ZS,W,H);
+  const ZP=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(DCL.filter(e=>!e.door)),...bridgeRails(bridge)],DRS=DCL.filter(e=>e.door);let ZS=ZP,ZR=zRaster(ZS,W,H);
   /* cửa hai trạng thái: tìm đường coi cửa là đi qua được (ZP); va chạm thật (ZS) theo trạng thái hiện tại */
   const setDoor=(e,st)=>{const v=e.door.v&&e.door.v[st];if(!v||e.door.st===st)return;e.door.st=st;if(v.tile)e.tile=v.tile;e.col=v.col&&v.col.length?v.col:undefined;rebuildZ();};
   function rebuildZ(){ZS=DRS.length?[...ZP,...decoZones(DRS)]:ZP;ZR=zRaster(ZS,W,H);}
@@ -249,7 +252,7 @@ export function play2D(o){
     if(d<=Math.max(.03,st)&&traverse(P.x,P.y,q.x,q.y,.28,false)){P.x=q.x;P.y=q.y;PATH.shift();if(!PATH.length){PATH=null;GOAL=null;}return;}
     const px0=P.x,py0=P.y;const step=Math.min(d,st);move(P,dx/d*step,dy/d*step,.28);solidPush(P);fx=dx/d;fy=dy/d;const sxv=ISO?(dx-dy):dx;if(Math.abs(sxv)>.05)P.face=sxv>0?1:-1;
     stuckT=Math.hypot(P.x-px0,P.y-py0)<st*.35?stuckT+dt:0;if(stuckT>.45){stuckT=0;repath();}}
-  function toPlane(cx0,cy0){const r=cv.getBoundingClientRect(),sx=cx0-r.left,sy=cy0-r.top;if(!VIEW)return null;if(VIEW.ang)return {x:(sx-VIEW.ox0)/VIEW.cw,y:(sy-VIEW.oy0)/VIEW.ch};if(VIEW.iso){const a=(sx-VIEW.ox0)/VIEW.hw,b=(sy-VIEW.oy0)/VIEW.hh;return {x:(a+b)/2,y:(b-a)/2};}return {x:(sx-VIEW.ox)/VIEW.s,y:(sy-VIEW.oy)/VIEW.s};}
+  function toPlane(cx0,cy0){const r=cv.getBoundingClientRect(),sx=cx0-r.left,sy=cy0-r.top;if(!VIEW)return null;const deck=pickBridge(bridge,VIEW.bridgeProject,VIEW.bridgeUnit,sx,sy);if(deck)return deck;if(VIEW.ang)return {x:(sx-VIEW.ox0)/VIEW.cw,y:(sy-VIEW.oy0)/VIEW.ch};if(VIEW.iso){const a=(sx-VIEW.ox0)/VIEW.hw,b=(sy-VIEW.oy0)/VIEW.hh;return {x:(a+b)/2,y:(b-a)/2};}return {x:(sx-VIEW.ox)/VIEW.s,y:(sy-VIEW.oy)/VIEW.s};}
   function calcReach(){const a=nodesOf(.28),out=new Float32Array(W*H);let [si,sj]=nOf(P.x,P.y);if(!nfree(a,si,sj,.28)){const g=snapFree(P.x,P.y,.28,1.5);if(!g)return out;[si,sj]=nOf(g.x,g.y);}
     const seen=new Uint8Array(NW*NH),q=[sj*NW+si];seen[q[0]]=1;for(let h=0;h<q.length;h++){const k=q[h],i=k%NW,j=(k/NW)|0;out[((j/PQ)|0)*W+((i/PQ)|0)]+=1/(PQ*PQ);for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){if(!di&&!dj)continue;const ni=i+di,nj=j+dj;if(!nfree(a,ni,nj,.28))continue;if(di&&dj&&!(nfree(a,i+di,j,.28)&&nfree(a,i,j+dj,.28)))continue;const nk=nj*NW+ni;if(seen[nk]||(collision.floor||ceilings.length)&&!clearSeg((i+.5)/PQ,(j+.5)/PQ,(ni+.5)/PQ,(nj+.5)/PQ,.28))continue;seen[nk]=1;q.push(nk);}}
     return out;}
@@ -318,13 +321,18 @@ export function play2D(o){
       {const wc=SL.filter(q=>q.f&4);if(wc.length)shore(cx,wc,(x,y)=>[pX(x,y),pY(x,y)],hw);}
       if(geo)cx.restore();}
     else{VIEW={ox,oy,s};if(SIDE){const gr=cx.createLinearGradient(0,oy,0,oy+H*s);gr.addColorStop(0,'#5fa8dd');gr.addColorStop(1,'#d6edf8');cx.fillStyle=gr;cx.fillRect(ox,oy,W*s,H*s);}cx.drawImage(base,ox,oy,W*s,H*s);}
+    const floorX=ox,floorY=oy;
+    const bridgeProject=ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[floorX+x*s,floorY+y*s];
+    const bridgeUnit=ISO?s*.75:0;
+    VIEW.bridgeProject=bridgeProject;VIEW.bridgeUnit=bridgeUnit;
+    drawSettlementBridge(cx,bridge,bridgeProject,bridgeUnit);
     cx.font=(s*.6)+'px serif';cx.textAlign='center';for(const it of items)ico('heart',ISO?pX(it.x,it.y):ox+it.x*s,(ISO?pY(it.x,it.y):oy+it.y*s),s*.8);
     /* thứ tự vẽ theo KHUNG CHÂN: nhà dài chỉ có một điểm neo (góc trước) nên người đứng ở mép trước bên trái bị vẽ trước nhà → nhà đè lên thân người.
        Quy tắc isometric: đứng ngoài khung ở phía gần camera (x>=x1 hoặc y>=y1) thì vẽ SAU nhà; ở phía xa (x<=x0 hoặc y<=y0) thì vẽ TRƯỚC. */
     const RC=ISO?DCL.filter(d=>!d.flat&&d.zb).map(d=>{const z=d.zb,x0=d.x+1+z[0],y0=d.y+1+z[1];return {x0,y0,x1:x0+z[2],y1:y0+z[3],K:d.x+d.y+2};}):[];
     const kk=(x,y)=>{let k=ANG?y:x+y;if(ANG||!RC.length)return k;for(const r of RC){if(x<r.x0-2||x>r.x1+2||y<r.y0-2||y>r.y1+2)continue;const fr=x>=r.x1||y>=r.y1,bh=x<=r.x0||y<=r.y0;if(fr&&!bh)k=Math.max(k,r.K+.001);else if(bh&&!fr)k=Math.min(k,r.K-.001);}return k;};
     const builtWalls=[...builtWallFaces(DCL,ANG||!ISO),...DCL.flatMap(e=>gateWalls(e,ANG||!ISO))].map(wall=>({wall,k:wall.k,y:(wall.a[1]+wall.b[1])/2}));
-    const ents=[...builtWalls,...(geo?geo.walls.map(wall=>({wall,k:wall.k})):[]),{y:P.y,x:P.x,p:1,k:kk(P.x,P.y)},...E.map(e=>({y:e.y,x:e.x,e,k:kk(e.x,e.y)})),...NP.map(n=>({y:n.y,x:n.x,n,k:kk(n.x,n.y)})),...CH.map(c=>({y:c.y,x:c.x,c,k:kk(c.x,c.y)})),...(GL?[{y:GL.y,x:GL.x,g:GL,k:kk(GL.x,GL.y)}]:[]),...(ISO?GR.map(g=>({y:g.yb,x:g.xc,grp:g})):[]),...DCL.filter(d=>!d.wallLine&&!coverSet.has(d)).map(d=>({y:d.flat?-1e4+d.y:d.y,x:d.flat?-1e4+d.x:d.x+1,dc:d,k:d.placedProp?(ANG?d.y+1:d.x+d.y+2):ANG?(d.flat?-1e4+d.y:depthAng(d)):undefined}))].sort(ISO?((a,b)=>(a.k!=null?a.k:a.x+a.y)-(b.k!=null?b.k:b.x+b.y)):((a,b)=>a.y-b.y));
+    const ents=[...builtWalls,...(geo?geo.walls.map(wall=>({wall,k:wall.k})):[]),{y:P.y,x:P.x,p:1,k:kk(P.x,P.y)},...E.map(e=>({y:e.y,x:e.x,e,k:kk(e.x,e.y)})),...NP.map(n=>({y:n.y,x:n.x,n,k:kk(n.x,n.y)})),...CH.map(c=>({y:c.y,x:c.x,c,k:kk(c.x,c.y)})),...(GL?[{y:GL.y,x:GL.x,g:GL,k:kk(GL.x,GL.y)}]:[]),...(ISO?GR.map(g=>({y:g.yb,x:g.xc,grp:g})):[]),...DCL.filter(d=>!d.wallLine&&!coverSet.has(d)).map(d=>({y:d.flat?-1e4+d.y:d.y,x:d.flat?-1e4+d.x:d.x+1,dc:d,k:d.tiledLayer!==undefined?tiledDepth(d,W,H,ANG):d.placedProp?(ANG?d.y+1:d.x+d.y+2):ANG?(d.flat?-1e4+d.y:depthAng(d)):undefined}))].sort(ISO?((a,b)=>(a.k!=null?a.k:a.x+a.y)-(b.k!=null?b.k:b.x+b.y)):((a,b)=>a.y-b.y));
     const ox1=ox,oy1=oy,TC=[];
     const grounded=!!geo;
     function actorShadow(q){
@@ -341,7 +349,7 @@ export function play2D(o){
         drawPlacedProp(cx,d,sh,placedPropFrame(d,project,s,ANG?'angle':ISO?'iso':'top'));
         continue;
       }
-      const sp=ISO?sprOf(d,sh,ANG):(sh?{img:sh.img,tw:sh.tw,cols:sh.cols,margin:sh.margin,sc:d.sc,oy:d.oy||0}:null),ws=((sp?sp.sc:d.sc)||3)*s;const X=ANG?pX(d.x+.5,d.y+1):ISO?pX(d.x+1,d.y+1):ox1+(d.x+.5)*s,Y=ANG?pY(d.x+.5,d.y+1):ISO?pY(d.x+1,d.y+1):oy1+(d.y+1)*s;if(sp&&sp.img){const sx=(d.tile.idx%sp.cols)*(sp.tw+sp.margin),sy=Math.floor(d.tile.idx/sp.cols)*(sp.tw+sp.margin);cx.drawImage(sp.img,sx,sy,sp.tw,sp.tw,X-ws/2+(d.ox||0)*ws,Y-ws+(sp.oy||0)*ws,ws,ws);}if(d.cv)TC.push({d,X,Y,ws});continue;}if(n.grp){const g=n.grp,k2=s*.95/CQ,wp=ANG?g.c.width*s*1.5/CQ:g.c.width*k2,hp=ANG?g.c.height*s*1.5*ANG_R/CQ:g.c.height*k2;cx.drawImage(g.c,pX(g.xc,g.yb)-wp/2,pY(g.xc,g.yb)-hp,wp,hp);continue;}if(ISO){const q=n.p?P:(n.e||n.n||n.c||n.g);ox=pX(q.x,q.y)-q.x*s;oy=pY(q.x,q.y)-q.y*s;}if(n.c){const c=n.c;if(c.tl)tile(c.tl.sid,c.tl.idx,ox+(c.x-.5)*s,oy+(c.y-.5)*s,s,0);else{cx.font=(s*.7)+'px serif';cx.textAlign='center';ico(c.open?'chest2':'chest',ox+c.x*s,oy+c.y*s,s*1.2);}continue;}if(n.g){const g=n.g;if(g.tl)tile(g.tl.sid,g.tl.idx,ox+(g.x-.5)*s,oy+(g.y-.5)*s,s,0);else{cx.font=(s*.8)+'px serif';cx.textAlign='center';ico('flag',ox+g.x*s,oy+g.y*s,s*1.2);}continue;}if(n.n){const q=n.n;actorShadow(q);if(!(q.anim&&AN.drawChar(cx,q,q.anim,ox+q.x*s,oy+q.y*s,s,t,{iso:ISO,ang:ANG,grounded})))fbk(q,ox+(q.x-.5)*s,actorTop(q,q.tl.sid,q.tl.idx),s,0);continue;}const q=n.p?P:n.e;actorShadow(q);
+      const sp=ISO?sprOf(d,sh,ANG):(sh?{img:sh.img,tw:sh.tw,cols:sh.cols,margin:sh.margin,sc:d.sc,oy:d.oy||0}:null),ws=((sp?sp.sc:d.sc)||3)*s;const X=ANG?pX(d.x+.5,d.y+1):ISO?pX(d.x+1,d.y+1):ox1+(d.x+.5)*s,Y=ANG?pY(d.x+.5,d.y+1):ISO?pY(d.x+1,d.y+1):oy1+(d.y+1)*s;if(sp&&sp.img){const sx=(d.tile.idx%sp.cols)*(sp.tw+sp.margin),sy=Math.floor(d.tile.idx/sp.cols)*(sp.tw+sp.margin);cx.drawImage(sp.img,sx,sy,sp.tw,sp.tw,X-ws/2+(d.ox||0)*ws,Y-ws+(sp.oy||0)*ws,ws,ws);}if(d.cv)TC.push({d,X,Y,ws});continue;}if(n.grp){const g=n.grp,k2=s*.95/CQ,wp=ANG?g.c.width*s*1.5/CQ:g.c.width*k2,hp=ANG?g.c.height*s*1.5*ANG_R/CQ:g.c.height*k2;cx.drawImage(g.c,pX(g.xc,g.yb)-wp/2,pY(g.xc,g.yb)-hp,wp,hp);continue;}if(ISO){const q=n.p?P:(n.e||n.n||n.c||n.g);ox=pX(q.x,q.y)-q.x*s;oy=pY(q.x,q.y)-q.y*s-bridgeHeight(bridge,q.x,q.y)*bridgeUnit;}if(n.c){const c=n.c;if(c.tl)tile(c.tl.sid,c.tl.idx,ox+(c.x-.5)*s,oy+(c.y-.5)*s,s,0);else{cx.font=(s*.7)+'px serif';cx.textAlign='center';ico(c.open?'chest2':'chest',ox+c.x*s,oy+c.y*s,s*1.2);}continue;}if(n.g){const g=n.g;if(g.tl)tile(g.tl.sid,g.tl.idx,ox+(g.x-.5)*s,oy+(g.y-.5)*s,s,0);else{cx.font=(s*.8)+'px serif';cx.textAlign='center';ico('flag',ox+g.x*s,oy+g.y*s,s*1.2);}continue;}if(n.n){const q=n.n;actorShadow(q);if(!(q.anim&&AN.drawChar(cx,q,q.anim,ox+q.x*s,oy+q.y*s,s,t,{iso:ISO,ang:ANG,grounded})))fbk(q,ox+(q.x-.5)*s,actorTop(q,q.tl.sid,q.tl.idx),s,0);continue;}const q=n.p?P:n.e;actorShadow(q);
       if(n.p){if(P.inv>0&&Math.floor(t*14)%2)continue;
         cx.save();
         if(P.crouching){const y=oy+P.y*s;cx.translate(0,y);cx.scale(1,playerSize.crouching/playerSize.standing);cx.translate(0,-y);}
@@ -352,10 +360,11 @@ export function play2D(o){
     for(const d of covers){
       const project=ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s];
       const footprint=actorFootprint(P.x,P.y,.28);
-      const inside=Number.isFinite(lowestCeiling([d.ceiling],footprint))&&fitsUnderRoof([d.ceiling],footprint,postureHeight(P));
+      const inside=!!d.ceiling&&Number.isFinite(lowestCeiling([d.ceiling],footprint))&&fitsUnderRoof([d.ceiling],footprint,postureHeight(P));
       cx.globalAlpha=inside?.4:1;
       drawPlacedProp(cx,d,sheets[d.tile?.sid],placedPropFrame(d,project,s,ANG?'angle':ISO?'iso':'top'));
     }
+    drawSettlementBridge(cx,bridge,bridgeProject,bridgeUnit,true);
     cx.globalAlpha=1;
     if(ISO&&FOG)drawFog(cx,w,h,FOG,t,(P.x-P.y)*s*.75,(P.x+P.y)*s*.375);
     ox=ox1;oy=oy1;for(const d of DR){if(d.gate)continue;if(ISO){ox=pX(d.x,d.y)-d.x*s;oy=pY(d.x,d.y)-d.y*s;}cx.font=(s*.8)+'px serif';cx.textAlign='center';ico('door',ox+d.x*s,oy+d.y*s,s*1.2);}
