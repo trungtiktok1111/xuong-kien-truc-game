@@ -1,3 +1,4 @@
+import {usedGridBounds,rebaseOutlineSource} from './outlineGrid.js';
 import {builtWallFaces,mountGate} from './wall2d.js';
 import {gateWalls,gateZones} from './gate2d.js';
 import {constructionContext,propIssue,wallIssue} from './constructionRules2d.js';
@@ -587,8 +588,8 @@ export function init2D(root,A){
       const geo=outline2D(M.cfg.outline);
       if(geo){
         const [a,b,c,d]=geo.bounds;
-        const S=Math.min(w*.90/(c-a),h*.86/(d-b+1.3));
-        view.z=S/CELL;view.x=w/2-(a+c)*S/2;view.y=h/2-(b+d-1.1)*S/2;dirty=true;return;
+        const height=Math.max(geo.front,geo.rear),S=Math.min(w*.90/(c-a),h*.86/(d-b+height+.2));
+        view.z=S/CELL;view.x=w/2-(a+c)*S/2;view.y=h/2-(b+d-height)*S/2;dirty=true;return;
       }
       const n=M.w+M.h;view.z=Math.max(.01,Math.min(8,Math.min(w/(n*CELL),h/(n*CELL*.5+CELL*4))));const S=CELL*view.z;view.x=w/2-(M.w-M.h)*S/2;view.y=(h-n*S/2)/2;dirty=true;return;}
     view.z=Math.max(.01,Math.min(8,Math.min(w/(M.w*CELL),h/(M.h*CELL))));view.x=(w-M.w*CELL*view.z)/2;view.y=(h-M.h*CELL*view.z)/2;dirty=true;}
@@ -1956,7 +1957,20 @@ export function init2D(root,A){
     sid=target.findIndex(match);
     return sid>=0?sid:target.push(sh)-1;
   }
-  async function buildBuiltinOutline(level,outline,w,h,target,stamps){
+  function fixedIncomingOutlineCells(){
+    return MAPS.flatMap((map,i)=>i===curMap?[]:map.ents
+      .filter(e=>e.t==='door'&&Number(e.to)===curMap&&Number.isFinite(e.tx)&&Number.isFinite(e.ty))
+      .map(e=>[e.tx,e.ty]));
+  }
+  function outlineGridBounds(level){
+    const incoming=fixedIncomingOutlineCells();
+    const sample=level?.sample;
+    const source=sample?{...sample,blk:sample.collision}:level?null:M;
+    const cells=level?[level.start,level.goal,...(level.chests||[])].filter(Boolean):M.ents
+      .filter(e=>e.t==='door'&&Number(e.to)===curMap&&Number.isFinite(e.tx)&&Number.isFinite(e.ty)).map(e=>[e.tx,e.ty]);
+    return {bounds:usedGridBounds(source,[...incoming,...cells]),keepOrigin:incoming.length>0};
+  }
+  async function buildBuiltinOutline(level,outline,w,h,target,stamps,origin){
     const sample=level.sample,ids=[0,1,2,3];
     for(const sh of sample.sheets.slice(4))ids.push(await loadBuiltinSheet(sh,target));
     const remap=tile=>({...tile,sid:ids[tile.sid]});
@@ -1969,9 +1983,9 @@ export function init2D(root,A){
       if(!v)return 0;
       const {sid,idx,f}=dec(v);return enc(ids[sid],idx,f);
     }));
-    const same=w===sample.w&&h===sample.h&&JSON.stringify(outline.loops)===JSON.stringify(sample.cfg.outline.loops);
+    const same=!origin.some(Boolean)&&w===sample.w&&h===sample.h&&JSON.stringify(outline.loops)===JSON.stringify(sample.cfg.outline.loops);
     if(same&&!stamps.length){preset.cfg.outline={...outline,floorCollision:true};return preset;}
-    return buildOutlineMap(outline,w,h,{...level,sample:null,goal:null},target,stamps,false,preset);
+    return buildOutlineMap(outline,w,h,{...level,sample:null,goal:null},target,stamps,false,preset,origin);
   }
   function validateMapOutline(outline,w,h){
     if(!validOutline(outline.loops,w,h)||![outline.front,outline.rear].every(n=>Number.isFinite(n)&&n>=0&&n<=4))
@@ -2015,9 +2029,16 @@ export function init2D(root,A){
       }
     }
   }
-  async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[]){
-    validateResize(w,h);validateMapOutline(outline,w,h);
-    const current=M,m=w===M.w&&h===M.h?M:resizedMap(M,w,h);
+  async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[],origin=[0,0]){
+    validateDimensions(w,h);validateMapOutline(outline,w,h);
+    const [ox,oy]=origin;
+    if(origin.some(Boolean)){
+      const {bounds,keepOrigin}=outlineGridBounds();
+      if(keepOrigin||bounds&&(bounds[0]<ox-1e-8||bounds[1]<oy-1e-8||bounds[2]>ox+w+1e-8||bounds[3]>oy+h+1e-8))
+        throw Error('Lưới mới cắt qua nội dung đã đặt. Hãy bấm Vừa lưới lại.');
+    }else validateResize(w,h);
+    const current=M,m=origin.some(Boolean)?rebaseOutlineSource(M,w,h,origin,curMap):
+      w===M.w&&h===M.h?M:resizedMap(M,w,h);
     const mask=rasterOutline(outline.loops,w,h),old=m.cfg.outline?.loops;
     const oldMask=old?rasterOutline(old,w,h):null;
     if(!mask.some(Boolean))throw Error('Đường bao chưa phủ ô sàn nào.');
@@ -2027,18 +2048,19 @@ export function init2D(root,A){
     }
     const fill=outlineFill(m,stamps)||await stoneTile(sheets);
     if(M!==current)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
-    pushUndo();M=m;paintOutline(m,outline,mask,fill,updateCollision,oldMask,stamps);
+    pushUndo();M=m;sel=null;hov=null;paintOutline(m,outline,mask,fill,updateCollision,oldMask,stamps);
     after();fit();draw();toast('Đã áp dụng đường bao');
   }
   function outlineFill(source,stamps){
     return source?.layers[0].find(Boolean)||stamps.flatMap(stamp=>stamp).find(cell=>cell.tiles[0])?.tiles[0];
   }
-  async function buildOutlineMap(outline,w,h,level,target,stamps,useSource=true,sourcePreset=null){
+  async function buildOutlineMap(outline,w,h,level,target,stamps,useSource=true,sourcePreset=null,origin=[0,0]){
     validateDimensions(w,h);validateMapOutline(outline,w,h);
-    if(level?.sample)return buildBuiltinOutline(level,outline,w,h,target,stamps);
+    if(level?.sample)return buildBuiltinOutline(level,outline,w,h,target,stamps,origin);
     const mask=rasterOutline(outline.loops,w,h);
     const index=p=>p&&p[0]>=0&&p[0]<w&&p[1]>=0&&p[1]<h?p[1]*w+p[0]:-1;
-    const proposed=index(level?.start),goal=index(level?.goal);
+    const shift=p=>p&&[p[0]-origin[0],p[1]-origin[1]];
+    const proposed=index(shift(level?.start)),goal=index(shift(level?.goal));
     const start=mask[proposed]?proposed:mask.indexOf(1);
     if(start<0)throw Error('Hình chưa có ô nào đi được.');
     const queue=[start],visited=new Uint8Array(mask.length);visited[start]=1;
@@ -2061,14 +2083,15 @@ export function init2D(root,A){
     Object.assign(fresh.ents[0],place(start));
     fresh.ents.push({id:'goal-'+Date.now().toString(36),t:'goal',...place(end),name:'Đích',tile:null});
     for(const p of level?.chests||[]){
-      const i=index(p);
+      const i=index(shift(p));
       if(visited[i]&&i!==start&&i!==end)fresh.ents.push({id:'chest-'+i,t:'chest',...place(i),name:'Rương',tile:null});
     }
+    if(sourcePreset&&origin.some(Boolean))sourcePreset=rebaseOutlineSource(sourcePreset,w,h,origin);
     if(sourcePreset){
       c.hero=sourcePreset.cfg.hero;c.smooth=sourcePreset.cfg.smooth;
       fresh.ents.push(...sourcePreset.ents.filter(e=>e.t==='deco'&&mask[index([e.x,e.y])]));
     }
-    const source=sourcePreset||(level||!useSource?null:M);
+    const source=sourcePreset||(level||!useSource?null:origin.some(Boolean)?rebaseOutlineSource(M,w,h,origin):M);
     let fill=outlineFill(source,stamps);
     if(level?.theme&&!sourcePreset){
       const style=builtinOutlineSample();
@@ -2082,16 +2105,16 @@ export function init2D(root,A){
     paintOutline(fresh,outline,mask,fill||await stoneTile(target),true,null,stamps,source,target);
     return fresh;
   }
-  async function previewOutlineMap(outline,w,h,level,stamps=[]){
+  async function previewOutlineMap(outline,w,h,level,stamps=[],origin=[0,0]){
     const previewSheets=sheets.slice();
-    const draft=await buildOutlineMap(outline,w,h,level,previewSheets,stamps);
+    const draft=await buildOutlineMap(outline,w,h,level,previewSheets,stamps,true,null,origin);
     if(draft.cfg.proj==='angle')await ensureAngle(previewSheets);
     return {M:draft,sheets:previewSheets};
   }
-  async function replaceWithOutlineMap(outline,w,h,level,stamps=[]){
+  async function replaceWithOutlineMap(outline,w,h,level,stamps=[],origin=[0,0]){
     const before=M,index=curMap;
     const incoming=MAPS.flatMap((map,i)=>i===index?[]:map.ents.filter(e=>e.t==='door'&&e.to===index&&e.tx!=null&&e.ty!=null));
-    const replacement=await buildOutlineMap(outline,w,h,level,sheets,stamps);
+    const replacement=await buildOutlineMap(outline,w,h,level,sheets,stamps,true,null,origin);
     if(M!==before||curMap!==index)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Màn mẫu.');
     const collision=mapCollision(replacement);
     if(incoming.some(e=>!collision.free(e.tx+.5,e.ty+.5,.28)))
@@ -2101,8 +2124,8 @@ export function init2D(root,A){
     syncCur();after();fit();draw();cv.focus({preventScroll:true});
     toast('Đã áp dụng '+level.name+'. Có thể hoàn tác trong trình sửa.');
   }
-  async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],useSource=true){
-    const current=M,fresh=await buildOutlineMap(outline,w,h,level,sheets,stamps,useSource);
+  async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true){
+    const current=M,fresh=await buildOutlineMap(outline,w,h,level,sheets,stamps,useSource,null,origin);
     if(M!==current)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
     if(MAPS.some(m=>m.name===fresh.name)||M.name===fresh.name){
       const name=fresh.name;
@@ -2114,5 +2137,5 @@ export function init2D(root,A){
     toast('Đã tạo '+fresh.name);
   }
   function clearOutline(){pushUndo();delete M.cfg.outline;after();fit();draw();}
-  return {ready,exportPNG,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  return {ready,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
 }

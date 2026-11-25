@@ -1,3 +1,4 @@
+import {DEFAULT_OUTLINE_WALL_HEIGHT} from './outlineGrid.js';
 const cached=new WeakMap();
 export function outline2D(data,angle=false){
  if(!data?.loops?.length)return null;
@@ -23,7 +24,7 @@ export function outline2D(data,angle=false){
  });
  const points=loops.flat(),u=points.map(p=>angle?p[0]:p[0]-p[1]),v=points.map(p=>angle?p[1]:(p[0]+p[1])/2);
  const bounds=[Math.min(...u),Math.min(...v),Math.max(...u),Math.max(...v)];
- const result={loops,walls,bounds,front:data.front??.375,rear:data.rear??1.1};
+ const result={loops,walls,bounds,front:data.front??DEFAULT_OUTLINE_WALL_HEIGHT,rear:data.rear??DEFAULT_OUTLINE_WALL_HEIGHT};
  variants[index]=result;cached.set(data,variants);return result;
 }
 export function stoneBackdrop(cx,w,h){

@@ -19,7 +19,7 @@ function* outlineCells(loops,w,h){
  }
 }
 
-export function captureOutlineTiles(loops,source,stamps,w,h){
+export function captureOutlineTiles(loops,source,stamps,w,h,[ox,oy]=[0,0]){
  const placed=new Map();
  for(const stamp of stamps)for(const {x,y,tiles} of stamp){
   const k=key(x,y),prior=placed.get(k);
@@ -28,7 +28,7 @@ export function captureOutlineTiles(loops,source,stamps,w,h){
  const cells=new Map();
  for(const {x,y,on} of outlineCells(loops,w,h)){
   const k=key(x,y),pasted=placed.get(k);
-  const i=source&&x<source.w&&y<source.h?y*source.w+x:-1;
+  const i=source&&x+ox<source.w&&y+oy<source.h?(y+oy)*source.w+x+ox:-1;
   const tiles=Array.from({length:on?4:1},(_,l)=>pasted?.[l]||(i>=0?source.layers[l][i]:0));
   if(tiles.some(Boolean))cells.set(k,tiles);
  }
