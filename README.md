@@ -2,6 +2,12 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
+## Khoảng trống theo trục Z trong cảnh 2D
+
+- X/Y xác định vị trí và diện tích chiếm chỗ. Z tính từ mặt sàn theo đơn vị ô bản đồ. So sánh đỉnh vật với đáy mái thấp nhất trên phần mặt bằng giao nhau. Mái dốc có cao độ khác nhau ở mỗi điểm.
+- Mặc định người chơi đứng cao 1,20 ô, cúi còn 0,68 ô. Bấm C hoặc nút Cúi để đi dưới mái thấp. Khi ở dưới mái thấp, cần ra chỗ đủ cao để đứng dậy. Tìm đường dùng tư thế hiện tại.
+- Mặc định rương đóng cao 0,55 ô, mở nắp lên 0,80 ô. Chiều cao của người chơi, NPC, quái và vật thể có thể chỉnh trong bảng Đối tượng. Vật thể ảnh riêng dùng chiều cao ước lượng từ ảnh khi chưa nhập số đo.
+
 ## Quy tắc dựng mái 2D
 
 - Mái cần hai điểm tựa ở hai phía trên tường hoặc cột có nền đỡ. Cao độ của mái khớp với đỉnh điểm tựa. Hai điểm bằng cao độ cho mặt mái ngang. Có thể đổi chiều mái hoặc chỉnh chiều cao tường để tạo độ dốc.

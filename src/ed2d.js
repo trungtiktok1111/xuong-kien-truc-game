@@ -1,7 +1,8 @@
+import {actorHeights,bodyHeight,roofPlane} from './headroom2d.js';
 import {usedGridBounds,rebaseOutlineSource} from './outlineGrid.js';
 import {builtWallFaces,mountGate,outlineSupports,isMapLink,projectSegment,wallThickness,WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS} from './wall2d.js';
 import {gateWalls,gateZones} from './gate2d.js';
-import {constructionContext,gateIssue,propIssue,wallIssue,isRoof,isBearingColumn,roofBearing,roofIssue,wallHasFoundation} from './constructionRules2d.js';
+import {constructionContext,gateIssue,propIssue,wallIssue,isRoof,isBearingColumn,roofBearing,roofIssue,wallHasFoundation,headroomIssue} from './constructionRules2d.js';
 import {automaticPaintZones, daXoayArchProfiles, estimateContact, makePaintProfile, paintedPieces, paintFamily, roofTextureDirection, sceneEntityLayer, propContact, resizeProp, turnProp} from './placement2d.js';
 import {openArchivePicker} from './archivePicker.js';
 import {DA_XOAY_LEVEL} from './outlineLevels.js';
@@ -104,10 +105,11 @@ export function init2D(root,A){
     if(!ex&&!objType){selId=null;ui.obj();return;}
     pushUndo();
     if(ex?.wallLine){undo.pop();selId=ex.id;draw();return;}
-    if(ex){selId=ex.id;const at=s2g(lastPt.x,lastPt.y);drag=ex.placedProp?{ent:true,precise:true,dx:at.x-ex.x,dy:at.y-ex.y,from:[ex.x,ex.y],original:structuredClone(ex)}:{ent:true,dx:c.x-ex.x,dy:c.y-ex.y};}
+    if(ex){selId=ex.id;const at=s2g(lastPt.x,lastPt.y);drag=ex.placedProp?{ent:true,precise:true,dx:at.x-ex.x,dy:at.y-ex.y,from:[ex.x,ex.y],original:structuredClone(ex)}:{ent:true,dx:c.x-ex.x,dy:c.y-ex.y,from:[ex.x,ex.y],original:structuredClone(ex)};}
     else if(objType==='start'&&M.ents.some(e=>e.t==='start')){const s=M.ents.find(e=>e.t==='start');s.x=c.x;s.y=c.y;selId=s.id;drag={ent:true};}
     else if(objType==='deco'){if(!vatSel){toast('Chọn một vật thể trong danh sách bên dưới trước');return;}const it=vatSel,n={id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),t:'deco',x:c.x,y:c.y,f:it.f,fx:it.fx,fy:it.fy,sc:it.sc,ox:it.ox,oy:it.oy,flat:it.role==='Phủ nền',name:it.name,tile:it.tile,zb:it.zb};if(it.zps)n.zps=JSON.parse(JSON.stringify(it.zps));if(it.col)n.col=JSON.parse(JSON.stringify(it.col));if(it.cal!=null)n.cal=it.cal;if(it.walk||it.role==='Phủ nền')n.walk=true;if(it.estimated)n.estimated=true;if(it.cv)n.cv=it.cv;M.ents.push(n);selId=n.id;drag={ent:true};}
     else{const n=newEnt(objType,c.x,c.y);M.ents.push(n);selId=n.id;drag={ent:true};}
+    if(!ex&&!acceptStructure()){drag=null;selId=null;ui.obj();return;}
     after();ui.obj();}
   // ===== chế độ iso (nhìn giống lúc chơi) =====
   let lastPt=null,isoC=null,isoK='',isoHB=[];
@@ -234,7 +236,7 @@ export function init2D(root,A){
       cx.save();cx.strokeStyle='#75efc1';cx.fillStyle='#75efc1';cx.setLineDash([3,3]);cx.beginPath();
       cx.moveTo(x,y);cx.lineTo(x,top);cx.stroke();cx.fillRect(x-2,top-2,4,4);cx.restore();
     }
-    if(active)drawMapName(entityName(e),bounds,issue?'#ffaaaa':'#ffe9ac');
+    if(active)drawMapName(entityName(e)+(support?' · Z '+coord.format(support.base)+(support.rise?'–'+coord.format(support.base+support.rise):''):''),bounds,issue?'#ffaaaa':'#ffe9ac');
     if(!preview){
       isoHB.push({e,r:bounds,f:[e.x+.9,e.y+.9,e.x+1.1,e.y+1.1]});
     }
@@ -977,18 +979,25 @@ export function init2D(root,A){
     }
     return pieces;
   }
-  function unsupportedPieces(map){
-    const pieces=structuralPieces(map),ctx=constructionContext(map);
-    return pieces.filter(e=>isRoof(e)?!roofBearing(e,ctx):e.wallLine?
-      !wallHasFoundation(e,ctx):e.placedProp&&(e.bearingColumn??isBearingColumn(e.name))&&!ctx.floor(e.x+1,e.y+1,.06));
+  function structuralProblems(map){
+    const pieces=structuralPieces(map),ctx=constructionContext({...map,ents:pieces});
+    const roofs=ctx.headroom(),issues=[];
+    for(const e of pieces){
+      const issue=isRoof(e)?roofs.some(r=>r.id===e.id)?'':roofIssue:
+        e.wallLine&&!wallHasFoundation(e,ctx)?'Chân tường cần nền đỡ.':
+        e.placedProp&&(e.bearingColumn??isBearingColumn(e.name))&&!ctx.floor(e.x+1,e.y+1,.06)?
+          'Chân cột cần nền đỡ.':headroomIssue(e,roofs,map.cfg);
+      if(issue)issues.push({e,issue});
+    }
+    return issues;
   }
   function structureError(before,next){
-    const unsupported=unsupportedPieces(next);
-    if(!unsupported.length)return '';
-    const fingerprint=e=>JSON.stringify([e.id,e.x,e.y,e.sc,e.roofDirection,e.wallLine,e.tile]);
-    const carried=new Set(unsupportedPieces(before).map(fingerprint));
-    const item=unsupported.find(e=>!carried.has(fingerprint(e)));
-    return item?(item.name||'Kết cấu')+' · '+(isRoof(item)?roofIssue:'Chân cột hoặc tường cần nền đỡ.'):'';
+    const problems=structuralProblems(next);
+    if(!problems.length)return '';
+    const fingerprint=({e,issue})=>JSON.stringify([e.id,e.x,e.y,e.sc,e.roofDirection,e.wallLine,e.tile,issue]);
+    const carried=new Set(structuralProblems(before).map(fingerprint));
+    const item=problems.find(problem=>!carried.has(fingerprint(problem)));
+    return item?(item.e.name||'Kết cấu')+' · '+item.issue:'';
   }
   function acceptStructure(){
     const before=undo.at(-1);
@@ -1000,7 +1009,13 @@ export function init2D(root,A){
   function constructionIssue(piece,fresh=false){
     if(piece.gateUncalibrated)return 'Ảnh cổng này cần dữ liệu hai chân trụ. Có thể lắp ngay bằng cổng Đá Xoáy.';
     if(!piece.gateAssembly&&!piece.buildChecks&&!isRoof(piece))return '';
-    return propIssue(piece,ruleCtx(fresh));
+    const ctx=ruleCtx(fresh),issue=propIssue(piece,ctx);
+    if(issue)return issue;
+    if(!isRoof(piece))return headroomIssue(piece,ctx.headroom(),M.cfg);
+    const bearing=roofBearing(piece,ctx);
+    const plane=roofPlane(piece,bearing);
+    const conflict=M.ents.find(e=>headroomIssue(e,[plane],M.cfg));
+    return conflict?(conflict.name||'Vật thể')+' · '+headroomIssue(conflict,[plane],M.cfg):'';
   }
   function aimProp(prop,p){
     const hit=prop.wallGateBrush?visibleWallAt(p):null;
@@ -1145,6 +1160,17 @@ export function init2D(root,A){
         change(Number(input.value));
       }});
     return el('label',{},'Độ dày tường ',input,' ô');
+  }
+  function physicalHeightField(label,obj,key,value,max=12){
+    const input=el('input',{type:'number',min:.1,max,step:.01,class:'num',value,
+      'aria-label':label,style:'width:76px',onchange:()=>{
+        const n=input.valueAsNumber;
+        if(!Number.isFinite(n)||n<.1||n>max){input.value=value;return;}
+        pushUndo();obj[key]=n;
+        if(acceptStructure())after();
+        draw();
+      }});
+    return el('label',{},label+' ',input,' ô');
   }
   function heightInput(value,change){
     const input=el('input',{type:'number',class:'num',min:.25,max:8,step:.05,value,
@@ -1580,6 +1606,8 @@ export function init2D(root,A){
         body.append(el('div',{style:'border:1px solid '+OT[e.t][2]+';border-radius:10px;padding:8px;margin:6px 0'},
           el('div',{class:'lbl',style:'margin-bottom:4px'},OT[e.t][0]+' '+OT[e.t][1]+' · '+(e.placedProp?'Điểm chân ('+(e.x+1).toFixed(2)+', '+(e.y+1).toFixed(2)+')':'Ô ('+e.x+', '+e.y+')')),
           e.t!=='start'&&e.t!=='goal'?fld('Tên',e,'name'):'',
+          bodyHeight(e,M.cfg)>0&&e.t!=='start'&&!isRoof(e)?physicalHeightField('Chiều cao vật',e,'bodyHeight',bodyHeight(e,M.cfg)):null,
+          e.t==='chest'?physicalHeightField('Phần nắp nâng thêm',e,'lidRise',bodyHeight(e,M.cfg,true)-bodyHeight(e,M.cfg)):null,
           ...(e.t==='enemy'?[fld('Máu',e,'hp','number',{min:1,max:99}),fld('Sát thương',e,'dmg','number',{min:0,max:9}),fld('Tốc độ (ô/s)',e,'spd','number',{min:0,max:8,step:.1}),fld('Tầm phát hiện',e,'chase','number',{min:1,max:20}),
             el('div',{class:'row'},el('span',{class:'lbl'},'Hành vi'),(()=>{const s=el('select',{class:'num'},AIL.map(([v,n])=>el('option',{value:v},n)));s.value=e.ai;s.onchange=()=>{e.ai=s.value;after();};return s;})())]:[]),
           ...(e.t==='deco'&&e.door?[el('div',{class:'row'},el('span',{class:'lbl'},'Trạng thái cửa'),(()=>{const sl=el('select',{class:'num'},el('option',{value:'dong'},'Đóng (chặn lối)'),el('option',{value:'mo'},'Mở (đi qua được)'));sl.value=e.door.st;sl.onchange=()=>{const v=e.door.v[sl.value];e.door.st=sl.value;e.tile=v.tile;if(v.col&&v.col.length)e.col=v.col;else delete e.col;after();draw();};return sl;})()),el('div',{class:'row'},el('label',{style:'font-size:13px'},(()=>{const c=el('input',{type:'checkbox'});c.checked=!!e.door.auto;c.onchange=()=>{e.door.auto=c.checked?1:0;after();};return c;})(),' Tự đóng lại khi nhân vật đi xa')),el('div',{class:'hint'},'Khi chơi: cửa tự mở khi lại gần, phím E đóng/mở. Vùng chặn riêng từng trạng thái.')]:[]),
@@ -1603,6 +1631,8 @@ export function init2D(root,A){
       body.append(el('div',{class:'row'},btn('🗑 Xoá hết đối tượng',async()=>{if(await yes('Xoá toàn bộ đối tượng?')){pushUndo();M.ents=[];selId=null;after();draw();}})));
       const C=M.cfg;
       body.append(el('div',{style:'border:1px solid #34485a;border-radius:10px;padding:8px;margin:6px 0'},el('div',{class:'lbl'},'⚙ Thiết lập game'),
+        physicalHeightField('Cao khi đứng',C,'playerHeight',actorHeights(C).standing),
+        physicalHeightField('Cao khi cúi',C,'crouchHeight',actorHeights(C).crouching,actorHeights(C).standing),
         fld('Máu người chơi',C,'hp','number',{min:1,max:99}),fld('Tốc độ đi (ô/s)',C,'spd','number',{min:1,max:10,step:.1}),fld('Sát thương đòn đánh',C,'dmg','number',{min:1,max:99}),fld('Tầm đánh (ô)',C,'rng','number',{min:.5,max:4,step:.05}),
         el('div',{class:'row'},el('span',{class:'lbl'},'Điều kiện thắng'),(()=>{const s=el('select',{class:'num'},el('option',{value:'auto'},'Tự động'),el('option',{value:'kill'},'Diệt hết quái'),el('option',{value:'goal'},'Chạm đích'),el('option',{value:'both'},'Diệt hết quái + chạm đích'));s.value=C.win;s.onchange=()=>{C.win=s.value;after();};return s;})()),
         el('div',{class:'lbl'},'Hình nhân vật chính:'),picker(()=>C.hero,t=>{C.hero=t;}),animPick(C,'heroAnim',M.cfg,after,'Hoạt ảnh nhân vật chính')));

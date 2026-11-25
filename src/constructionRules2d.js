@@ -1,3 +1,4 @@
+import {actorHeights,bodyFootprint,bodyHeight,fitsUnderRoof,lowestCeiling,roofPlane,wallCeiling} from './headroom2d.js';
 import {roofTextureDirection} from './placement2d.js';
 import {outline2D} from './outline2d.js';
 import {wallThickness,wallSpan,mountGate,builtWallZones,outlineSupports,gateLanding,wallRuns} from './wall2d.js';
@@ -27,10 +28,14 @@ export function constructionContext(map,placementZones=map.placementZones){
     return !!ground&&[[0,0],[-r,0],[r,0],[0,-r],[0,r]].every(([dx,dy])=>
       ground[Math.floor(y+dy)*map.w+Math.floor(x+dx)]);
   };
-  let bearings;
+  let bearings,planes;
   const bearingSurfaces=()=>bearings??=roofSupports(map,floor);
-  return {floor,bearingSurfaces,free:collision.free,manual:map.cfg?.zones||[],
+  const ctx={floor,bearingSurfaces,headroom:()=>planes??=(map.ents||[]).filter(isRoof).flatMap(roof=>{
+    const bearing=roofBearing(roof,ctx);
+    return bearing?[roofPlane(roof,bearing)]:[];
+  }),free:collision.free,manual:map.cfg?.zones||[],
     objects:decoZones(map.ents),walls:[...(map.ents||[]).filter(e=>e.wallLine),...outlineSupports(outline)],gates:(map.ents||[]).filter(e=>e.gateAssembly),markers:(map.ents||[]).filter(e=>['start','goal','door','npc','chest'].includes(e.t))};
+  return ctx;
 }
 
 export function isRoof(e){
@@ -54,7 +59,7 @@ function roofSupports(map,floor){
       }
     }else if(e.placedProp&&(e.bearingColumn??isBearingColumn(e.name))&&!isRoof(e)&&!e.wallId&&!e.gateAssembly){
       const x=e.x+1,y=e.y+1;
-      const height=((e.spriteBounds?.[3]??1)-(e.spriteBounds?.[1]??0))*(e.sc||0)/.75;
+      const height=bodyHeight(e,map.cfg);
       if(floor(x,y,.06))surfaces.push({a:[x,y],b:[x,y],key:e,height});
     }
   }
@@ -102,6 +107,22 @@ export const roofIssue='Mái cần tường hoặc cột có nền đỡ ở hai
 
 export function roofPlacementProblems(map,context=constructionContext(map)){
   return (map.ents||[]).filter(isRoof).filter(e=>!roofBearing(e,context));
+}
+
+// Bearing columns are tested at the contact point (flush contact with the roof is legal).
+export function headroomIssue(e,roofs,cfg){
+  if(!roofs.length||isRoof(e))return '';
+  if(e.wallLine){
+    const top=e.wallLine.height??1.25,gap=wallCeiling(roofs,e);
+    return top<=gap+.03?'':'Đỉnh tường '+top.toFixed(2)+' ô cao hơn mặt dưới mái '+gap.toFixed(2)+' ô.';
+  }
+  const column=e.t==='deco'&&e.placedProp&&(e.bearingColumn??isBearingColumn(e.name));
+  const top=e.t==='start'?actorHeights(cfg).crouching:bodyHeight(e,cfg);
+  if(!top)return '';
+  const foot=column?[e.x+1,e.y+1,e.x+1,e.y+1]:bodyFootprint(e);
+  const gap=lowestCeiling(roofs,foot);
+  if(column?top<=gap+.03:fitsUnderRoof(roofs,foot,top))return '';
+  return 'Khoảng trống dưới mái '+gap.toFixed(2)+' ô, cần '+top.toFixed(2)+' ô.';
 }
 
 export function gateIssue(e,context){

@@ -1,5 +1,6 @@
+import {actorFootprint,actorHeights,bodyFootprint,bodyHeight,fitsUnderRoof} from './headroom2d.js';
 import {outlineCollision3D} from './outline3d.js';
-import {constructionContext,gateIssue,wallIssue,isRoof,roofPlacementProblems} from './constructionRules2d.js';
+import {constructionContext,gateIssue,wallIssue,isRoof,roofPlacementProblems,headroomIssue} from './constructionRules2d.js';
 import {mapCollision} from './mapCollision.js';
 import {guideBox,appGuides} from './editorHelp.js';
 import {zRaster,decoZones} from './zones.js';
@@ -12,15 +13,19 @@ const SOLID={cube:1,slab:1,wedge:1,stairs:1,curve:1,pillar:1,panel:1,window:1,ra
 const R=(id,st,txt,why)=>({id,st,txt,why:why||''});
 
 // ---------- 2D ----------
-function bfs2(d,sx,sy){const W=d.w,H=d.h,seen=new Uint8Array(W*H);if(sx<0||sy<0||sx>=W||sy>=H)return seen;const q=[[sx,sy]];seen[sy*W+sx]=1;
-  while(q.length){const [x,y]=q.pop();for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+a,ny=y+b;if(nx<0||ny<0||nx>=W||ny>=H)continue;const i=ny*W+nx;if(seen[i]||d.blk[i])continue;seen[i]=1;q.push([nx,ny]);}}return seen;}
+function bfs2(d,sx,sy,allowed=()=>true){const W=d.w,H=d.h,seen=new Uint8Array(W*H);if(sx<0||sy<0||sx>=W||sy>=H)return seen;const q=[[sx,sy]];seen[sy*W+sx]=1;
+  while(q.length){const [x,y]=q.pop();for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+a,ny=y+b;if(nx<0||ny<0||nx>=W||ny>=H)continue;const i=ny*W+nx;if(seen[i]||d.blk[i]||!allowed(nx,ny))continue;seen[i]=1;q.push([nx,ny]);}}return seen;}
 export function check2D(d0){
   const zz=[...((d0.cfg&&d0.cfg.zones)||[]),...decoZones(d0.ents)],zr=zz.length?zRaster(zz,d0.w,d0.h):null;const d=zr?Object.assign({},d0,{blk:Array.from(d0.blk,(v,i)=>v||zr[i]?1:0)}):d0;
   const geometry=mapCollision(d0);
   const out=[],E=d.ents||[],cf=d.cfg||{},W=d.w,H=d.h;
+  const roofs=E.filter(isRoof),walls=E.filter(e=>e.wallLine),gates=E.filter(e=>e.gateAssembly);
+  const context=(walls.length||gates.length||roofs.length)?constructionContext(d0):null;
+  const ceilings=context?.headroom()||[],crouching=actorHeights(cf).crouching;
+  const canPass=(x,y)=>fitsUnderRoof(ceilings,actorFootprint(x,y,.28),crouching);
   const st=E.find(e=>e.t==='start'),goals=E.filter(e=>e.t==='goal'),en=E.filter(e=>e.t==='enemy');
   const cell=e=>Math.floor(e.y)*W+Math.floor(e.x);
-  const startFree=st&&geometry.free(st.x+.5,st.y+.5,.28)&&!d.blk[cell(st)];
+  const startFree=st&&geometry.free(st.x+.5,st.y+.5,.28)&&!d.blk[cell(st)]&&canPass(st.x+.5,st.y+.5);
   if(!E.length){out.push(R('F1','not_assessed','Chưa đặt đối tượng nào: game chạy chế độ cũ (quái rải ngẫu nhiên)','không có dữ liệu để kiểm xuất phát/đích; vào tab 🎯 Đối tượng để đặt'));}
   else{
     out.push(st?R('F1','pass','Có điểm xuất phát'):R('F1','missing','Chưa có 🚩 Xuất phát','game sẽ đặt người chơi ở vị trí mặc định'));
@@ -30,7 +35,7 @@ export function check2D(d0){
     const byRule=checkLogic(cf,E).canWinByRule;const canWin=byRule||(need==='goal'&&goals.length)||(need==='kill'&&en.length)||(need==='both'&&goals.length&&en.length)||(need==='both'&&goals.length);
     out.push(canWin||(win==='auto'&&(goals.length||en.length))?R('F3','pass','Có cách thắng ('+({goal:'chạm đích',kill:'diệt hết quái',both:'diệt quái rồi chạm đích'})[need]+')'):R('F3','broken','Không có cách thắng','điều kiện thắng "'+win+'" nhưng thiếu '+(win==='goal'?'🏁 Đích':win==='kill'?'👾 Quái':'🏁 Đích hoặc 👾 Quái')));
     if(startFree){
-      const seen=bfs2(d,Math.floor(st.x),Math.floor(st.y));
+      const seen=bfs2(d,Math.floor(st.x),Math.floor(st.y),(x,y)=>canPass(x+.5,y+.5));
       const bad=(arr)=>arr.filter(e=>!seen[cell(e)]);
       if(goals.length){const b=bad(goals);out.push(b.length?R('F4','broken','Đích không đi tới được từ điểm xuất phát','bị tường/nước chặn kín ('+b.length+'/'+goals.length+' đích)'):R('F4','pass','Đích đi tới được từ điểm xuất phát (BFS 4 hướng)'));}
       if(en.length){const b=bad(en);out.push(b.length?R('F5','broken',b.length+'/'+en.length+' quái nằm vùng không tới được','không diệt hết được nếu điều kiện thắng là diệt quái'):R('F5','pass','Mọi quái đều tới được'));}
@@ -39,15 +44,19 @@ export function check2D(d0){
     const onBlk=E.filter(e=>e.t!=='start'&&e.t!=='deco'&&d.blk[cell(e)]);out.push(onBlk.length?R('F7','broken',onBlk.length+' đối tượng nằm trong ô bị chặn'):R('F7','pass','Không đối tượng nào nằm trong ô bị chặn'));
     out.push(E.some(e=>{const dx=e.placedProp?1:0,x=e.x+dx,y=e.y+dx;return x<0||y<0||(e.wallId?.startsWith('outline:')?(x>W||y>H):(x>=W||y>=H));})?R('F8','broken','Có đối tượng nằm ngoài bản đồ'):R('F8','pass','Mọi đối tượng nằm trong bản đồ'));
   }
-  const gates=E.filter(e=>e.gateAssembly);
-  const walls=E.filter(e=>e.wallLine);
-  const roofs=E.filter(isRoof);
-  const context=(walls.length||gates.length||roofs.length)?constructionContext(d0):null;
   if(roofs.length){
     const bad=roofPlacementProblems(d0,context);
     out.push(bad.length?R('ROOF','broken',bad.length+'/'+roofs.length+' mái thiếu điểm tựa',
       bad.slice(0,5).map(e=>(e.name||'Mái')+' · X '+(e.x+1).toFixed(2)+' · Y '+(e.y+1).toFixed(2)).join(' | ')):
       R('ROOF','pass','Các mái có hai điểm tựa đúng cao độ'));
+  }
+  if(roofs.length){
+    const collisions=E.flatMap(e=>{const issue=headroomIssue(e,ceilings,cf);return issue?[e.name+' · '+issue]:[];});
+    out.push(collisions.length?R('HEIGHT','broken',collisions.length+' vật thể hoặc điểm xuất phát vướng mái',
+      collisions.slice(0,5).join(' | ')):R('HEIGHT','pass','Vật thể có đủ chiều cao dưới mái'));
+    const lids=E.filter(e=>e.t==='chest'&&!headroomIssue(e,ceilings,cf)&&
+      !fitsUnderRoof(ceilings,bodyFootprint(e),bodyHeight(e,cf,true)));
+    if(lids.length)out.push(R('LID','broken',lids.length+' rương thiếu chỗ mở nắp',lids.slice(0,5).map(e=>e.name||'Rương').join(' | ')));
   }
   if(walls.length){
     const invalid=walls.filter(e=>wallIssue(e,{...context,objects:context.objects.filter(z=>!context.gates.some(g=>g.wallId===e.id&&g.id===z.deco)),gates:context.gates.filter(g=>g.wallId!==e.id)}));

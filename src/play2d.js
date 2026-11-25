@@ -1,4 +1,5 @@
-import {constructionContext,isRoof,roofBearing} from './constructionRules2d.js';
+import {actorFootprint,actorHeights,bodyHeight,fitsUnderRoof,lowestCeiling,roofPlane} from './headroom2d.js';
+import {constructionContext,isRoof,roofBearing,headroomIssue} from './constructionRules2d.js';
 import {builtWallFaces,isMapLink,portalAnchor} from './wall2d.js';
 import {gateWalls} from './gate2d.js';
 import {paintedPieces,sceneEntityLayer} from './placement2d.js';
@@ -16,11 +17,14 @@ const HERO=88,FOES=[108,109,120,121,122,111,110],TD=2;
 export function play2D(o){
   const M=o.M,W=M.w,H=M.h,sheets=o.sheets;const CF=Object.assign({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:TD,idx:HERO},win:'auto'},M.cfg||{});const EN=(M.ents||[]).map(e=>e.door?Object.assign({},e,{door:Object.assign({},e.door)}):e),legacy=!EN.length;const VW=CF.view||'rpg',SIDE=VW==='side',ISO=VW==='iso',ANG=ISO&&CF.proj==='angle',decos=EN.filter(e=>e.t==='deco');
   const build=decos.some(isRoof)?constructionContext(M):null;
+  const ceilings=build?.headroom()||[],playerSize=actorHeights(CF);
   const DCL=decos.flatMap(e=>{
-    if(!isRoof(e))return [e];
+    if(!isRoof(e))return headroomIssue(e,ceilings,CF)?[]:[e];
     const support=roofBearing(e,build);
-    return support?[{...e,roofBase:support.base,roofRise:support.rise}]:[];
+    return support?[{...e,roofBase:support.base,roofRise:support.rise,ceiling:roofPlane(e,support)}]:[];
   });
+  const fitsAt=(x,y,r,top)=>fitsUnderRoof(ceilings,actorFootprint(x,y,r),top);
+  const postureHeight=e=>e===P?(P.crouching?playerSize.crouching:playerSize.standing):(e.height||1.2);
   const ov=el('div',{style:'position:fixed;inset:0;z-index:100;background:#10161d;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden'});
   const cv=document.createElement('canvas');cv.style.cssText='width:100%;height:100%;display:block';ov.append(cv);const cx=cv.getContext('2d');
   const msg=el('div',{style:'position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000a;color:#fff;font:700 26px system-ui;text-align:center'});
@@ -41,7 +45,9 @@ export function play2D(o){
   tbtn('✔ Tự kiểm',()=>runCheck());
   tbtn('↺ Đặt lại',()=>resetAll());
   if(o.published)for(const b of [...TB.children].slice(1))b.hidden=true;
-  ov.append(TB,el('div',{style:'position:absolute;left:10px;bottom:calc(env(safe-area-inset-bottom) + 8px);color:#fffc;font:12px system-ui;text-shadow:0 1px 2px #000;pointer-events:none;max-width:60%'},'Bấm sàn để đi · W/A/S/D hoặc phím mũi tên · Space/J đánh · +/− thu phóng · bấm phím để hủy tuyến'));
+  let crouchButton;
+  if(!SIDE)crouchButton=tbtn('Cúi · C',toggleCrouch);
+  ov.append(TB,el('div',{style:'position:absolute;left:10px;bottom:calc(env(safe-area-inset-bottom) + 8px);color:#fffc;font:12px system-ui;text-shadow:0 1px 2px #000;pointer-events:none;max-width:60%'},'Bấm sàn để đi · W/A/S/D hoặc phím mũi tên · Space/J đánh · C cúi/đứng · +/− thu phóng · bấm phím để hủy tuyến'));
   cv.addEventListener('wheel',e=>{e.preventDefault();setZ(zm*Math.exp(-e.deltaY*.0015));},{passive:false});
   let pd=0;cv.addEventListener('touchstart',e=>{if(e.touches.length===2){const a=e.touches[0],b=e.touches[1];pd=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);stick=null;}},{passive:true});
   cv.addEventListener('touchmove',e=>{if(e.touches.length===2&&pd){const a=e.touches[0],b=e.touches[1],d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);setZ(zm*d/pd);pd=d;}},{passive:true});
@@ -51,7 +57,7 @@ export function play2D(o){
   const AN=makeAnims(CF,sheets);
   const collision=mapCollision(M);
   const portalFloor=CF.outline?.loops?.length?mapCollision({...M,cfg:{...CF,outline:{...CF.outline,floorCollision:true}}}).floor:null;
-  const ZP=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(EN.filter(e=>!e.door))],DRS=EN.filter(e=>e.t==='deco'&&e.door);let ZS=ZP,ZR=zRaster(ZS,W,H);
+  const ZP=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(DCL.filter(e=>!e.door))],DRS=DCL.filter(e=>e.door);let ZS=ZP,ZR=zRaster(ZS,W,H);
   /* cửa hai trạng thái: tìm đường coi cửa là đi qua được (ZP); va chạm thật (ZS) theo trạng thái hiện tại */
   const setDoor=(e,st)=>{const v=e.door.v&&e.door.v[st];if(!v||e.door.st===st)return;e.door.st=st;if(v.tile)e.tile=v.tile;e.col=v.col&&v.col.length?v.col:undefined;rebuildZ();};
   function rebuildZ(){ZS=DRS.length?[...ZP,...decoZones(DRS)]:ZP;ZR=zRaster(ZS,W,H);}
@@ -60,7 +66,7 @@ export function play2D(o){
   function nearDoor(r){let b=null,bd=r;for(const e of DRS){const c=doorCtr(e),d=Math.hypot(c.x-P.x,c.y-P.y);if(d<bd){bd=d;b=e;}}return b;}
   function doorsTick(){for(const e of DRS){const c=doorCtr(e),d=Math.hypot(c.x-P.x,c.y-P.y);if(e.door.st==='dong'&&d<(e.door.rOpen||1.3))setDoor(e,'mo');else if(e.door.st==='mo'&&e.door.auto&&d>(e.door.rClose||2.6))setDoor(e,'dong');}}
   function toggleDoor(){const e=nearDoor(1.7);if(!e)return false;setDoor(e,e.door.st==='mo'?'dong':'mo');return true;}
-  const blocked=(x,y)=>!collision.free(x+.5,y+.5,0)||!!ZR[y*W+x];
+  const blocked=(x,y)=>!collision.free(x+.5,y+.5,0)||!!ZR[y*W+x]||!fitsAt(x+.5,y+.5,.28,1.2);
   let CQ=16;for(const sh of sheets)if(sh&&sh.img&&sh.tw>CQ)CQ=Math.min(48,sh.tw);
   while(W*H*CQ*CQ>2.2e7&&CQ>16)CQ-=8;
   const FOG=(M.cfg&&M.cfg.fog)|0;
@@ -117,7 +123,14 @@ export function play2D(o){
     let best=null,bd=1e9;const st=EN.find(e=>e.t==='start');
     if(st)best=[st.x,st.y];else for(let i=0;i<W*H;i++){if(M.blk[i])continue;const x=i%W,y=Math.floor(i/W),d=(x-W/2)**2+(y-H/2)**2;if(d<bd){bd=d;best=[x,y];}}
     if(!best){best=[0,0];}
-    const sp=ENTRY;P={x:sp?sp.x:best[0]+.5,y:sp?sp.y:best[1]+.5,hp:CF.hp,inv:0,face:1,atkT:0,hitT:0};score=0;said=null;
+    const sp=ENTRY;P={x:sp?sp.x:best[0]+.5,y:sp?sp.y:best[1]+.5,hp:CF.hp,inv:0,face:1,atkT:0,hitT:0,crouching:false};score=0;
+    if(!SIDE&&!fitsAt(P.x,P.y,.28,playerSize.standing))P.crouching=true;
+    if(!free(P.x,P.y,.28,false,false,postureHeight(P))){
+      const safe=snapFree(P.x,P.y,.28,1.5,false);
+      if(safe){P.x=safe.x;P.y=safe.y;}
+    }
+    refreshCrouch();
+    PATH=null;GOAL=null;said=null;
     if(sp&&sp.hp!=null&&!sp.used){P.hp=Math.max(1,Math.min(CF.hp,sp.hp));score=sp.score||0;sp.used=1;}
     DR=EN.filter(isMapLink).flatMap(e=>{
       const anchor=portalAnchor(e,(x,y,r)=>portalFloor?.fits(x,y,r)??collision.free(x,y,r));
@@ -129,13 +142,15 @@ export function play2D(o){
       const seen=new Uint8Array(W*H),q=[best[1]*W+best[0]],reach=[];seen[q[0]]=1;
       for(let h=0;h<q.length;h++){const c=q[h],x=c%W,y=Math.floor(c/W);reach.push(c);for(const [a,b] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+a,ny=y+b;if(blocked(nx,ny)||seen[ny*W+nx])continue;seen[ny*W+nx]=1;q.push(ny*W+nx);}}
       const far=reach.filter(c=>Math.hypot(c%W-best[0],Math.floor(c/W)-best[1])>=7);const pool=far.length>5?far:reach;
-      const n=Math.max(4,Math.min(24,Math.round(reach.length/110)));
+      const n=pool.length?Math.max(4,Math.min(24,Math.round(reach.length/110))):0;
       for(let i=0;i<n;i++){const c=pool[Math.floor(Math.random()*pool.length)];E.push({x:c%W+.5,y:Math.floor(c/W)+.5,hp:2,mhp:2,dmg:1,spd:1.7,ch:6,ai:'wander',tl:{sid:TD,idx:FOES[Math.floor(Math.random()*FOES.length)]},dx:0,dy:0,wt:0,fl:0});}
     }else{
-      for(const e of EN){const cx0=e.x+.5,cy0=e.y+.5;
-        if(e.t==='enemy')add('E',{x:cx0,y:cy0,hp:e.hp||2,mhp:e.hp||2,dmg:e.dmg==null?1:e.dmg,spd:e.spd||1.7,ch:e.chase||6,ai:e.ai||'wander',tl:e.tile||{sid:TD,idx:108},dx:0,dy:0,wt:0,fl:0,name:e.name,anim:e.anim},e);
-        else if(e.t==='npc')add('NP',{x:cx0,y:cy0,tl:e.tile||{sid:TD,idx:96},name:e.name,text:e.text,dlg:e.dlg,anim:e.anim},e);
-        else if(e.t==='chest')add('CH',{x:cx0,y:cy0,tl:e.tile,gives:e.gives,amt:e.amt||1,open:0},e);
+      for(const e of EN){
+        if(headroomIssue(e,ceilings,CF))continue;
+        const cx0=e.x+.5,cy0=e.y+.5;
+        if(e.t==='enemy')add('E',{x:cx0,y:cy0,hp:e.hp||2,mhp:e.hp||2,dmg:e.dmg==null?1:e.dmg,spd:e.spd||1.7,ch:e.chase||6,ai:e.ai||'wander',tl:e.tile||{sid:TD,idx:108},dx:0,dy:0,wt:0,fl:0,name:e.name,anim:e.anim,height:bodyHeight(e,CF)},e);
+        else if(e.t==='npc')add('NP',{x:cx0,y:cy0,tl:e.tile||{sid:TD,idx:96},name:e.name,text:e.text,dlg:e.dlg,anim:e.anim,height:bodyHeight(e,CF)},e);
+        else if(e.t==='chest')add('CH',{x:cx0,y:cy0,tl:e.tile,gives:e.gives,amt:e.amt||1,open:0,openHeight:bodyHeight(e,CF,true)},e);
         else if(e.t==='goal')add('GL',{x:cx0,y:cy0,tl:e.tile},e);}
     }
     const hasGoal=EN.some(e=>e.t==='goal'),hasEn=EN.some(e=>e.t==='enemy');
@@ -144,7 +159,7 @@ export function play2D(o){
     const saved=o.restore;
     if(saved&&o.spawn){
       if(saved.logic)L.restore(saved.logic);
-      for(const c of CH)c.open=Number((saved.chests||[]).includes(c.id));
+      for(const c of CH)c.open=Number((saved.chests||[]).includes(c.id)&&fitsAt(c.x,c.y,.25,c.openHeight));
       E=E.filter(e=>!(saved.defeated||[]).includes(e.id));
       for(const e of E){const hp=saved.enemyHp?.[e.id];if(Number.isFinite(hp))e.hp=hp;}
       for(const id of [...HID.keys()])if(!(saved.hidden||[]).includes(id))host.setHidden(id,false);
@@ -160,30 +175,34 @@ export function play2D(o){
       enemyHp:Object.fromEntries(enemies.map(e=>[e.id,e.hp])),
       hidden:[...HID.keys()],doors:Object.fromEntries(DRS.map(d=>[d.id,d.door.st]))};
   }
-  function free(x,y,r,plan=false,skipFloor=false){
+  function free(x,y,r,plan=false,skipFloor=false,top=postureHeight(P)){
     const zones=plan?ZP:ZS;
-    return collision.free(x,y,r,skipFloor)&&!zonesHit(zones,x,y,r);
+    return collision.free(x,y,r,skipFloor)&&!zonesHit(zones,x,y,r)&&fitsAt(x,y,r,top);
   }
-  function traverse(ax,ay,bx,by,r,plan){
+  function traverse(ax,ay,bx,by,r,plan,top=postureHeight(P)){
     const floor=collision.floor;
     if(floor&&!floor.sweep(ax,ay,bx,by,r))return false;
     const steps=Math.max(1,Math.ceil(Math.hypot(bx-ax,by-ay)/.07));
     for(let i=1;i<=steps;i++){
       const t=i/steps;
-      if(!free(ax+(bx-ax)*t,ay+(by-ay)*t,r,plan,!!floor))return false;
+      if(!free(ax+(bx-ax)*t,ay+(by-ay)*t,r,plan,!!floor,top))return false;
     }
     return true;
   }
   function move(e,dx,dy,r){
-    if(!Number.isFinite(dx)||!Number.isFinite(dy)||!free(e.x,e.y,r))return;
-    if(traverse(e.x,e.y,e.x+dx,e.y+dy,r,false)){e.x+=dx;e.y+=dy;return;}
-    if(dx&&traverse(e.x,e.y,e.x+dx,e.y,r,false))e.x+=dx;
-    if(dy&&traverse(e.x,e.y,e.x,e.y+dy,r,false))e.y+=dy;
+    const top=postureHeight(e);
+    if(!Number.isFinite(dx)||!Number.isFinite(dy)||!free(e.x,e.y,r,false,false,top))return;
+    const allows=(x,y)=>traverse(e.x,e.y,x,y,r,false,top);
+    if(allows(e.x+dx,e.y+dy)){e.x+=dx;e.y+=dy;return;}
+    if(e===P&&!P.crouching&&!fitsAt(e.x+dx,e.y+dy,r,top)&&fitsAt(e.x+dx,e.y+dy,r,playerSize.crouching)&&!said)
+      note('Mái thấp · Nhấn C để cúi');
+    if(dx&&allows(e.x+dx,e.y))e.x+=dx;
+    if(dy&&allows(e.x,e.y+dy))e.y+=dy;
   }
 
   /* ---- tìm đường 8 hướng trên lưới mịn + bỏ góc rẽ thừa; kích thước nhân vật tính bằng bán kính r ---- */
   const PQ=5,NW=W*PQ,NH=H*PQ,NC={};
-  const nodesOf=r=>NC[r]||(NC[r]=new Uint8Array(NW*NH));
+  const nodesOf=r=>{const key=r+':'+postureHeight(P);return NC[key]??=(new Uint8Array(NW*NH));};
   const nfree=(a,i,j,r)=>{if(i<0||j<0||i>=NW||j>=NH)return false;const k=j*NW+i;let v=a[k];if(!v){v=free((i+.5)/PQ,(j+.5)/PQ,r,1)?1:2;a[k]=v;}return v===1;};
   const nOf=(x,y)=>[Math.max(0,Math.min(NW-1,Math.floor(x*PQ))),Math.max(0,Math.min(NH-1,Math.floor(y*PQ)))];
   const clearSeg=(ax,ay,bx,by,r)=>traverse(ax,ay,bx,by,r,true);
@@ -200,7 +219,7 @@ export function play2D(o){
     const hf=(i,j)=>{const dx=Math.abs(i-gi),dy=Math.abs(j-gj);return (dx+dy)+(1.4142-2)*Math.min(dx,dy);};
     const s0=sj*NW+si,g0=gj*NW+gi;g[s0]=0;ps(s0,hf(si,sj));let found=false;
     while(hp.length){const [,k]=pp();if(done[k])continue;done[k]=1;if(k===g0){found=true;break;}const i=k%NW,j=(k/NW)|0;
-      for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){if(!di&&!dj)continue;const ni=i+di,nj=j+dj;if(!nfree(a,ni,nj,r))continue;if(di&&dj&&!(nfree(a,i+di,j,r)&&nfree(a,i,j+dj,r)))continue;if(collision.floor&&!clearSeg((i+.5)/PQ,(j+.5)/PQ,(ni+.5)/PQ,(nj+.5)/PQ,r))continue;const nk=nj*NW+ni,c=g[k]+(di&&dj?1.4142:1);if(c<g[nk]){g[nk]=c;par[nk]=k;ps(nk,c+hf(ni,nj));}}}
+      for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){if(!di&&!dj)continue;const ni=i+di,nj=j+dj;if(!nfree(a,ni,nj,r))continue;if(di&&dj&&!(nfree(a,i+di,j,r)&&nfree(a,i,j+dj,r)))continue;if((collision.floor||ceilings.length)&&!clearSeg((i+.5)/PQ,(j+.5)/PQ,(ni+.5)/PQ,(nj+.5)/PQ,r))continue;const nk=nj*NW+ni,c=g[k]+(di&&dj?1.4142:1);if(c<g[nk]){g[nk]=c;par[nk]=k;ps(nk,c+hf(ni,nj));}}}
     if(!found)return null;
     const raw=[];for(let k=g0;k>=0;k=par[k])raw.push({x:((k%NW)+.5)/PQ,y:(((k/NW)|0)+.5)/PQ});raw.reverse();
     const pts=[{x:sx,y:sy},...raw,{x:gx,y:gy}],out=[];let i=0;
@@ -208,16 +227,28 @@ export function play2D(o){
     return out;}
   const pathLen=(p,sx,sy)=>{let L=0,x=sx,y=sy;for(const q of p){L+=Math.hypot(q.x-x,q.y-y);x=q.x;y=q.y;}return L;};
   const note=t=>{said={n:{x:P.x,y:P.y,name:'',text:t},t:1.6};};
-  function goTo(x,y){if(over||L.dlgOpen)return false;if(x<0||y<0||x>=W||y>=H){note('Ngoài bản đồ');return false;}const g=snapFree(x,y,.28,1);if(!g){note('Điểm này bị chặn');return false;}
-    const p=findPath(P.x,P.y,g.x,g.y,.28);if(!p){PATH=null;GOAL=null;note('Chưa có đường tới đó');return false;}PATH=p;GOAL=g;stuckT=0;repN=0;return true;}
+  function refreshCrouch(){
+    if(crouchButton)crouchButton.textContent=P.crouching?'Đứng lên · C':'Cúi · C';
+  }
+  function toggleCrouch(){
+    if(!P||SIDE||over||L?.dlgOpen)return;
+    if(P.crouching&&!fitsAt(P.x,P.y,.28,playerSize.standing)){
+      note('Chưa đủ chỗ để đứng lên');return;
+    }
+    P.crouching=!P.crouching;refreshCrouch();if(showReach)REACH=calcReach();
+    if(GOAL)repath();
+  }
+  function goTo(x,y){if(over||L.dlgOpen)return false;if(x<0||y<0||x>=W||y>=H){note('Ngoài bản đồ');return false;}if(!fitsAt(x,y,.28,postureHeight(P))){note(P.crouching?'Khoảng trống quá thấp':'Mái thấp · Nhấn C để cúi');return false;}
+    const g=snapFree(x,y,.28,1);if(!g){note('Điểm này bị chặn');return false;}
+    const p=findPath(P.x,P.y,g.x,g.y,.28);if(!p){PATH=null;GOAL=null;note(!P.crouching&&ceilings.length?'Chưa có đường đứng đi được · thử nhấn C để cúi':'Chưa có đường tới đó');return false;}PATH=p;GOAL=g;stuckT=0;repN=0;return true;}
   function repath(){if(!GOAL)return;if(++repN>4){PATH=null;GOAL=null;note('Không đi tiếp được');return;}const p=findPath(P.x,P.y,GOAL.x,GOAL.y,.28);if(p)PATH=p;else{PATH=null;GOAL=null;note('Chưa có đường');}}
-  function followPath(dt){const q=PATH[0],dx=q.x-P.x,dy=q.y-P.y,d=Math.hypot(dx,dy),st=CF.spd*dt;
+  function followPath(dt){const q=PATH[0],dx=q.x-P.x,dy=q.y-P.y,d=Math.hypot(dx,dy),st=CF.spd*(P.crouching?.62:1)*dt;
     if(d<=Math.max(.03,st)&&traverse(P.x,P.y,q.x,q.y,.28,false)){P.x=q.x;P.y=q.y;PATH.shift();if(!PATH.length){PATH=null;GOAL=null;}return;}
     const px0=P.x,py0=P.y;const step=Math.min(d,st);move(P,dx/d*step,dy/d*step,.28);solidPush(P);fx=dx/d;fy=dy/d;const sxv=ISO?(dx-dy):dx;if(Math.abs(sxv)>.05)P.face=sxv>0?1:-1;
     stuckT=Math.hypot(P.x-px0,P.y-py0)<st*.35?stuckT+dt:0;if(stuckT>.45){stuckT=0;repath();}}
   function toPlane(cx0,cy0){const r=cv.getBoundingClientRect(),sx=cx0-r.left,sy=cy0-r.top;if(!VIEW)return null;if(VIEW.ang)return {x:(sx-VIEW.ox0)/VIEW.cw,y:(sy-VIEW.oy0)/VIEW.ch};if(VIEW.iso){const a=(sx-VIEW.ox0)/VIEW.hw,b=(sy-VIEW.oy0)/VIEW.hh;return {x:(a+b)/2,y:(b-a)/2};}return {x:(sx-VIEW.ox)/VIEW.s,y:(sy-VIEW.oy)/VIEW.s};}
   function calcReach(){const a=nodesOf(.28),out=new Float32Array(W*H);let [si,sj]=nOf(P.x,P.y);if(!nfree(a,si,sj,.28)){const g=snapFree(P.x,P.y,.28,1.5);if(!g)return out;[si,sj]=nOf(g.x,g.y);}
-    const seen=new Uint8Array(NW*NH),q=[sj*NW+si];seen[q[0]]=1;for(let h=0;h<q.length;h++){const k=q[h],i=k%NW,j=(k/NW)|0;out[((j/PQ)|0)*W+((i/PQ)|0)]+=1/(PQ*PQ);for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){if(!di&&!dj)continue;const ni=i+di,nj=j+dj;if(!nfree(a,ni,nj,.28))continue;if(di&&dj&&!(nfree(a,i+di,j,.28)&&nfree(a,i,j+dj,.28)))continue;const nk=nj*NW+ni;if(seen[nk]||collision.floor&&!clearSeg((i+.5)/PQ,(j+.5)/PQ,(ni+.5)/PQ,(nj+.5)/PQ,.28))continue;seen[nk]=1;q.push(nk);}}
+    const seen=new Uint8Array(NW*NH),q=[sj*NW+si];seen[q[0]]=1;for(let h=0;h<q.length;h++){const k=q[h],i=k%NW,j=(k/NW)|0;out[((j/PQ)|0)*W+((i/PQ)|0)]+=1/(PQ*PQ);for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){if(!di&&!dj)continue;const ni=i+di,nj=j+dj;if(!nfree(a,ni,nj,.28))continue;if(di&&dj&&!(nfree(a,i+di,j,.28)&&nfree(a,i,j+dj,.28)))continue;const nk=nj*NW+ni;if(seen[nk]||(collision.floor||ceilings.length)&&!clearSeg((i+.5)/PQ,(j+.5)/PQ,(ni+.5)/PQ,(nj+.5)/PQ,.28))continue;seen[nk]=1;q.push(nk);}}
     return out;}
   function resetAll(){PATH=null;GOAL=null;REACH=null;camMode=0;zm=1;if(chkBox){chkBox.remove();chkBox=null;}TB.firstChild.textContent='Camera: theo nhân vật';start();if(showReach)REACH=calcReach();}
   /* ---- tự kiểm: chạy bằng mã trên đúng cảnh đang chơi (kết quả logic, chưa phải quan sát trực quan) ---- */
@@ -240,7 +271,7 @@ export function play2D(o){
   function attack(){if(over||atkCD>0||L.dlgOpen)return;for(const n of NP){if(Math.hypot(n.x-P.x,n.y-P.y)<1.3){atkCD=.3;if(!L.talk(n))said={n,t:4};L.fire('talk',n.id);return;}}slash=.18;{const as=CF.heroAnim&&AN.get(CF.heroAnim);let K=0;if(as)for(let i=1;i<=6;i++){const kk=i>1?'atk'+i:'atk';if(as.st[kk]&&as.st[kk].src&&as.st[kk].src.length)K=i;else break;}
       P.cs=(K>1&&P.cs>0&&P.atkT>-.5)?(P.cs>=K?1:P.cs+1):1;P.atkN=(P.atkN||0)+1;const dur=as&&K?AN.clipSec(as,P.cs>1?'atk'+P.cs:'atk'):0;P.atkT=Math.max(.3,Math.min(1.2,dur||.45));atkCD=Math.max(.3,P.atkT*.8);}for(const e of E){const dx=e.x-P.x,dy=e.y-P.y,d=Math.hypot(dx,dy);if(d<CF.rng&&(d<.3||(dx*fx+dy*fy)/d>-.2)){e.hp-=CF.dmg;e.fl=.3;const k=d||1;move(e,dx/k*.6,dy/k*.6,.3);if(e.hp<=0&&Math.random()<.3)items.push({x:e.x,y:e.y});}}const dead=E.filter(e=>e.hp<=0);E=E.filter(e=>e.hp>0);for(const k of dead)L.fire('kill',k.id);if(dead.length&&!E.length&&!hidEn())L.fire('allkill');checkWin();}
   function checkWin(){if(over)return;if(winMode==='kill'&&!E.length&&!hidEn()&&(legacy||EN.some(e=>e.t==='enemy')))end(true);}
-  function solidPush(o){for(const n of [...NP,...CH]){const dx=o.x-n.x,dy=o.y-n.y,d=Math.hypot(dx,dy),r=.6;if(d<r&&d>0){const nx=n.x+dx/d*r,ny=n.y+dy/d*r;if(traverse(o.x,o.y,nx,o.y,.28,false))o.x=nx;if(traverse(o.x,o.y,o.x,ny,.28,false))o.y=ny;}}}
+  function solidPush(o){for(const n of [...NP,...CH]){const dx=o.x-n.x,dy=o.y-n.y,d=Math.hypot(dx,dy),r=.6;if(d<r&&d>0){const nx=n.x+dx/d*r,ny=n.y+dy/d*r;if(traverse(o.x,o.y,nx,o.y,.28,false,postureHeight(o)))o.x=nx;if(traverse(o.x,o.y,o.x,ny,.28,false,postureHeight(o)))o.y=ny;}}}
   function upd(dt){
     t+=dt;atkCD-=dt;slash-=dt;P.inv-=dt;P.atkT-=dt;P.hitT-=dt;P.pkT=(P.pkT||0)-dt;if(over||L.dlgOpen)return;
     doorsTick();
@@ -252,11 +283,13 @@ export function play2D(o){
       const mx=(Math.abs(ix)>.15?Math.sign(ix)*Math.min(1,Math.abs(ix)):0)*CF.spd*dt;if(mx&&traverse(P.x,P.y,P.x+mx,P.y,.28,false))P.x+=mx;if(Math.abs(ix)>.2){P.face=ix>0?1:-1;fx=ix>0?1:-1;fy=0;}
       const ny=P.y+P.vy*dt;if(traverse(P.x,P.y,P.x,ny,.28,false)){P.y=ny;P.on=0;}else{if(P.vy>0)P.on=1;P.vy=0;}}
     else if(PATH&&PATH.length&&!(ix||iy)){followPath(dt);}
-    else{const m=Math.hypot(ix,iy);if(m>.15){ix/=Math.max(m,1);iy/=Math.max(m,1);const sxv=ix;if(ISO&&!ANG){const a2=(ix+iy)/1.4142,b2=(iy-ix)/1.4142;ix=a2;iy=b2;}move(P,ix*CF.spd*dt,iy*CF.spd*dt,.28);solidPush(P);const n=Math.hypot(ix,iy);fx=ix/n;fy=iy/n;if(Math.abs(sxv)>.2)P.face=sxv>0?1:-1;}}
+    else{const m=Math.hypot(ix,iy);if(m>.15){ix/=Math.max(m,1);iy/=Math.max(m,1);const sxv=ix;if(ISO&&!ANG){const a2=(ix+iy)/1.4142,b2=(iy-ix)/1.4142;ix=a2;iy=b2;}const speed=CF.spd*(P.crouching?.62:1);move(P,ix*speed*dt,iy*speed*dt,.28);solidPush(P);const n=Math.hypot(ix,iy);fx=ix/n;fy=iy/n;if(Math.abs(sxv)>.2)P.face=sxv>0?1:-1;}}
     for(const e of E){e.fl-=dt;const dx=P.x-e.x,dy=P.y-e.y,d=Math.hypot(dx,dy);
       if(e.ai==='chase'||(e.ai!=='still'&&d<e.ch)){move(e,dx/d*e.spd*dt,dy/d*e.spd*dt,.28);}else if(e.ai!=='still'){e.wt-=dt;if(e.wt<=0){e.wt=1+Math.random()*1.5;const a=Math.random()*6.28;e.dx=Math.cos(a)*(Math.random()<.4?0:1);e.dy=Math.sin(a)*(e.dx?1:0);}move(e,e.dx*.8*dt,e.dy*.8*dt,.28);}
       solidPush(e);if(d<.6&&P.inv<=0){P.hp-=e.dmg;P.inv=1;P.hitT=.4;const k=d||1;move(P,-dx/k*.7,-dy/k*.7,.28);if(P.hp<=0){end(false);return;}}}
-    for(const c of CH)if(!c.open&&Math.hypot(c.x-P.x,c.y-P.y)<.7){c.open=1;P.pkT=1;L.fire('chest',c.id);if(c.gives==='hp')P.hp=Math.min(CF.hp,P.hp+c.amt);else score+=c.amt;said={n:{x:c.x,y:c.y,name:'Rương',text:c.gives==='hp'?'+'+c.amt+' máu':'+'+c.amt+' điểm'},t:1.5};}
+    for(const c of CH)if(!c.open&&Math.hypot(c.x-P.x,c.y-P.y)<.7){
+      if(!fitsAt(c.x,c.y,.25,c.openHeight)){if(!said)note('Không đủ chỗ để mở nắp rương');continue;}
+      c.open=1;P.pkT=1;L.fire('chest',c.id);if(c.gives==='hp')P.hp=Math.min(CF.hp,P.hp+c.amt);else score+=c.amt;said={n:{x:c.x,y:c.y,name:'Rương',text:c.gives==='hp'?'+'+c.amt+' máu':'+'+c.amt+' điểm'},t:1.5};}
     for(const d of DR){const dd=Math.hypot(d.x-P.x,d.y-P.y);if(dd>=.9)d.armed=true;else if(d.armed&&dd<.6&&o.onDoor){d.armed=false;o.onDoor({to:d.to,tx:d.tx,ty:d.ty,hp:P.hp,score,state:o.onSnapshot?snapshot():null});return;}}
     if(o.onTick&&(t-(P.lastSave||-9))>1.5){P.lastSave=t;o.onTick({x:P.x,y:P.y,hp:P.hp,score});}
     if(o.onSnapshot&&t-(P.lastSnapshot||-5)>1){P.lastSnapshot=t;o.onSnapshot(snapshot());}
@@ -308,15 +341,19 @@ export function play2D(o){
         continue;
       }
       const sp=ISO?sprOf(d,sh,ANG):(sh?{img:sh.img,tw:sh.tw,cols:sh.cols,margin:sh.margin,sc:d.sc,oy:d.oy||0}:null),ws=((sp?sp.sc:d.sc)||3)*s;const X=ANG?pX(d.x+.5,d.y+1):ISO?pX(d.x+1,d.y+1):ox1+(d.x+.5)*s,Y=ANG?pY(d.x+.5,d.y+1):ISO?pY(d.x+1,d.y+1):oy1+(d.y+1)*s;if(sp&&sp.img){const sx=(d.tile.idx%sp.cols)*(sp.tw+sp.margin),sy=Math.floor(d.tile.idx/sp.cols)*(sp.tw+sp.margin);cx.drawImage(sp.img,sx,sy,sp.tw,sp.tw,X-ws/2+(d.ox||0)*ws,Y-ws+(sp.oy||0)*ws,ws,ws);}if(d.cv)TC.push({d,X,Y,ws});continue;}if(n.grp){const g=n.grp,k2=s*.95/CQ,wp=ANG?g.c.width*s*1.5/CQ:g.c.width*k2,hp=ANG?g.c.height*s*1.5*ANG_R/CQ:g.c.height*k2;cx.drawImage(g.c,pX(g.xc,g.yb)-wp/2,pY(g.xc,g.yb)-hp,wp,hp);continue;}if(ISO){const q=n.p?P:(n.e||n.n||n.c||n.g);ox=pX(q.x,q.y)-q.x*s;oy=pY(q.x,q.y)-q.y*s;}if(n.c){const c=n.c;if(c.tl)tile(c.tl.sid,c.tl.idx,ox+(c.x-.5)*s,oy+(c.y-.5)*s,s,0);else{cx.font=(s*.7)+'px serif';cx.textAlign='center';ico(c.open?'chest2':'chest',ox+c.x*s,oy+c.y*s,s*1.2);}continue;}if(n.g){const g=n.g;if(g.tl)tile(g.tl.sid,g.tl.idx,ox+(g.x-.5)*s,oy+(g.y-.5)*s,s,0);else{cx.font=(s*.8)+'px serif';cx.textAlign='center';ico('flag',ox+g.x*s,oy+g.y*s,s*1.2);}continue;}if(n.n){const q=n.n;actorShadow(q);if(!(q.anim&&AN.drawChar(cx,q,q.anim,ox+q.x*s,oy+q.y*s,s,t,{iso:ISO,ang:ANG,grounded})))fbk(q,ox+(q.x-.5)*s,actorTop(q,q.tl.sid,q.tl.idx),s,0);continue;}const q=n.p?P:n.e;actorShadow(q);
-      if(n.p){if(P.inv>0&&Math.floor(t*14)%2)continue;if(!(CF.heroAnim&&AN.drawChar(cx,P,CF.heroAnim,ox+P.x*s,oy+P.y*s,s,t,{iso:ISO,ang:ANG,grounded,pk:q.pkT>0,atk:P.atkT>0?(P.cs||1):0,aid:P.atkN,chain:P.cs>1,hit:P.hitT>0}))){const hs=sheets[CF.hero.sid];if(hs&&/đã gỡ/.test(hs.name)){cx.fillStyle='#e0b050';cx.beginPath();cx.arc(ox+P.x*s,oy+(P.y-.3)*s,s*.3,0,6.3);cx.fill();}else tile(CF.hero.sid,CF.hero.idx,ox+(P.x-.5)*s,actorTop(P,CF.hero.sid,CF.hero.idx),s,P.face<0);}}
+      if(n.p){if(P.inv>0&&Math.floor(t*14)%2)continue;
+        cx.save();
+        if(P.crouching){const y=oy+P.y*s;cx.translate(0,y);cx.scale(1,playerSize.crouching/playerSize.standing);cx.translate(0,-y);}
+        if(!(CF.heroAnim&&AN.drawChar(cx,P,CF.heroAnim,ox+P.x*s,oy+P.y*s,s,t,{iso:ISO,ang:ANG,grounded,pk:q.pkT>0,atk:P.atkT>0?(P.cs||1):0,aid:P.atkN,chain:P.cs>1,hit:P.hitT>0}))){const hs=sheets[CF.hero.sid];if(hs&&/đã gỡ/.test(hs.name)){cx.fillStyle='#e0b050';cx.beginPath();cx.arc(ox+P.x*s,oy+(P.y-.3)*s,s*.3,0,6.3);cx.fill();}else tile(CF.hero.sid,CF.hero.idx,ox+(P.x-.5)*s,actorTop(P,CF.hero.sid,CF.hero.idx),s,P.face<0);}cx.restore();}
       else{const e=n.e;cx.globalAlpha=e.fl>0?.5:1;if(!(e.anim&&AN.drawChar(cx,e,e.anim,ox+e.x*s,oy+e.y*s,s,t,{iso:ISO,ang:ANG,grounded,pk:q.pkT>0,hit:e.fl>0,atk:Math.hypot(P.x-e.x,P.y-e.y)<.8})))fbk(e,ox+(e.x-.5)*s,actorTop(e,e.tl.sid,e.tl.idx),s,e.x<P.x);cx.globalAlpha=1;cx.fillStyle='#000a';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7,3);cx.fillStyle='#e74c3c';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7*Math.max(0,e.hp)/e.mhp,3);}}
     for(const q of TC){const d=q.d,zb=d.zb||[-(d.fx||1),-(d.fy||1),d.fx||1,d.fy||1],x0=d.x+1+zb[0]-.7,y0=d.y+1+zb[1]-.7,ins=P.x>x0&&P.x<x0+zb[2]+1.4&&P.y>y0&&P.y<y0+zb[3]+1.4;d._a=(d._a==null?1:d._a)+((ins?.3:1)-(d._a==null?1:d._a))*.2;const sh=sheets[d.cv.sid];if(!sh||!sh.img)continue;const sx=(d.cv.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(d.cv.idx/sh.cols)*(sh.tw+sh.margin);cx.globalAlpha=d._a;cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,q.X-q.ws/2+(d.ox||0)*q.ws,q.Y-q.ws+(d.oy||0)*q.ws,q.ws,q.ws);cx.globalAlpha=1;}
     if(ISO)for(const g of OVG){const ins=P.x>g.x0-.4&&P.x<g.x1+.4&&P.y>g.y0-.4&&P.y<g.y1+.4;g.a+=((ins?.35:1)-g.a)*.18;const k2=s*.95/CQ,wp=g.c.width*k2,hp=g.c.height*k2;cx.globalAlpha=g.a;cx.drawImage(g.c,pX(g.xc,g.yb)-wp/2,pY(g.xc,g.yb)-hp,wp,hp);cx.globalAlpha=1;}
     for(const d of covers){
       const project=ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s];
-      const inside=Math.max(Math.abs(P.x-d.x-1),Math.abs(P.y-d.y-1))<d.sc/.95/2+.2;
+      const footprint=actorFootprint(P.x,P.y,.28);
+      const inside=Number.isFinite(lowestCeiling([d.ceiling],footprint))&&fitsUnderRoof([d.ceiling],footprint,postureHeight(P));
       cx.globalAlpha=inside?.4:1;
-      drawPlacedProp(cx,d,sheets[d.tile.sid],placedPropFrame(d,project,s,ANG?'angle':ISO?'iso':'top'));
+      drawPlacedProp(cx,d,sheets[d.tile?.sid],placedPropFrame(d,project,s,ANG?'angle':ISO?'iso':'top'));
     }
     cx.globalAlpha=1;
     if(ISO&&FOG)drawFog(cx,w,h,FOG,t,(P.x-P.y)*s*.75,(P.x+P.y)*s*.375);
@@ -351,7 +388,7 @@ export function play2D(o){
   function fbk(q,x,y,s,flip){if(q.anim){cx.fillStyle='#e0b050';cx.beginPath();cx.arc(x+s/2,y+s*.3,s*.28,0,6.3);cx.fill();cx.fillStyle='#222';cx.font='bold '+(s*.35)+'px system-ui';cx.textAlign='center';cx.fillText((q.name||'?')[0],x+s/2,y+s*.42);}else tile(q.tl.sid,q.tl.idx,x,y,s,flip);}
   function loop(ts){if(dead)return;const dt=Math.min(.05,(ts-last)/1000||0);last=ts;upd(dt);if(dead)return;draw();raf=requestAnimationFrame(loop);}
   // ---- điều khiển ----
-  const kd=e=>{if(e.key==='Escape'&&(o.onSnapshot||o.escapeExit)){e.preventDefault();stop();return;}const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=1;if(k==='+'||k==='='){setZ(zm*1.25);}if(k==='-'||k==='_'){setZ(zm*.8);}if(k==='e'){toggleDoor();}if(k===' '||k==='j'){attack();e.preventDefault();}if(k.startsWith('Arrow'))e.preventDefault();},ku=e=>{keys[e.key.length===1?e.key.toLowerCase():e.key]=0;};
+  const kd=e=>{if(e.key==='Escape'&&(o.onSnapshot||o.escapeExit)){e.preventDefault();stop();return;}const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=1;if(k==='+'||k==='='){setZ(zm*1.25);}if(k==='-'||k==='_'){setZ(zm*.8);}if(k==='e'){toggleDoor();}if(k==='c'&&!e.repeat){toggleCrouch();e.preventDefault();}if(k===' '||k==='j'){attack();e.preventDefault();}if(k.startsWith('Arrow'))e.preventDefault();},ku=e=>{keys[e.key.length===1?e.key.toLowerCase():e.key]=0;};
   addEventListener('keydown',kd);addEventListener('keyup',ku);
   atk.addEventListener('pointerdown',e=>{e.stopPropagation();e.preventDefault();attack();});
   let clk=null;cv.addEventListener('pointerdown',e=>{clk={x:e.clientX,y:e.clientY,t:performance.now(),id:e.pointerId};},true);
