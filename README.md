@@ -2,6 +2,10 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
+## Vật lý mái
+- Mái (lớp **Mái / cửa**, hoặc vật thể mái) không đặt được khi lơ lửng: ô mái phải nằm sát tường, cột hoặc nhà (vươn ra tối đa 2 ô), hoặc bắc ngang giữa hai điểm tựa đối diện cách nhau không quá 12 ô. Xóa phần đỡ làm mái mất tựa thì app báo, không tự xóa mái.
+- Tắt cho cả bản đồ: `cfg.roofPhysics=false`. Đổi nhịp: `cfg.roofSpan`, `cfg.roofOverhang`. Mã ở `src/roofSupport2d.js`, test ở `tests/roofSupport2d.test.js`.
+
 ## V15.7.1
 - **Va chạm (K)** hiện ngay vùng chặn. Bộ đếm ghi rõ số vùng vẽ tay.
 

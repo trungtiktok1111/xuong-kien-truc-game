@@ -2,6 +2,7 @@ import {usedGridBounds,rebaseOutlineSource} from './outlineGrid.js';
 import {builtWallFaces,mountGate,projectSegment,wallThickness,WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS} from './wall2d.js';
 import {gateWalls,gateZones} from './gate2d.js';
 import {constructionContext,gateIssue,propIssue,wallIssue} from './constructionRules2d.js';
+import {floatingRoofCells,floatingRoofEnt,isRoofEnt} from './roofSupport2d.js';
 import {automaticPaintZones, daXoayArchProfiles, estimateContact, makePaintProfile, paintedGroups, paintFamily, propContact, resizeProp, turnProp} from './placement2d.js';
 import {openArchivePicker} from './archivePicker.js';
 import {DA_XOAY_LEVEL} from './outlineLevels.js';
@@ -51,7 +52,8 @@ export function init2D(root,A){
   const defCfg=()=>({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:2,idx:88},win:'auto'});
   const newMap=(w,h)=>({w,h,layers:[0,1,2,3].map(()=>new Array(w*h).fill(0)),blk:new Array(w*h).fill(0),ents:[],cfg:defCfg()});
   const clone=m=>({name:m.name,w:m.w,h:m.h,layers:m.layers.map(l=>l.slice()),blk:m.blk.slice(),ents:JSON.parse(JSON.stringify(m.ents||[])),cfg:Object.assign(defCfg(),JSON.parse(JSON.stringify(m.cfg||{})))});
-  function pushUndo(){undo.push(clone(M));if(undo.length>40)undo.shift();redo=[];}
+  let roofBase=null;
+  function pushUndo(){roofBase=M&&M.layers&&M.layers[3]?Array.from(M.layers[3]):null;undo.push(clone(M));if(undo.length>40)undo.shift();redo=[];}
   function doUndo(){if(!undo.length)return;redo.push(clone(M));const before=M;M=undo.pop();if(M.w!==before.w||M.h!==before.h)fit();after();ui.obj();}
   function doRedo(){if(!redo.length)return;undo.push(clone(M));const before=M;M=redo.pop();if(M.w!==before.w||M.h!==before.h)fit();after();ui.obj();}
   let saveT,buildRevision=0;function after(){buildRevision++;dirty=true;saveStatus.textContent='Đang chờ tự lưu…';clearTimeout(saveT);saveT=setTimeout(save,700);}
@@ -104,7 +106,7 @@ export function init2D(root,A){
     if(ex?.wallLine){undo.pop();selId=ex.id;draw();return;}
     if(ex){selId=ex.id;const at=s2g(lastPt.x,lastPt.y);drag=ex.placedProp?{ent:true,precise:true,dx:at.x-ex.x,dy:at.y-ex.y,from:[ex.x,ex.y]}:{ent:true,dx:c.x-ex.x,dy:c.y-ex.y};}
     else if(objType==='start'&&M.ents.some(e=>e.t==='start')){const s=M.ents.find(e=>e.t==='start');s.x=c.x;s.y=c.y;selId=s.id;drag={ent:true};}
-    else if(objType==='deco'){if(!vatSel){toast('Chọn một vật thể trong danh sách bên dưới trước');return;}const it=vatSel,n={id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),t:'deco',x:c.x,y:c.y,f:it.f,fx:it.fx,fy:it.fy,sc:it.sc,ox:it.ox,oy:it.oy,flat:it.role==='Phủ nền',name:it.name,tile:it.tile,zb:it.zb};if(it.zps)n.zps=JSON.parse(JSON.stringify(it.zps));if(it.col)n.col=JSON.parse(JSON.stringify(it.col));if(it.cal!=null)n.cal=it.cal;if(it.walk||it.role==='Phủ nền')n.walk=true;if(it.estimated)n.estimated=true;if(it.cv)n.cv=it.cv;M.ents.push(n);selId=n.id;drag={ent:true};}
+    else if(objType==='deco'){if(!vatSel){toast('Chọn một vật thể trong danh sách bên dưới trước');return;}const it=vatSel,n={id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),t:'deco',x:c.x,y:c.y,f:it.f,fx:it.fx,fy:it.fy,sc:it.sc,ox:it.ox,oy:it.oy,flat:it.role==='Phủ nền',name:it.name,tile:it.tile,zb:it.zb};if(it.zps)n.zps=JSON.parse(JSON.stringify(it.zps));if(it.col)n.col=JSON.parse(JSON.stringify(it.col));if(it.cal!=null)n.cal=it.cal;if(it.walk||it.role==='Phủ nền')n.walk=true;if(it.estimated)n.estimated=true;if(it.cv)n.cv=it.cv;if(isRoofEnt(n)&&floatingRoofEnt(M,n,roofCtx)){undo.pop();toast('Không đặt được mái.'+ROOF_MSG);draw();return;}M.ents.push(n);selId=n.id;drag={ent:true};}
     else{const n=newEnt(objType,c.x,c.y);M.ents.push(n);selId=n.id;drag={ent:true};}
     after();ui.obj();}
   // ===== chế độ iso (nhìn giống lúc chơi) =====
@@ -410,7 +412,7 @@ export function init2D(root,A){
     if(act!==4&&['draw','rect','fill'].includes(tool)&&!hasBrush()){
       chooseTab('tools');toast('Chọn vật liệu hoặc vật thể trong khung Dựng cảnh trước khi đặt.');return;
     }
-    if(fillArm&&sel&&tool==='draw'){const r=selRect();if(r&&c.x>=r.x0&&c.x<=r.x1&&c.y>=r.y0&&c.y<=r.y1){pushUndo();rectFill(r);after();toast('Đã đổ vào vùng chọn '+r.w+'×'+r.h+' — bấm ↶ nếu muốn hủy');dirty=true;return;}fillArm=false;}
+    if(fillArm&&sel&&tool==='draw'){const r=selRect();if(r&&c.x>=r.x0&&c.x<=r.x1&&c.y>=r.y0&&c.y<=r.y1){pushUndo();rectFill(r);roofGuard();after();toast('Đã đổ vào vùng chọn '+r.w+'×'+r.h+' — bấm ↶ nếu muốn hủy');dirty=true;return;}fillArm=false;}
     if(act===2&&['rect','fill'].includes(tool)&&stampHasGate()){
       useTool('draw');toast('Đặt từng cổng để Xưởng kiểm tra chân tường và lối đi.');return;
     }
@@ -430,7 +432,7 @@ export function init2D(root,A){
     if(tool==='zone'){zDown(p,e);dirty=true;return;}
     if(tool==='obj'){objDown(c);dirty=true;return;}
     if(tool==='draw'||tool==='erase'||tool==='fill'||tool==='pick'){pushUndo();
-      if(tool==='draw'){paste(c.x,c.y);drag={sx:c.x,sy:c.y,last:c};}else if(tool==='erase'){erase(c.x,c.y);drag={last:c};}else if(tool==='fill'){fill(c.x,c.y);drag=null;}else{const ok=pick(c.x,c.y,p);undo.pop();drag=null;if(ok&&pickAndDraw)useTool('draw');else if(ok)draw();else toast('Ô này chưa có hình để lấy.');}after();}
+      if(tool==='draw'){paste(c.x,c.y);drag={sx:c.x,sy:c.y,last:c};}else if(tool==='erase'){erase(c.x,c.y);drag={last:c};}else if(tool==='fill'){fill(c.x,c.y);drag=null;}else{const ok=pick(c.x,c.y,p);undo.pop();drag=null;if(ok&&pickAndDraw)useTool('draw');else if(ok)draw();else toast('Ô này chưa có hình để lấy.');}roofGuard();after();}
     else if(tool==='paste'){if(!clip){toast('Chưa có gì để dán — dùng Chọn vùng → Sao chép');return;}drag={paste:true};}
     else if(tool==='rect'||tool==='select'){drag={rect:{x0:c.x,y0:c.y,x1:c.x,y1:c.y}};if(tool==='select'){sel=null;ui.sel();}}
     dirty=true;});
@@ -450,9 +452,9 @@ export function init2D(root,A){
       dirty=true;
     }}
       else if(q&&inb(nx,ny)&&(q.x!==nx||q.y!==ny)){q.x=nx;q.y=ny;dirty=true;}return;}
-    if(e.shiftKey&&tool==='draw'&&drag.sx!=null&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;const dx=c.x-drag.sx,dy=c.y-drag.sy,hz=Math.abs(dx)>=Math.abs(dy),sw=Math.max(1,stamp.w),sh=Math.max(1,stamp.h);const n=hz?Math.floor(Math.abs(dx)/sw):Math.floor(Math.abs(dy)/sh);for(let q=0;q<=n;q++)paste(drag.sx+(hz?Math.sign(dx||1)*q*sw:0),drag.sy+(hz?0:Math.sign(dy||1)*q*sh));after();return;}
-    if(drag.last&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;if(tool==='draw'){if(stamp.w===1&&stamp.h===1||((c.x-drag.sx)%stamp.w===0&&(c.y-drag.sy)%stamp.h===0))paste(c.x,c.y);}else if(tool==='erase')erase(c.x,c.y);after();}});
-  const end=e=>{P.delete(e.pointerId);if(P.size<2)gest=null;if(zd){zUp();dirty=true;return;}if(!drag)return;
+    if(e.shiftKey&&tool==='draw'&&drag.sx!=null&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;const dx=c.x-drag.sx,dy=c.y-drag.sy,hz=Math.abs(dx)>=Math.abs(dy),sw=Math.max(1,stamp.w),sh=Math.max(1,stamp.h);const n=hz?Math.floor(Math.abs(dx)/sw):Math.floor(Math.abs(dy)/sh);for(let q=0;q<=n;q++)paste(drag.sx+(hz?Math.sign(dx||1)*q*sw:0),drag.sy+(hz?0:Math.sign(dy||1)*q*sh));roofGuard();after();return;}
+    if(drag.last&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;if(tool==='draw'){if(stamp.w===1&&stamp.h===1||((c.x-drag.sx)%stamp.w===0&&(c.y-drag.sy)%stamp.h===0))paste(c.x,c.y);}else if(tool==='erase')erase(c.x,c.y);if(tool==='draw')roofGuard();after();}});
+  const end=e=>{P.delete(e.pointerId);if(P.size<2)gest=null;if(zd){zUp();dirty=true;return;}if(!drag)return;if(tool==='erase'&&drag.last)roofWarn();
     if(drag.wallPointer){
       const start=drag.start,p=pos(e),moved=Math.hypot(p.x-drag.p.x,p.y-drag.p.y)>5;
       drag=null;
@@ -463,13 +465,13 @@ export function init2D(root,A){
       }
       dirty=true;return;
     }
-    if(drag.paste){const o=pOrg();if(o&&e.type!=='pointercancel'){pushUndo();const n=pasteClip(o.x,o.y);after();toast('Đã dán'+(n?' + '+n+' đối tượng':''));}drag=null;dirty=true;return;}
+    if(drag.paste){const o=pOrg();if(o&&e.type!=='pointercancel'){pushUndo();const n=pasteClip(o.x,o.y);roofGuard();after();toast('Đã dán'+(n?' + '+n+' đối tượng':''));}drag=null;dirty=true;return;}
     if(drag.ent){
       const q=selEnt(),moved=drag.from&&q&&(q.x!==drag.from[0]||q.y!==drag.from[1]),issue=moved&&constructionIssue(q,true);
       if(drag.from&&q&&(issue||e.type==='pointercancel')){[q.x,q.y]=drag.from;undo.pop();if(issue)toast(issue);}
       after();ui.obj();
     }
-    if(drag.rect){if(tool==='rect'){pushUndo();rectFill(drag.rect);after();}else{sel=drag.rect;ui.sel();}}drag=null;dirty=true;};
+    if(drag.rect){if(tool==='rect'){pushUndo();rectFill(drag.rect);roofGuard();after();}else{sel=drag.rect;ui.sel();}}drag=null;dirty=true;};
   cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);cv.addEventListener('pointerleave',e=>{if(e.pointerType!=='touch'&&!drag?.wallPointer){hov=null;dirty=true;}});
   cv.addEventListener('contextmenu',e=>{
     e.preventDefault();if(!M||!desktop())return;
@@ -834,6 +836,28 @@ export function init2D(root,A){
     if(piece.gateUncalibrated)return 'Ảnh cổng này cần dữ liệu hai chân trụ. Có thể lắp ngay bằng cổng Đá Xoáy.';
     if(!piece.gateAssembly&&(!piece.buildChecks||piece.walk))return '';
     return propIssue(piece,ruleCtx(fresh));
+  }
+  /* ===== vật lý mái: mái cần tường/cột/nhà đỡ ===== */
+  const STRUCT_TYPES=['Nhà','Tường/hàng rào'],STRUCT_NAME=/tuong|tường|wall|fence|pillar|tru|trụ|cot|cột|nha|nhà|house|build|cong|cổng|gate|arch/i;
+  const roofCtx={
+    isSupportTile:v=>{const d=dec(v);return !!sheets[d.sid]&&STRUCT_TYPES.includes(eff(d.sid,d.idx).type);},
+    isSupportEnt:e=>{const t=e.tile&&sheets[e.tile.sid]?eff(e.tile.sid,e.tile.idx).type:null;return STRUCT_TYPES.includes(t)||STRUCT_NAME.test(e.name||'');}
+  };
+  const ROOF_MSG=' Mái cần tường, cột hoặc nhà đỡ bên dưới, không được lơ lửng. Dựng phần đỡ trước rồi đặt mái.';
+  function roofGuard(){
+    if(!M||!roofBase||M.cfg?.roofPhysics===false)return 0;
+    const roof=M.layers[3],only=[];
+    for(let i=0;i<roof.length;i++)if(roof[i]&&roof[i]!==roofBase[i])only.push(i);
+    if(!only.length)return 0;
+    const bad=floatingRoofCells(M,roofCtx,only);
+    for(const i of bad)roof[i]=roofBase[i]||0;
+    if(bad.length){toast('Không đặt được '+bad.length+' ô mái.'+ROOF_MSG);dirty=true;}
+    return bad.length;
+  }
+  function roofWarn(){
+    if(!M||M.cfg?.roofPhysics===false)return;
+    const n=floatingRoofCells(M,roofCtx).length;
+    if(n)toast('Có '+n+' ô mái đang mất điểm tựa sau khi xóa. Dựng lại phần đỡ hoặc xóa mái đó.');
   }
   function aimProp(prop,p){
     const at=propPosition(p);
