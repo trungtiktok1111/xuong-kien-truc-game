@@ -2,6 +2,9 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
+## V15.7.1
+- **Va chạm (K)** hiện ngay vùng chặn. Bộ đếm ghi rõ số vùng vẽ tay.
+
 ## V15.7
 - **Dựng cảnh** hiển thị vật liệu và vật thể theo lớp ngay trong khung bên phải. **Đặt mảnh (B)** dùng mảnh đã chọn để lắp lên bản đồ.
 - Tìm và chọn mảnh trong cùng khung. Dùng **Bảng ghép ô** để kéo chọn nhiều ô liền nhau trong atlas.

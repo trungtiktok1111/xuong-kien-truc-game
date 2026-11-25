@@ -179,7 +179,7 @@ export function init2D(root,A){
     cx.setTransform(dp,0,0,dp,0,0);cx.fillStyle='#10161d';cx.fillRect(0,0,w,h);cx.imageSmoothingEnabled=false;
     const z=view.z,IS=ISOQ();
     if(IS){drawIso();cx.strokeStyle='#ffffff55';cx.lineWidth=1;pathQ(0,0,M.w,M.h);cx.stroke();}else{rebuild();cx.drawImage(mc,view.x,view.y,M.w*CELL*z,M.h*CELL*z);cx.strokeStyle='#ffffff55';cx.lineWidth=1;cx.strokeRect(view.x-.5,view.y-.5,M.w*CELL*z+1,M.h*CELL*z+1);}
-    if(vis[4]||colMode){
+    if(tool==='zone'||vis[4]||colMode){
       const walk=colMode===2,collision=mapCollision(M);
       if(collision.floor)drawFloorCollision(cx,collision.floor,g2s,w,h,walk);
       cx.save();if(collision.floor)clipOutline(cx,collision.floor,g2s);
@@ -420,13 +420,14 @@ export function init2D(root,A){
   function zoneUI(){const box=el('div',{style:'border:1px solid #c0503a;border-radius:10px;padding:8px;margin:6px 0'});
     const automatic=M.cfg.autoObjectCollision!==false;
     box.append(el('div',{class:'row'},el('b',{},'🚧 Vùng chặn hình học (không cần ảnh)')),
+      el('p',{class:'hint collision-legend',role:'status'},'Đang hiện vùng chặn. Đỏ: vùng chặn của bản đồ và vật thể. Cam: vùng chặn tự động ước lượng theo chân ảnh.'),
       btn('Va chạm tự động: '+(automatic?'bật':'tắt'),()=>{
         pushUndo();M.cfg.autoObjectCollision=!automatic;after();draw();
       },automatic?'on':''),
-      el('p',{class:'hint'},'Viền cam là vùng chặn ước lượng của ảnh đặt trên lớp Vật thể. Cửa, vòm và bậc cần dữ liệu của mẫu hoặc vùng chặn đặt tay.'));
+      el('p',{class:'hint'},'Cửa, vòm và bậc cần dữ liệu của mẫu hoặc vùng chặn đặt tay.'));
     box.append(el('div',{class:'row'},Object.keys(ZK).map(k=>btn(ZK[k][0]+' '+ZK[k][1],()=>{zk=k;zmode='draw';zpend=null;draw();},(zmode==='draw'&&zk===k)?'on':'')),btn('✋ Chọn / sửa',()=>{zmode='edit';zpend=null;draw();dirty=true;},zmode==='edit'?'on':'')));
     const sl=el('select',{class:'num',style:'min-width:130px',onchange:e=>{zsnap=+e.target.value;}},[[1,'Bám lưới: 1 ô'],[.5,'Bám: ½ ô'],[.25,'Bám: ¼ ô'],[0,'Tự do']].map(([v,n])=>el('option',{value:v},n)));sl.value=String(zsnap);
-    box.append(el('div',{class:'row'},sl,el('span',{class:'lbl'},ZL().length+' vùng')));
+    box.append(el('div',{class:'row'},sl,el('span',{class:'lbl'},ZL().length+' vùng vẽ tay')));
     if(zpend)box.append(el('div',{class:'row'},el('span',{class:'lbl'},'Đang vẽ '+zpend.pts.length+' điểm: '),btn('✔ Xong',zFinish,'on'),btn('↶ Bỏ điểm cuối',()=>{zpend.pts.pop();if(!zpend.pts.length)zpend=null;draw();dirty=true;}),btn('✕ Hủy',()=>{zpend=null;draw();dirty=true;})));
     const sz=zsel&&zget(zsel);
     if(sz){const row=el('div',{class:'row'});
@@ -771,12 +772,12 @@ export function init2D(root,A){
         el('div',{class:'row'},btn(smoothOn()?'Nền mượt: bật':'Nền mượt: tắt',()=>{pushUndo();M.cfg.smooth=!smoothOn();after();draw();}),
           btn(grid?'Lưới: bật':'Lưới: tắt',switchGrid),
           btn('Sương: '+fogLv(),()=>{pushUndo();M.cfg.fog=(fogLv()+1)%4;after();draw();}),
-          btn(['Va chạm: ẩn','Va chạm: vùng chặn','Va chạm: chặn và đi'][colMode],()=>{colMode=(colMode+1)%3;dirty=true;draw();}),
+          tool!=='zone'?btn(['Va chạm: ẩn','Va chạm: vùng chặn','Va chạm: chặn và đi'][colMode],()=>{colMode=(colMode+1)%3;dirty=true;draw();}):null,
           btn('Phép chiếu: '+(ANGQ()?'Angle':'Isometric'),async()=>{
             pushUndo();const to=ANGQ()?'iso':'angle';if(to==='angle')await ensureAngle(sheets);
             M.cfg.view='iso';M.cfg.proj=to;isoK='';angN=-1;after();fit();draw();
           }))));
-      if(simple&&!desktop())body.append(el('div',{class:'row'},btn('↶ Hoàn tác',doUndo),btn('↷ Làm lại',doRedo),btn('＋',()=>zoomBy(1.4)),btn('－',()=>zoomBy(1/1.4)),btn('⤢ Vừa khung',fit)));else if(!desktop())body.append(el('div',{class:'row'},btn('↶ Hoàn tác',doUndo),btn('↷ Làm lại',doRedo),btn('＋',()=>zoomBy(1.4)),btn('－',()=>zoomBy(1/1.4)),btn('⤢ Vừa khung',fit),btn(grid?'▦ Lưới: bật':'▦ Lưới: tắt',()=>{grid=!grid;dirty=true;draw();}),btn(['🚧 Va chạm: ẩn','🚧 Hiện vùng CHẶN (đỏ)','🚧 Chặn (đỏ) + Đi được (xanh)'][colMode],()=>{colMode=(colMode+1)%3;dirty=true;draw();ui.tools&&ui.tools();})));
+      if(simple&&!desktop())body.append(el('div',{class:'row'},btn('↶ Hoàn tác',doUndo),btn('↷ Làm lại',doRedo),btn('＋',()=>zoomBy(1.4)),btn('－',()=>zoomBy(1/1.4)),btn('⤢ Vừa khung',fit)));else if(!desktop())body.append(el('div',{class:'row'},btn('↶ Hoàn tác',doUndo),btn('↷ Làm lại',doRedo),btn('＋',()=>zoomBy(1.4)),btn('－',()=>zoomBy(1/1.4)),btn('⤢ Vừa khung',fit),btn(grid?'▦ Lưới: bật':'▦ Lưới: tắt',()=>{grid=!grid;dirty=true;draw();}),tool!=='zone'?btn(['🚧 Va chạm: ẩn','🚧 Hiện vùng CHẶN (đỏ)','🚧 Chặn (đỏ) + Đi được (xanh)'][colMode],()=>{colMode=(colMode+1)%3;dirty=true;draw();ui.tools&&ui.tools();}):null));
       if(!desktop()&&!building)body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Lớp đang sửa: '),LAYN.concat(['Vùng chặn']).map((n,i)=>btn(n,()=>{act=i;draw();},act===i?'on':''))));
       if((!simple||desktop())&&(tool==='select'||tool==='paste')){
         const box=el('div',{style:'border:1px solid #34485a;border-radius:10px;padding:8px;margin:6px 0'});
