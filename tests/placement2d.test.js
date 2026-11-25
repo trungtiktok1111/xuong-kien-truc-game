@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {automaticPaintZones,estimateContact,indexPaintZones,makePaintProfile,paintedGroups,paintFamily} from '../src/placement2d.js';
+import {automaticPaintZones,daXoayArchProfiles,estimateContact,indexPaintZones,makePaintProfile,paintedGroups,paintFamily} from '../src/placement2d.js';
 import {mapCollision} from '../src/mapCollision.js';
 
 test('painted props choose foot profile by role and keep open or unknown multipart assets clear',()=>{
@@ -57,4 +57,23 @@ test('100,000 placement and indexed collision checks across grid, Angle and Isom
     count++;
   }
   assert.equal(count,100000);
+});
+
+
+test('a painted Đá Xoáy arch has two separate post colliders in every projection',()=>{
+  const layer=Array(64).fill(0);
+  layer[27]=1;
+  for(const cfg of [{view:'top'},{view:'iso'},{view:'iso',proj:'angle'}]){
+    for(let flip=0;flip<8;flip++){
+      const map={w:8,h:8,blk:Array(64).fill(0),layers:[[],[],layer,[]],cfg};
+      const zones=automaticPaintZones(map,()=>daXoayArchProfiles(flip));
+      assert.equal(zones.length,2);
+      assert.ok(zones.every(zone=>zone.estimated===false));
+      const [a,b]=zones.map(z=>[z.x+z.w/2,z.y+z.h/2]);
+      const collision=mapCollision({...map,placementZones:zones});
+      assert.equal(collision.free(...a,.08),false);
+      assert.equal(collision.free(...b,.08),false);
+      assert.equal(collision.free((a[0]+b[0])/2,(a[1]+b[1])/2,.08),true);
+    }
+  }
 });

@@ -59,6 +59,17 @@ export function makePaintProfile(family, contact) {
   return {...contact,kind:family==='round'?'ell':'rect',w:size,h:family==='round'?size:family==='wall'?.15:size*.72};
 }
 
+// Ground contact centers measured on the two posts of the 64 px Đá Xoáy arch.
+export function daXoayArchProfiles(flip) {
+  return [[22.5,60.5],[46.5,48.5]].map(([x,y])=>{
+    let u=x/64,v=y/64;
+    if(flip&1)u=1-u;
+    if(flip&2)v=1-v;
+    if(flip&4)[u,v]=[v,u];
+    return {u,v,kind:'ell',w:.18,h:.18,estimated:false};
+  });
+}
+
 function projectedContact(map, group, x, y, profile) {
   if (map.cfg?.view!=='iso') return [x+profile.u,y+profile.v];
   const u=x-group.x0+profile.u-(group.x1-group.x0)/2;
@@ -74,9 +85,12 @@ export function automaticPaintZones(map, lookup, groups) {
   for (const group of groups || paintedGroups(layer,map.w,map.h)) for (const i of group.cells) {
     const profile=lookup(layer[i]);
     if (!profile) continue;
-    const [x,y]=projectedContact(map,group,i%map.w,Math.floor(i/map.w),profile);
-    result.push({id:'painted:'+i,k:profile.kind,x:x-profile.w/2,y:y-profile.h/2,
-      w:profile.w,h:profile.h,rot:0,estimated:true});
+    const parts=Array.isArray(profile)?profile:[profile];
+    for(const [n,part] of parts.entries()){
+      const [x,y]=projectedContact(map,group,i%map.w,Math.floor(i/map.w),part);
+      result.push({id:'painted:'+i+(n?':'+n:''),k:part.kind,x:x-part.w/2,y:y-part.h/2,
+        w:part.w,h:part.h,rot:0,estimated:part.estimated!==false});
+    }
   }
   return result;
 }

@@ -1,4 +1,4 @@
-import {automaticPaintZones, estimateContact, makePaintProfile, paintedGroups, paintFamily} from './placement2d.js';
+import {automaticPaintZones, daXoayArchProfiles, estimateContact, makePaintProfile, paintedGroups, paintFamily} from './placement2d.js';
 import {openArchivePicker} from './archivePicker.js';
 import {DA_XOAY_LEVEL} from './outlineLevels.js';
 import {mapCollision,rasterOutline} from './mapCollision.js';
@@ -191,8 +191,11 @@ export function init2D(root,A){
       }
       cx.restore();cx.fillStyle='rgba(255,40,40,.5)';cx.strokeStyle='rgba(255,120,120,.9)';cx.lineWidth=1;
       for(const q of decoZones(M.ents)){zPath(cx,q,g2s);cx.fill();cx.stroke();}
-      cx.fillStyle='rgba(255,170,45,.45)';cx.strokeStyle='#ffbd69';
-      for(const q of currentPaintZones()){zPath(cx,q,g2s);cx.fill();cx.stroke();}
+      for(const q of currentPaintZones()){
+        cx.fillStyle=q.estimated?'rgba(255,170,45,.45)':'rgba(255,40,40,.5)';
+        cx.strokeStyle=q.estimated?'#ffbd69':'#ff8a8a';
+        zPath(cx,q,g2s);cx.fill();cx.stroke();
+      }
     }
     drawZ();
     if(grid&&z>=(IS?1.1:2.5)){cx.strokeStyle='rgba(255,255,255,.13)';cx.beginPath();if(IS){for(let x=0;x<=M.w;x++){const a=g2s(x,0),b=g2s(x,M.h);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}for(let y=0;y<=M.h;y++){const a=g2s(0,y),b=g2s(M.w,y);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}}else{for(let x=0;x<=M.w;x++){const X=Math.round(view.x+x*CELL*z)+.5;cx.moveTo(X,view.y);cx.lineTo(X,view.y+M.h*CELL*z);}for(let y=0;y<=M.h;y++){const Y=Math.round(view.y+y*CELL*z)+.5;cx.moveTo(view.x,Y);cx.lineTo(view.x+M.w*CELL*z,Y);}}cx.stroke();}
@@ -424,7 +427,7 @@ export function init2D(root,A){
       btn('Va chạm tự động: '+(automatic?'bật':'tắt'),()=>{
         pushUndo();M.cfg.autoObjectCollision=!automatic;after();draw();
       },automatic?'on':''),
-      el('p',{class:'hint'},'Cửa, vòm và bậc cần dữ liệu của mẫu hoặc vùng chặn đặt tay.'));
+      el('p',{class:'hint'},'Cổng vòm Đá Xoáy có vùng chặn ở hai chân trụ. Với mẫu khác, Xưởng ưu tiên va chạm khai báo sẵn.'));
     box.append(el('div',{class:'row'},Object.keys(ZK).map(k=>btn(ZK[k][0]+' '+ZK[k][1],()=>{zk=k;zmode='draw';zpend=null;draw();},(zmode==='draw'&&zk===k)?'on':'')),btn('✋ Chọn / sửa',()=>{zmode='edit';zpend=null;draw();dirty=true;},zmode==='edit'?'on':'')));
     const sl=el('select',{class:'num',style:'min-width:130px',onchange:e=>{zsnap=+e.target.value;}},[[1,'Bám lưới: 1 ô'],[.5,'Bám: ½ ô'],[.25,'Bám: ¼ ô'],[0,'Tự do']].map(([v,n])=>el('option',{value:v},n)));sl.value=String(zsnap);
     box.append(el('div',{class:'row'},sl,el('span',{class:'lbl'},ZL().length+' vùng vẽ tay')));
@@ -1020,7 +1023,7 @@ export function init2D(root,A){
     const cnt={};M.layers.forEach((a,l)=>{for(let i=0;i<a.length;i++){const v=a[i];if(!v)continue;const d=dec(v),k=d.sid+':'+d.idx;const o=cnt[k]||(cnt[k]={sid:d.sid,idx:d.idx,l:[0,0,0,0],b:0,n:0});o.l[l]++;o.n++;if(M.blk[i])o.b++;}});
     for(const k in cnt){const o=cnt[k],sh=sheets[o.sid];if(!sh)continue;const key=sh.name+'#'+o.idx,t=TG.tiles[key]||{},base=TG.sheets[sh.name]||{};let ch=0;
       if(t.layer==null&&base.layer==null){t.layer=o.l.indexOf(Math.max(...o.l));ch=1;}
-      if(!t.fn&&!base.fn){t.fn=t.layer===3?'Chỉ trang trí':(o.b>o.n/2?'Chặn đường':'Đi được');ch=1;}
+      if(!t.fn&&!base.fn){t.fn=constructionTile(o.sid,o.idx,0).behavior??(t.layer===3?'Chỉ trang trí':(o.b>o.n/2?'Chặn đường':'Đi được'));ch=1;}
       if(ch){TG.tiles[key]=t;nt++;}}
     for(const e of M.ents){if(!e.tile||!sheets[e.tile.sid])continue;const key=sheets[e.tile.sid].name+'#'+e.tile.idx,t=TG.tiles[key]||{};if(!t.type&&!(TG.sheets[sheets[e.tile.sid].name]||{}).type){t.type=e.t==='enemy'?'Quái':e.t==='npc'?'Nhân vật':'Đồ vật';TG.tiles[key]=t;nt++;}}
     tgSave();toast('Đã tinh chỉnh nhãn theo bản đồ của bạn: '+nt+' ô');}
@@ -1522,7 +1525,9 @@ export function init2D(root,A){
       if(sheet?.img&&!sheet.iso){
         const info=constructionTile(sid,idx,0);
         const family=paintFamily(info.source,info.type,info.behavior);
-        if(family){
+        if(idx===0&&sheet.tw===64&&/^Đá Xoáy · cổng, cột, rương/.test(sheet.name)&&info.behavior==='Chặn đường'){
+          profile=daXoayArchProfiles(f);
+        }else if(family){
           let byFrame=contactCache.get(sheet.img);
           if(!byFrame){byFrame=new Map();contactCache.set(sheet.img,byFrame);}
           const frame=idx*8+f;
