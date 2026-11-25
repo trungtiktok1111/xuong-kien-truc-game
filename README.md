@@ -2,6 +2,22 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
 
+## Tự phối vật liệu Đường Bao 2D
+
+Mở **2D → Đường Bao → Tự phối vật liệu Đường Bao**, bật phối vật liệu rồi bấm **Chơi thử bản nháp** hoặc **Tạo màn mới từ hình này**. Dungeon, Farm, Library và Bases cung cấp sàn và đạo cụ. Xưởng lát sàn theo phòng, chừa hành lang và kiểm tra va chạm khi đặt đạo cụ. Bố cục tường, lỗ khoét và cổng lấy từ Đường Bao.
+
+**Thêm gói ZIP** nhận nhiều gói cùng lúc. Xưởng nhận diện một số tên mảnh thông dụng. Với gói có tên riêng, thêm tệp `outline-materials.json` và khai báo đường dẫn ảnh tính từ thư mục chứa tệp. Ví dụ:
+
+```json
+{
+  "version": 1,
+  "floors": [{"path": "nen/da.png", "name": "Đá lát", "shape": "square"}],
+  "props": [{"path": "vat/thung-e.png", "name": "Thùng", "anchor": [128, 437], "tileWidth": 256}]
+}
+```
+
+Dùng `shape: "square"` cho ảnh vật liệu vuông nhìn từ trên xuống. Mặc định ảnh sàn dùng góc isometric 2:1. `anchor` là điểm chân trên ảnh gốc tính bằng pixel. `tileWidth` là bề rộng pixel ứng với một ô bản đồ. Có thể chỉ khai báo sàn hoặc chỉ khai báo đạo cụ và phối với gói khác.
+
 ## Điểm neo khi đặt mảnh 2D
 
 Chọn một trong chín vị trí dưới mục Điểm neo để đặt mái theo tâm, theo mép hoặc theo góc. Điểm sáng trên mái đi theo con trỏ. Các dấu tựa xanh vẫn thể hiện nơi đỉnh tường hoặc cột đỡ mái. Vật thể khác có một, ba hoặc chín điểm theo kích thước nhìn thấy. Giữ Shift để bám lưới ¼ ô.

@@ -301,6 +301,7 @@ async function groundTile(result,a){
   }else{
     if(a.flatTop){
       g.beginPath();g.moveTo(64,0);g.lineTo(128,32);g.lineTo(64,64);g.lineTo(0,32);g.closePath();g.clip();
+      if(a.underlay){g.fillStyle=a.underlay;g.fillRect(0,0,128,64);}
     }
     const [l,t,r,b]=art.bounds;
     g.drawImage(art.out,l*art.side,t*art.side,(r-l)*art.side,(b-t)*art.side,0,0,128,Math.min(128,128*art.h/art.w));
@@ -308,6 +309,58 @@ async function groundTile(result,a){
   result.sheets.push({name:a.pack.name+' · '+a.label,tw:128,margin:0,iso:1,url:sh.toDataURL()});
   return result.sheets.length-1;
 }
+// Profiles may supply exact roles for any ZIP. Otherwise use recognized floor
+// tiles and small props from the existing archive catalogue.
+export async function outlinePackMaterials(pack,profile){
+  const result={sheets:[],floors:[],props:[],source:pack.name};
+  const file=pack.paths.find(path=>/(^|\/)outline-materials\.json$/.test(path));
+  const settings=file?readJSON(pack.files,file):null;
+  const folder=file?file.slice(0,file.lastIndexOf('/')+1):'';
+  const named=(row,layer)=>{
+    if(typeof row==='string')row={path:row};
+    const path=typeof row?.path==='string'?norm(folder+row.path):'';
+    if(!isImage(path)||!pack.files[path])throw Error('Thiếu ảnh '+(row?.path||'')+' trong '+pack.name+'.');
+    const anchor=row.anchor;
+    if(anchor!==undefined&&(!Array.isArray(anchor)||anchor.length!==2||!anchor.every(Number.isFinite)))
+      throw Error('Điểm neo mảnh '+row.path+' cần hai tọa độ pixel.');
+    if(row.tileWidth!==undefined&&(!Number.isFinite(row.tileWidth)||row.tileWidth<1))
+      throw Error('tileWidth không hợp lệ cho '+row.path+'.');
+    return {pack,path,label:row.name||stem(path),anchor,tileWidth:row.tileWidth,layer,
+      material:row.shape==='square',flatTop:true};
+  };
+  if(file&&(!settings||settings.version!==1||
+    ![settings.floors??[],settings.props??[]].every(Array.isArray)))
+    throw Error('outline-materials.json trong '+pack.name+' cần version 1 và danh sách floors, props.');
+  let floors,props;
+  if(settings){
+    floors=(settings.floors||[]).slice(0,4).map(row=>named(row,0));
+    props=(settings.props||[]).slice(0,6).map(row=>named(row,2));
+  }else if(profile){
+    const [,floor,extras]=profile,path=id=>'isometric/'+id.toLowerCase()+'_e.png';
+    const tile=named(path(floor),0);
+    if(floor==='floorCarpet')tile.underlay='#5a473d';
+    floors=[tile];
+    props=extras.map(id=>named({path:path(id),anchor:[128,437],tileWidth:256},2));
+  }else{
+    const assets=catalog(pack);
+    floors=assets.filter(a=>a.layer===0&&!/high|float|stairs|water|river|sea|lake|corner|cliff|transition/i.test(a.label))
+      .slice(0,3).map(a=>({...a,flatTop:true}));
+    props=assets.filter(a=>a.layer===2&&/^(?:barrel|crate|chest|chair|bookstand|lamp|statue|ruong|thung|chum|den)/i.test(stem(a.path)))
+      .slice(0,4);
+  }
+  for(const a of floors){
+    const sid=await groundTile(result,a);
+    result.floors.push({sid,source:pack.name});
+  }
+  for(const a of props){
+    const art=await sprite(a);
+    const tileWidth=Math.max(a.tileWidth||1,art.w/.95,art.h/1.65);
+    const piece=addSprite(result,{...a,tileWidth,collision:null,block:true},art);
+    result.props.push({source:pack.name,radius:.27,create:(x,y,id)=>({...entity(piece,x,y,0,id),outlineAutoProp:true})});
+  }
+  return result;
+}
+
 // Read one tile for each compatible facade or roof role. Atlas offsets are retained.
 function buildingParts(town){
   const index=new Map(town.ents.map(e=>[e.tiledLayer+':'+e.tile.idx,e]));

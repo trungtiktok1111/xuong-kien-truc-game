@@ -1,3 +1,4 @@
+import {dressOutline,kenneyOutlinePacks} from './outlineDressing.js';
 import {campaignStart,planMapPair} from './mapLinks2d.js';
 import {stockScenes,packPurpose} from './stockScenes.js';
 import {drawSettlementBridge} from './settlementBridge.js';
@@ -12,7 +13,7 @@ import {constructionContext,gateIssue,propIssue,wallIssue,isRoof,isBearingColumn
 import {automaticPaintZones, daXoayArchProfiles, estimateContact, makePaintProfile, paintedPieces, paintFamily, roofTextureDirection, sceneEntityLayer, propContact, resizeProp, turnProp} from './placement2d.js';
 import {openArchivePicker} from './archivePicker.js';
 import {tiledDepth} from './tiledScene.js';
-import {buildReferenceScene,generateScene,openScenePack,reconstructPack} from './scenePacks.js';
+import {buildReferenceScene,generateScene,openScenePack,outlinePackMaterials,reconstructPack} from './scenePacks.js';
 import {settlementProfiles} from './settlementLayout.js';
 import {DA_XOAY_LEVEL} from './outlineLevels.js';
 import {mapCollision,rasterOutline} from './mapCollision.js';
@@ -3317,9 +3318,42 @@ export function init2D(root,A){
     paintOutline(fresh,outline,mask,fill||await stoneTile(target),true,null,stamps,source,target);
     return fresh;
   }
-  async function previewOutlineMap(outline,w,h,level,stamps=[],origin=[0,0]){
+  const outlinePackCache=new Map();
+  async function prepareOutlineDressing(map,target,options){
+    if(!options)return null;
+    const tasks=(options.kenney?kenneyOutlinePacks:[]).map(profile=>{
+      const [id]=profile,file='kenney-isometric-miniature-'+id+'.zip';
+      if(!outlinePackCache.has(id)){
+        const job=stockPackList().then(()=>readStockScenePack(stockByFile(file)))
+          .then(pack=>outlinePackMaterials(pack,profile)).catch(error=>{
+            outlinePackCache.delete(id);throw error;
+          });
+        outlinePackCache.set(id,job);
+      }
+      return outlinePackCache.get(id);
+    });
+    for(const file of options.files)tasks.push(file.arrayBuffer().then(bytes=>
+      outlinePackMaterials(openScenePack(file.name,new Uint8Array(bytes)))));
+    const materials=[],skipped=[];
+    for(const pack of await Promise.all(tasks)){
+      if(!pack.floors.length&&!pack.props.length){skipped.push(pack.source);continue;}
+      const ids=[];
+      for(const sheet of pack.sheets)ids.push(await loadBuiltinSheet(sheet,target));
+      const props=pack.props.map(art=>({...art,create:(...args)=>{
+        const e=art.create(...args);e.tile.sid=ids[e.tile.sid];return e;
+      }}));
+      materials.push({...pack,floors:pack.floors.map(f=>({...f,sid:ids[f.sid]})),props});
+    }
+    map.cfg.proj='iso';map.cfg.smooth=false;
+    const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)));
+    map.cfg.outlineMaterials=info;
+    return 'Đã phối '+info.sources.length+' gói và đặt '+info.props+' vật thể.'+
+      (skipped.length?' Chưa nhận diện được vai trò trong '+skipped.join(', ')+'.':'');
+  }
+  async function previewOutlineMap(outline,w,h,level,stamps=[],origin=[0,0],materials=null){
     const previewSheets=sheets.slice();
     const draft=await buildOutlineMap(outline,w,h,level,previewSheets,stamps,true,null,origin);
+    await prepareOutlineDressing(draft,previewSheets,materials);
     if(draft.cfg.proj==='angle')await ensureAngle(previewSheets);
     return {M:draft,sheets:previewSheets};
   }
@@ -3336,9 +3370,10 @@ export function init2D(root,A){
     syncCur();after();fit();draw();cv.focus({preventScroll:true});
     toast('Đã áp dụng '+level.name+'. Có thể hoàn tác trong trình sửa.');
   }
-  async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true,connect=false){
+  async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true,connect=false,materials=null){
     const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
     const fresh=await buildOutlineMap(outline,w,h,level,prepared,stamps,useSource,null,origin);
+    const dressing=await prepareOutlineDressing(fresh,prepared,materials);
     if(M!==current||curMap!==index||revision!==buildRevision)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
     if(MAPS.some(m=>m.name===fresh.name)||M.name===fresh.name){
       const name=fresh.name;
@@ -3350,7 +3385,7 @@ export function init2D(root,A){
     if(connect)addPair(current,fresh,index,next,prepared);
     sheets.push(...prepared.slice(sheets.length));syncCur();curMap=MAPS.push(clone(fresh))-1;M=fresh;undo=[];redo=[];selId=null;sel=null;
     after();fit();draw();await save();
-    toast('Đã tạo '+fresh.name+(connect?' và nối hai chiều với '+current.name:'.'));
+    toast('Đã tạo '+fresh.name+(connect?' và nối hai chiều với '+current.name:'.')+(dressing?' '+dressing:''));
   }
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   return {ready,connectMap,mapConnectionBox,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};

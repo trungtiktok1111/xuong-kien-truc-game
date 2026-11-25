@@ -603,15 +603,25 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const stamp=placeOutlineTiles(scan.cells,placed,{x:0,y:0,dx:actualX,dy:actualY,c:1,s:0},w,h,v=>v);
   return runAction(()=>editor.newOutlineMap({...outlineData(),gates:[],loops:placed},w,h,null,[stamp],[0,0],false),true);
  }
+ const dressing=el('input',{type:'checkbox','aria-label':'Tự phối vật liệu'});
+ const kenney=el('input',{type:'checkbox',checked:'','aria-label':'Dùng bốn gói Kenney'});
+ const zipFiles=el('input',{type:'file',multiple:'',accept:'.zip','aria-label':'Gói vật liệu ZIP'});
+ zipFiles.addEventListener('change',()=>{if(zipFiles.files.length)dressing.checked=true;});
+ const materials=()=>!is3D&&dressing.checked?{kenney:kenney.checked,files:[...zipFiles.files]}:null;
+ const materialsPanel=is3D?null:el('details',{},el('summary',{},'Tự phối vật liệu Đường Bao'),
+  el('div',{class:'row'},el('label',{},dressing,' Tự phối vật liệu khi tạo màn'),
+   el('label',{},kenney,' Dungeon, Farm, Library và Bases')),
+  el('label',{},'Thêm gói ZIP ',zipFiles),
+  el('p',{class:'hint'},'Tự lát sàn theo phòng và đặt đạo cụ tránh lối đi. Dùng Chơi thử bản nháp hoặc Tạo màn mới để xem kết quả.'));
  function createDraft(connect=false){
   return runAction(async()=>{
    if(!loops.length)throw Error('Hãy tạo đường bao hoặc chọn một màn mẫu.');
-   await editor.newOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,true,connect);
+   await editor.newOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,true,connect,materials());
   },true);
  }
  function playDraft(){
   return runAction(async()=>{
-   const data=await editor.previewOutlineMap(outlineData(),W,H,levelDraft,stamps,origin);
+   const data=await editor.previewOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,materials());
    const back=()=>{ov.hidden=false;ov.style.display='grid';box.focus();};
    ov.hidden=true;ov.style.display='none';
    try{(is3D?play3D:play2D)({...data,escapeExit:true,onExit:back});}
@@ -625,6 +635,6 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  if(!is3D)buttons.insertBefore(B('Tạo và nối hai chiều',()=>createDraft(true)),tryLabel);
  box.append(el('h2',{},(is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ')),guideBox('outline',appGuides.outline),setup,toolbar,
   el('div',{class:'outline-layout'},el('div',{},gridSetup,gridNote,viewTools,el('div',{class:'outline-canvas-wrap',style:'position:relative'},canvas,aim),status),library),
-  editShape,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons);
+  editShape,materialsPanel,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons);
  ov.append(box);document.body.append(ov);draw();
 }

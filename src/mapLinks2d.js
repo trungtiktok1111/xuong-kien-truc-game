@@ -10,9 +10,9 @@ const steps=[[1,0],[-1,0],[0,1],[0,-1]];
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 const cellKey=(x,y)=>x+':'+y;
 
-export function linkWalkability(map){
+export function linkWalkability(map,placementZones=map.placementZones||[]){
   const collision=mapCollision(map),bridge=map.cfg?.settlement?.plan?.bridge;
-  const zones=[...(map.cfg?.zones||[]),...decoZones(map.ents),...bridgeRails(bridge)];
+  const zones=[...(map.cfg?.zones||[]),...decoZones(map.ents),...bridgeRails(bridge),...placementZones];
   const roofs=map.ents.some(isRoof)?constructionContext(map).headroom():[];
   const {standing}=actorHeights(map.cfg);
   const free=(x,y,r=radius)=>collision.free(x,y,r)&&!zonesHit(zones,x,y,r)&&
