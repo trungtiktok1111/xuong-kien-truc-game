@@ -151,3 +151,19 @@ export function resizeProp(e,factor){
   if(e.col)e.col=shapes(e.col);
   if(e.door?.v)for(const state of Object.values(e.door.v))if(state.col)state.col=shapes(state.col);
 }
+
+// The alternate facing of an upright 2D sprite is its mirrored frame.
+export function turnProp(e){
+  const iso=e.propProjection==='iso';
+  const flip=([x,y])=>iso?[y,x]:[-x,y];
+  e.spriteFlip=(e.spriteFlip||0)^1;
+  e.ox=-(e.ox||0);
+  if(e.spriteBounds){const [l,t,r,b]=e.spriteBounds;e.spriteBounds=[1-r,t,1-l,b];}
+  if(e.col)e.col=e.col.map(c=>{
+    if(c.k==='circle'){const [x,y]=flip([c.x,c.y]);return {...c,x,y};}
+    if(c.k==='rect')return iso?{...c,x:c.y,y:c.x,w:c.h,h:c.w}:{...c,x:-c.x-c.w};
+    if(c.k==='poly')return {...c,pts:c.pts.map(flip)};
+    if(c.k==='seg')return {...c,a:flip(c.a),b:flip(c.b)};
+    return c;
+  });
+}

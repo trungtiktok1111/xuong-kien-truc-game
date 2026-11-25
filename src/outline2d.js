@@ -59,7 +59,7 @@ function face(cx,points,fill,stroke){
 }
 export function stoneWall(cx,wall,project,unit,w,h,geometry){
  const [x,y]=project(...wall.a),[a,b]=project(...wall.b);
- const high=unit*(wall.near?geometry.front:geometry.rear);
+ const high=unit*(wall.height??(wall.near?geometry.front:geometry.rear));
  if(high<=0)return;
  if(Math.max(x,a)<0||Math.min(x,a)>w||Math.max(y,b)<0||Math.min(y,b)-high>h)return;
  cx.lineWidth=.55;

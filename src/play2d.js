@@ -1,3 +1,4 @@
+import {gateWalls} from './gate2d.js';
 import {paintedGroups} from './placement2d.js';
 import {tileFoot} from './spriteFoot.js';
 import {mapCollision} from './mapCollision.js';
@@ -269,7 +270,8 @@ export function play2D(o){
        Quy tắc isometric: đứng ngoài khung ở phía gần camera (x>=x1 hoặc y>=y1) thì vẽ SAU nhà; ở phía xa (x<=x0 hoặc y<=y0) thì vẽ TRƯỚC. */
     const RC=ISO?DCL.filter(d=>!d.flat&&d.zb).map(d=>{const z=d.zb,x0=d.x+1+z[0],y0=d.y+1+z[1];return {x0,y0,x1:x0+z[2],y1:y0+z[3],K:d.x+d.y+2};}):[];
     const kk=(x,y)=>{let k=ANG?y:x+y;if(ANG||!RC.length)return k;for(const r of RC){if(x<r.x0-2||x>r.x1+2||y<r.y0-2||y>r.y1+2)continue;const fr=x>=r.x1||y>=r.y1,bh=x<=r.x0||y<=r.y0;if(fr&&!bh)k=Math.max(k,r.K+.001);else if(bh&&!fr)k=Math.min(k,r.K-.001);}return k;};
-    const ents=[...(geo?geo.walls.map(wall=>({wall,k:wall.k})):[]),{y:P.y,x:P.x,p:1,k:kk(P.x,P.y)},...E.map(e=>({y:e.y,x:e.x,e,k:kk(e.x,e.y)})),...NP.map(n=>({y:n.y,x:n.x,n,k:kk(n.x,n.y)})),...CH.map(c=>({y:c.y,x:c.x,c,k:kk(c.x,c.y)})),...(GL?[{y:GL.y,x:GL.x,g:GL,k:kk(GL.x,GL.y)}]:[]),...(ISO?GR.map(g=>({y:g.yb,x:g.xc,grp:g})):[]),...DCL.map(d=>({y:d.flat?-1e4+d.y:d.y,x:d.flat?-1e4+d.x:d.x+1,dc:d,k:d.placedProp?(ANG?d.y+1:d.x+d.y+2):ANG?(d.flat?-1e4+d.y:depthAng(d)):undefined}))].sort(ISO?((a,b)=>(a.k!=null?a.k:a.x+a.y)-(b.k!=null?b.k:b.x+b.y)):((a,b)=>a.y-b.y));
+    const builtWalls=DCL.flatMap(e=>gateWalls(e,ANG||!ISO)).map(wall=>({wall,k:wall.k,y:(wall.a[1]+wall.b[1])/2}));
+    const ents=[...builtWalls,...(geo?geo.walls.map(wall=>({wall,k:wall.k})):[]),{y:P.y,x:P.x,p:1,k:kk(P.x,P.y)},...E.map(e=>({y:e.y,x:e.x,e,k:kk(e.x,e.y)})),...NP.map(n=>({y:n.y,x:n.x,n,k:kk(n.x,n.y)})),...CH.map(c=>({y:c.y,x:c.x,c,k:kk(c.x,c.y)})),...(GL?[{y:GL.y,x:GL.x,g:GL,k:kk(GL.x,GL.y)}]:[]),...(ISO?GR.map(g=>({y:g.yb,x:g.xc,grp:g})):[]),...DCL.map(d=>({y:d.flat?-1e4+d.y:d.y,x:d.flat?-1e4+d.x:d.x+1,dc:d,k:d.placedProp?(ANG?d.y+1:d.x+d.y+2):ANG?(d.flat?-1e4+d.y:depthAng(d)):undefined}))].sort(ISO?((a,b)=>(a.k!=null?a.k:a.x+a.y)-(b.k!=null?b.k:b.x+b.y)):((a,b)=>a.y-b.y));
     const ox1=ox,oy1=oy,TC=[];
     const grounded=!!geo;
     function actorShadow(q){
@@ -280,10 +282,10 @@ export function play2D(o){
       cx.fill();cx.restore();
     }
     const actorTop=(q,sid,idx)=>oy+(q.y-(grounded?tileFoot(sheets[sid],idx):.7))*s;
-    for(const n of ents){if(n.wall){stoneWall(cx,n.wall,(x,y)=>[pX(x,y),pY(x,y)],s*.75,w,h,geo);continue;}if(n.dc){const d=n.dc,sh=d.tile&&sheets[d.tile.sid];
+    for(const n of ents){if(n.wall){stoneWall(cx,n.wall,ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s],ISO?s*.75:s,w,h,geo);continue;}if(n.dc){const d=n.dc,sh=d.tile&&sheets[d.tile.sid];
       if(d.placedProp){
         const project=ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s];
-        drawPlacedProp(cx,d,sh,placedPropFrame(d,project,s));
+        drawPlacedProp(cx,d,sh,placedPropFrame(d,project,s,ANG?'angle':ISO?'iso':'top'));
         continue;
       }
       const sp=ISO?sprOf(d,sh,ANG):(sh?{img:sh.img,tw:sh.tw,cols:sh.cols,margin:sh.margin,sc:d.sc,oy:d.oy||0}:null),ws=((sp?sp.sc:d.sc)||3)*s;const X=ANG?pX(d.x+.5,d.y+1):ISO?pX(d.x+1,d.y+1):ox1+(d.x+.5)*s,Y=ANG?pY(d.x+.5,d.y+1):ISO?pY(d.x+1,d.y+1):oy1+(d.y+1)*s;if(sp&&sp.img){const sx=(d.tile.idx%sp.cols)*(sp.tw+sp.margin),sy=Math.floor(d.tile.idx/sp.cols)*(sp.tw+sp.margin);cx.drawImage(sp.img,sx,sy,sp.tw,sp.tw,X-ws/2+(d.ox||0)*ws,Y-ws+(sp.oy||0)*ws,ws,ws);}if(d.cv)TC.push({d,X,Y,ws});continue;}if(n.grp){const g=n.grp,k2=s*.95/CQ,wp=ANG?g.c.width*s*1.5/CQ:g.c.width*k2,hp=ANG?g.c.height*s*1.5*ANG_R/CQ:g.c.height*k2;cx.drawImage(g.c,pX(g.xc,g.yb)-wp/2,pY(g.xc,g.yb)-hp,wp,hp);continue;}if(ISO){const q=n.p?P:(n.e||n.n||n.c||n.g);ox=pX(q.x,q.y)-q.x*s;oy=pY(q.x,q.y)-q.y*s;}if(n.c){const c=n.c;if(c.tl)tile(c.tl.sid,c.tl.idx,ox+(c.x-.5)*s,oy+(c.y-.5)*s,s,0);else{cx.font=(s*.7)+'px serif';cx.textAlign='center';ico(c.open?'chest2':'chest',ox+c.x*s,oy+c.y*s,s*1.2);}continue;}if(n.g){const g=n.g;if(g.tl)tile(g.tl.sid,g.tl.idx,ox+(g.x-.5)*s,oy+(g.y-.5)*s,s,0);else{cx.font=(s*.8)+'px serif';cx.textAlign='center';ico('flag',ox+g.x*s,oy+g.y*s,s*1.2);}continue;}if(n.n){const q=n.n;actorShadow(q);if(!(q.anim&&AN.drawChar(cx,q,q.anim,ox+q.x*s,oy+q.y*s,s,t,{iso:ISO,ang:ANG,grounded})))fbk(q,ox+(q.x-.5)*s,actorTop(q,q.tl.sid,q.tl.idx),s,0);continue;}const q=n.p?P:n.e;actorShadow(q);

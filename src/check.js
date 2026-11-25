@@ -1,3 +1,4 @@
+import {constructionContext,gateIssue} from './constructionRules2d.js';
 import {mapCollision} from './mapCollision.js';
 import {guideBox,appGuides} from './editorHelp.js';
 import {zRaster,decoZones} from './zones.js';
@@ -34,8 +35,16 @@ export function check2D(d0){
       if(en.length){const b=bad(en);out.push(b.length?R('F5','broken',b.length+'/'+en.length+' quái nằm vùng không tới được','không diệt hết được nếu điều kiện thắng là diệt quái'):R('F5','pass','Mọi quái đều tới được'));}
       const oth=bad(E.filter(e=>e.t==='npc'||e.t==='chest'));out.push(oth.length?R('F6','broken',oth.length+' NPC/rương nằm vùng không tới được'):R('F6','pass','NPC và rương đều tới được'));
     }else out.push(R('F4','not_assessed','Chưa kiểm đường tới đích','cần điểm xuất phát hợp lệ'));
-    const onBlk=E.filter(e=>e.t!=='start'&&d.blk[cell(e)]);out.push(onBlk.length?R('F7','broken',onBlk.length+' đối tượng nằm trong ô bị chặn'):R('F7','pass','Không đối tượng nào nằm trong ô bị chặn'));
-    out.push(E.some(e=>e.x<0||e.y<0||e.x>=W||e.y>=H)?R('F8','broken','Có đối tượng nằm ngoài bản đồ'):R('F8','pass','Mọi đối tượng nằm trong bản đồ'));
+    const onBlk=E.filter(e=>e.t!=='start'&&e.t!=='deco'&&d.blk[cell(e)]);out.push(onBlk.length?R('F7','broken',onBlk.length+' đối tượng nằm trong ô bị chặn'):R('F7','pass','Không đối tượng nào nằm trong ô bị chặn'));
+    out.push(E.some(e=>{const dx=e.placedProp?1:0,x=e.x+dx,y=e.y+dx;return x<0||y<0||x>=W||y>=H;})?R('F8','broken','Có đối tượng nằm ngoài bản đồ'):R('F8','pass','Mọi đối tượng nằm trong bản đồ'));
+  }
+  const gates=E.filter(e=>e.gateAssembly);
+  if(gates.length){
+    const context=constructionContext(d0);
+    const lost=gates.map(e=>[e,gateIssue(e,context)]).filter(([,issue])=>issue);
+    out.push(lost.length?R('GATE','broken',lost.length+'/'+gates.length+' cổng cần chỉnh',
+      lost.slice(0,5).map(([e,why])=>(e.name||'Cổng')+' ('+(e.x+1).toFixed(1)+', '+(e.y+1).toFixed(1)+') · '+why).join(' | ')):
+      R('GATE','pass','Tất cả cổng có tường và lối đi hai phía'));
   }
   logicRows(out,cf,E);
   paramRows(out,cf,['hp','spd','dmg','rng']);

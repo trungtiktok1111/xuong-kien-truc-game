@@ -25,16 +25,59 @@ export function tileAng(cx,A,idx,X,Y,cw){if(!A||!A.img)return;const k=cw/A.tw,sx
 export const depthAng=d=>{const z=d.zb;return d.y+1+(z&&(z[2]||z[3])?z[1]+z[3]:0);};
 
 // A placed prop uses the same frame, scale and ground anchor in the preview and the game.
-export function placedPropFrame(e,project,unit){
+export function placedPropFrame(e,project,unit,projection){
   const [x,y]=project(e.x+1,e.y+1),size=e.sc*unit;
-  return {x:x-size/2+(e.ox||0)*size,y:y-size+(e.oy||0)*size,size};
+  const frame={x:x-size/2+(e.ox||0)*size,y:y-size+(e.oy||0)*size,size};
+  if(!e.gateAssembly||!e.propProjection||e.propProjection===projection)return frame;
+  const [a,b]=e.col||[];
+  if(!a||!b)return frame;
+  const dx=b.x-a.x,dy=b.y-a.y;
+  const [ux,uy]=e.propProjection==='iso'?[.75*(dx-dy),.375*(dx+dy)]:
+    e.propProjection==='angle'?[1.5*dx,1.5*ANG_R*dy]:[dx,dy];
+  const [ax,ay]=project(e.x+1+a.x,e.y+1+a.y),[bx,by]=project(e.x+1+b.x,e.y+1+b.y);
+  const scale=(bx-ax)/(ux*unit);
+  if(!Number.isFinite(scale)||Math.abs(ux)<.001||Math.abs(scale)<.22){
+    frame.edge={feet:[[ax,ay],[bx,by]].sort((a,b)=>a[1]-b[1]),height:size*.62,halfWidth:size*.035};
+    return frame;
+  }
+  const shear=((by-ay)/unit-uy)/ux;
+  // Match both feet across views while keeping vertical sprite edges upright.
+  frame.matrix=[scale,shear,0,1,x*(1-scale),-x*shear];
+  return frame;
+}
+
+export function placedPropBounds(frame,bounds){
+  if(frame.edge){
+    const {feet,height,halfWidth}=frame.edge,[a,b]=feet;
+    return [Math.min(a[0],b[0])-halfWidth,a[1]-height,Math.max(a[0],b[0])+halfWidth,b[1]];
+  }
+  const {x,y,size,matrix}=frame,[l,t,r,b]=bounds;
+  const corners=[[l,t],[l,b],[r,t],[r,b]].map(([u,v])=>{
+    const px=x+u*size,py=y+v*size;
+    return matrix?[matrix[0]*px+matrix[4],matrix[1]*px+py+matrix[5]]:[px,py];
+  });
+  const xs=corners.map(p=>p[0]),ys=corners.map(p=>p[1]);
+  return [Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
 }
 
 export function drawPlacedProp(ctx,e,sheet,frame){
+  if(frame.edge){
+    const {feet,height,halfWidth}=frame.edge,[a,b]=feet;
+    ctx.save();
+    ctx.strokeStyle='#6d6c63';ctx.lineWidth=halfWidth*1.8;
+    ctx.beginPath();ctx.moveTo(a[0],a[1]-height);ctx.lineTo(b[0],b[1]-height);ctx.stroke();
+    for(const [x,y] of feet){
+      ctx.fillStyle='#484e4d';ctx.fillRect(x-halfWidth,y-height,halfWidth*2,height);
+      ctx.fillStyle='#77766a';ctx.fillRect(x-halfWidth,y-height,halfWidth*.65,height);
+    }
+    ctx.restore();
+    return;
+  }
   if(!sheet?.img)return;
   const {x,y,size}=frame,tw=sheet.tw,step=tw+(sheet.margin||0);
   const sx=e.tile.idx%sheet.cols*step,sy=Math.floor(e.tile.idx/sheet.cols)*step;
   ctx.save();
+  if(frame.matrix)ctx.transform(...frame.matrix);
   ctx.translate(x+size/2,y+size/2);
   if(e.spriteFlip&4){ctx.rotate(Math.PI/2);ctx.scale(1,-1);}
   if(e.spriteFlip&1)ctx.scale(-1,1);

@@ -27,3 +27,17 @@ Giữ va chạm sát chân vật và kiểm với kích thước nhân vật. Ch
 - Kiểm vật từ nhiều phía, va chạm khi đi sát chân, khoảng trống cạnh vật, cửa mở/đóng, ảnh đã lật, xóa ô, lưu/mở lại và chơi bản xuất. Bộ kiểm thử sinh 100.000 tình huống cho tọa độ và tra va chạm của nhóm tự động.
 
 Đối chiếu tài liệu «Kenney Isometric Miniature Dungeon», mục 7 và mục 8, cùng giao thức gói của Xưởng. Các mục bố trí tự động tránh nhau, khoảng trống trước cửa, liên kết nhiều cao độ và vật nhiều chân từ PNG cần dữ liệu hình học bổ sung.
+
+## Dựng cổng và tường
+
+| Quy tắc | Hành vi trong Xưởng |
+|---|---|
+| Cổng vòm Đá Xoáy lắp với tường | Hai đoạn tường đá nối từ hai chân trụ về phía ngoài. Xem trước, chỉnh cỡ, đổi hướng, di chuyển và xóa theo cả cụm. |
+| Chân tường cần sàn đỡ | Kiểm tra dọc toàn bộ hai đoạn tường và lấy đường bao sàn làm chuẩn nếu màn có đường bao. Với bản đồ ô, kiểm tra lớp Nền. |
+| Cổng phải đi xuyên được | Khe giữa hai trụ rộng ít nhất 0,64 ô. Kiểm tra phần đường ở cả hai phía với bán kính 0,32 ô, bao gồm khoảng dự phòng cho bán kính nhân vật 0,28 ô. |
+| Giữ khoảng trống quanh lối đi | Vùng chặn đã có, kể cả vùng vẽ tay và vật cảnh, không được chồng vào chân tường hoặc hành lang xuyên cổng. Công trình tránh che điểm xuất phát, đích, cửa chuyển màn, NPC và rương. |
+| Bảo toàn dự án cũ | Cổng đã đặt giữ bố cục cũ. Có thể chọn vật cảnh đủ hai chân và bấm **Ghép tường vào cổng cũ**. Ảnh cổng nhận diện theo tên cần hồ sơ hai chân trụ trước khi đặt theo quy tắc này. |
+| Vật thể rắn đặt riêng | Điểm chân cần nằm trên sàn. Không đặt đè lên điểm tương tác hoặc chắn hành lang xuyên qua cổng đã lắp. |
+| Kiểm tra sau khi đổi bố cục | Nút **Kiểm** kiểm lại sàn, tường và lối đi của các cổng đã lắp, kể cả sau khi sửa sàn hoặc dán vùng. Chế độ Chơi và bản xuất dùng cùng hình học chặn với trình sửa. |
+
+Phím **+ / −** hoặc **Shift + cuộn** đổi cỡ theo bước 10 điểm phần trăm. **T** hoặc **Alt + cuộn** đổi giữa hai hướng hiển thị bằng khung ảnh lật ngang và cập nhật chân trụ theo hướng mới. **Shift** khi đặt bám lưới ¼ ô. Với sprite có chữ hoặc hình bất đối xứng, khung lật sẽ lật cả chi tiết ảnh. Hồ sơ bậc, mái và cầu vẫn cần dữ liệu hình học và cao độ riêng.
