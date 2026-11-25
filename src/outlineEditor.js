@@ -1,3 +1,4 @@
+import {WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS} from './wall2d.js';
 import {DEFAULT_OUTLINE_WALL_HEIGHT,fitDraftGrid} from './outlineGrid.js';
 import {captureOutlineTiles,placeOutlineTiles} from './outlineMaterials.js';
 import {levelLibrary} from './outlineLevels.js';
@@ -178,13 +179,13 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   return ellipseLoop((a[0]+b[0])/2,(a[1]+b[1])/2,rx,ry);
  }
  function select(next){pending=[];placement=null;previewAt=null;selection=null;mode=next;draw();}
- function draft(previous=loops){return {loops:copy(previous),w:W,h:H,level:levelDraft,stamps,origin,front:front.value,rear:rear.value,collision:collision.checked};}
+ function draft(previous=loops){return {loops:copy(previous),w:W,h:H,level:levelDraft,stamps,origin,front:front.value,rear:rear.value,thickness:thickness.value,collision:collision.checked};}
  function record(previous=loops){undo.push(draft(previous));if(undo.length>40)undo.shift();redo.length=0;}
  function travel(from,to){
   if(!from.length)return;
   to.push(draft());const next=from.pop();
   const resized=next.w!==W||next.h!==H||next.origin!==origin;
-  loops=next.loops;stamps=next.stamps;W=next.w;H=next.h;origin=next.origin;levelDraft=next.level;front.value=next.front;rear.value=next.rear;collision.checked=next.collision;
+  loops=next.loops;stamps=next.stamps;W=next.w;H=next.h;origin=next.origin;levelDraft=next.level;front.value=next.front;rear.value=next.rear;thickness.value=next.thickness;collision.checked=next.collision;
   if(resized)resetGridView();
   picked=-1;select('select');
  }
@@ -369,6 +370,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  operation.onchange=draw;
  const front=el('input',{type:'number',min:'0',max:'4',step:'.05',value:map.cfg.outline?.front??DEFAULT_OUTLINE_WALL_HEIGHT,style:'width:68px'});
  const rear=el('input',{type:'number',min:'0',max:'4',step:'.05',value:map.cfg.outline?.rear??DEFAULT_OUTLINE_WALL_HEIGHT,style:'width:68px'});
+ const thickness=el('input',{type:'number',min:WALL_MIN_THICKNESS,max:WALL_MAX_THICKNESS,step:'.01',
+  value:map.cfg.outline?.thickness??WALL_THICKNESS,style:'width:68px'});
  const collision=el('input',{type:'checkbox'});collision.checked=true;
  for(const [key,label] of [['select','Chỉnh điểm'],['move','Di chuyển đường'],['polygon','Đa giác'],['rect','Chữ nhật'],['ellipse','Hình elip'],['scan','Quét chọn'],['corridor','Nối hành lang']]){
   const button=B(label,()=>select(key));modeButtons.set(key,button);toolbar.append(button);
@@ -391,7 +394,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const setup=el('div',{class:'row outline-setup'},el('label',{},'Cách đặt ',operation),el('label',{},snap,' Bám 1 ô'),
   undoButton,redoButton,B('Khôi phục lúc mở',()=>{
    record();loops=copy(original);stamps=[];W=map.w;H=map.h;origin=[0,0];levelDraft=null;
-   front.value=map.cfg.outline?.front??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=map.cfg.outline?.rear??DEFAULT_OUTLINE_WALL_HEIGHT;collision.checked=true;
+   front.value=map.cfg.outline?.front??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=map.cfg.outline?.rear??DEFAULT_OUTLINE_WALL_HEIGHT;thickness.value=map.cfg.outline?.thickness??WALL_THICKNESS;collision.checked=true;
    resetGridView();picked=-1;select('select');
   }));
  const presets=el('select',{'aria-label':'Cỡ lưới nhanh'},el('option',{value:''},'Cỡ nhanh'),
@@ -451,7 +454,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  function loadLevel(level){
   if(!level||commitBusy)return;
   record();levelDraft=level;loops=copy(level.loops);stamps=[];W=level.w;H=level.h;origin=[0,0];
-  front.value=level.sample?.cfg.outline.front??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=level.sample?.cfg.outline.rear??DEFAULT_OUTLINE_WALL_HEIGHT;collision.checked=true;
+  front.value=level.sample?.cfg.outline.front??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=level.sample?.cfg.outline.rear??DEFAULT_OUTLINE_WALL_HEIGHT;thickness.value=level.sample?.cfg.outline.thickness??WALL_THICKNESS;collision.checked=true;
   resetGridView();picked=-1;select('select');
  }
  const levelHint=el('p',{class:'hint'},'Bấm một màn để xem bố cục, chơi thử hoặc tạo bản sao.');
@@ -488,9 +491,9 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  }
  const library=el('aside',{class:'outline-library'},el('div',{class:'row'},shapesTab,levelsTab),shapePanel,levelPanel);
  setTab(initialTab);
- footer.append(el('label',{},'Tường trước ',front),el('label',{},'Tường sau ',rear),el('label',{},collision,' Cập nhật vùng chặn'));
+ footer.append(el('label',{},'Tường trước ',front),el('label',{},'Tường sau ',rear),el('label',{},'Độ dày tường bao ',thickness,' ô'),el('label',{},collision,' Cập nhật vùng chặn'));
  const buttons=el('div',{class:'row outline-actions'});
- const outlineData=()=>({loops:copy(loops),front:+front.value,rear:+rear.value});
+ const outlineData=()=>({loops:copy(loops),front:+front.value,rear:+rear.value,thickness:+thickness.value});
  async function runAction(action,close){
   if(commitBusy||!readGrid())return;
   commitBusy=true;

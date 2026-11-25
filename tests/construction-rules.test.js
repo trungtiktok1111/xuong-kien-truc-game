@@ -92,3 +92,12 @@ test('a wall blocks first, a mounted gate cuts only the opening, deletion closes
   assert.match(gateIssue({...gate,id:'another'},constructionContext(m)),/quá gần/);
   assert.equal(gateWalls(gate,false).length,0);
 });
+
+test('wall thickness is saved in footprint collisions and rejects a pinched gate',()=>{
+ const m=map(),thick={...wall,wallLine:{...wall.wallLine,thickness:1.5}};
+ assert.equal(decoZones([thick])[0].th,1.5);
+ assert.ok(zonesHit(decoZones([thick]),7,8.6));
+ assert.ok(!zonesHit(decoZones([wall]),7,8.6));
+ m.ents=[thick];
+ assert.match(gateIssue(mountGate(arch(),[thick]),constructionContext(m)),/thông thoáng/);
+});

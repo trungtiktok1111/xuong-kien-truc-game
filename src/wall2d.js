@@ -1,4 +1,15 @@
 export const WALL_THICKNESS=.24;
+export const WALL_MIN_THICKNESS=.08;
+export const WALL_MAX_THICKNESS=1.5;
+export const wallThickness=wall=>wall.wallLine?.thickness??WALL_THICKNESS;
+
+export function projectSegment([x,y],a,b){
+  const dx=b[0]-a[0],dy=b[1]-a[1],length=dx*dx+dy*dy;
+  if(!length)return {point:a,distance:Math.hypot(x-a[0],y-a[1])};
+  const t=Math.max(0,Math.min(1,((x-a[0])*dx+(y-a[1])*dy)/length));
+  const point=[a[0]+dx*t,a[1]+dy*t];
+  return {point,distance:Math.hypot(x-point[0],y-point[1])};
+}
 export function wallSpan(wall){
   const a=[wall.x+1,wall.y+1],{dx,dy}=wall.wallLine;
   const length=Math.hypot(dx,dy),u=[dx/length,dy/length];
@@ -51,13 +62,13 @@ export function builtWallFaces(ents,angle){
     const n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])*2),p=t=>a.map((v,i)=>v+(b[i]-v)*t);
     return Array.from({length:n},(_,i)=>{
       const [x,y]=p((i+.5)/n);
-      return {a:p(i/n),b:p((i+1)/n),k:angle?y:x+y,near:true,i,height:wall.wallLine.height||1.25};
+      return {a:p(i/n),b:p((i+1)/n),k:angle?y:x+y,near:true,i,height:wall.wallLine.height||1.25,thickness:wallThickness(wall),wall};
     });
   }));
 }
 
 export function builtWallZones(ents,ignoreGate){
   return ents.filter(e=>e.wallLine).flatMap(wall=>wallRuns(wall,ents,ignoreGate).map((pts,i)=>({
-    id:wall.id+'-'+i,k:'line',pts,th:WALL_THICKNESS,deco:wall.id
+    id:wall.id+'-'+i,k:'line',pts,th:wallThickness(wall),deco:wall.id
   })));
 }

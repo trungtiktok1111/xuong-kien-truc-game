@@ -1,3 +1,4 @@
+import {WALL_THICKNESS} from './wall2d.js';
 import {DEFAULT_OUTLINE_WALL_HEIGHT} from './outlineGrid.js';
 const cached=new WeakMap();
 export function outline2D(data,angle=false){
@@ -11,6 +12,7 @@ export function outline2D(data,angle=false){
    if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])yes=!yes;
   return yes;
  }
+ const thickness=data.thickness??WALL_THICKNESS;
  const walls=edges.flatMap(([a,b],i)=>{
   const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,near=inside(angle?mx:mx-.24,my-.24);
   /* cắt cạnh dài thành đoạn ngắn: khóa sắp xếp độ sâu theo từng đoạn, không theo điểm giữa cả cạnh (cạnh dài làm tường đè lên người đứng ở đầu cạnh) */
@@ -18,7 +20,7 @@ export function outline2D(data,angle=false){
   for(let j=0;j<n;j++){
    const p=[a[0]+(b[0]-a[0])*j/n,a[1]+(b[1]-a[1])*j/n],q=[a[0]+(b[0]-a[0])*(j+1)/n,a[1]+(b[1]-a[1])*(j+1)/n];
    const x=(p[0]+q[0])/2,y=(p[1]+q[1])/2;
-   out.push({a:p,b:q,k:angle?y:x+y,near,i});
+   out.push({a:p,b:q,k:angle?y:x+y,near,i,thickness});
   }
   return out;
  });
@@ -58,17 +60,29 @@ function face(cx,points,fill,stroke){
  cx.closePath();cx.fillStyle=fill;cx.fill();
  if(stroke){cx.strokeStyle=stroke;cx.stroke();}
 }
-export function stoneWall(cx,wall,project,unit,w,h,geometry){
- const [x,y]=project(...wall.a),[a,b]=project(...wall.b);
+// Positive elevation is screen-up. The footprint stays in map units.
+export function wallSurface(wall,project,unit,geometry){
+ const {a,b}=wall,dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);
+ if(!len)return null;
  const high=unit*(wall.height??(wall.near?geometry.front:geometry.rear));
- if(high<=0)return;
- if(Math.max(x,a)<0||Math.min(x,a)>w||Math.max(y,b)<0||Math.min(y,b)-high>h)return;
+ const r=(wall.thickness??WALL_THICKNESS)/2,nx=-dy*r/len,ny=dx*r/len;
+ const f=(p,k)=>project(p[0]+k*nx,p[1]+k*ny);
+ const first=[f(a,1),f(b,1)],second=[f(a,-1),f(b,-1)];
+ const near=first[0][1]+first[1][1]>=second[0][1]+second[1][1];
+ return {front:near?first:second,back:near?second:first,high};
+}
+
+export function stoneWall(cx,wall,project,unit,w,h,geometry){
+ const shape=wallSurface(wall,project,unit,geometry);
+ if(!shape||shape.high<=0)return;
+ const {front,back,high}=shape,[[x,y],[a,b]]=front;
+ if(Math.max(x,a,back[0][0],back[1][0])<0||Math.min(x,a,back[0][0],back[1][0])>w||
+    Math.max(y,b)<0||Math.min(y,b,back[0][1],back[1][1])-high>h)return;
  cx.lineWidth=.55;
  const palette=colors[Number(wall.near)];
  for(let i=0;i<3;i++){
   const n=high*i/3,m=high*(i+1)/3;
   face(cx,[[x,y-n],[a,b-n],[a,b-m],[x,y-m]],palette[(i+(wall.i%17===0?1:0))%3],i?'#424d49':'#2e3b3a');
  }
- const rim=.09*unit;
- face(cx,[[x,y-high],[a,b-high],[a,b-high-rim],[x,y-high-rim]],wall.near?'#8d8d76':'#818679');
+ face(cx,[...front,...back.slice().reverse()].map(([px,py])=>[px,py-high]),wall.near?'#8d8d76':'#818679');
 }

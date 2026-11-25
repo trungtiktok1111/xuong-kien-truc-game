@@ -1,4 +1,4 @@
-import {WALL_THICKNESS,wallSpan,mountGate} from './wall2d.js';
+import {wallThickness,wallSpan,mountGate,builtWallZones} from './wall2d.js';
 import {mapCollision} from './mapCollision.js';
 import {gateLayout} from './gate2d.js';
 import {decoZones,zonesHit} from './zones.js';
@@ -49,8 +49,10 @@ export function gateIssue(e,context){
   if(!g.posts.every(([x,y],i)=>clear(x,y,e.col[i].r))||
     (!e.wallId&&!g.wings.every(([a,b])=>along(a,b,(x,y)=>clear(x,y,g.thickness/2)))))
     return 'Chân trụ hoặc tường đang đè lên vùng chặn có sẵn.';
+  const parent=context.walls.find(w=>w.id===e.wallId);
+  const edges=parent?builtWallZones([parent,e]):[];
   if(!along(...gateApproach(g),
-    (px,py)=>floor(px,py,clearance)&&free(px,py,clearance)&&!occupied(px,py,clearance)))
+    (px,py)=>floor(px,py,clearance)&&free(px,py,clearance)&&!occupied(px,py,clearance)&&!zonesHit(edges,px,py,clearance)))
     return 'Cổng cần lối đi thông thoáng ở cả hai phía.';
   const zones=decoZones([e]);
   if(markers.some(m=>zonesHit(zones,m.x+.5,m.y+.5,clearance)))
@@ -74,17 +76,17 @@ export function propIssue(e,context){
 }
 
 export function wallIssue(wall,context){
-  const {a,length,point}=wallSpan(wall),r=WALL_THICKNESS/2;
+  const {a,length,point}=wallSpan(wall),th=wallThickness(wall),r=th/2;
   if(length<.24)return 'Chọn hai điểm khác nhau để dựng tường.';
   const b=point(length);
   if(!along(a,b,(x,y)=>context.floor(x,y,r)))return 'Toàn bộ chân tường cần có sàn đỡ.';
   const zones=[...context.manual,...context.objects.filter(z=>!context.walls.some(w=>w.id===z.deco))];
   if(!along(a,b,(x,y)=>context.free(x,y,r)&&!zonesHit(zones,x,y,r)))return 'Tuyến tường đè lên vùng chặn hoặc vật thể.';
-  if(context.markers.some(m=>zonesHit([{k:'line',pts:[a,b],th:WALL_THICKNESS}],m.x+.5,m.y+.5,clearance)))
+  if(context.markers.some(m=>zonesHit([{k:'line',pts:[a,b],th}],m.x+.5,m.y+.5,clearance)))
     return 'Tuyến tường đè lên điểm xuất phát, đích hoặc đối tượng tương tác.';
   for(const gate of context.gates){
     const layout=gateLayout(gate);
-    if(layout&&!along(...gateApproach(layout),(x,y)=>!zonesHit([{k:'line',pts:[a,b],th:WALL_THICKNESS}],x,y,clearance)))
+    if(layout&&!along(...gateApproach(layout),(x,y)=>!zonesHit([{k:'line',pts:[a,b],th}],x,y,clearance)))
       return 'Tuyến tường chắn lối qua cổng đã có.';
   }
   return '';
