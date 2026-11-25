@@ -28,10 +28,10 @@ export const depthAng=d=>{const z=d.zb;return d.y+1+(z&&(z[2]||z[3])?z[1]+z[3]:0
 export function placedPropFrame(e,project,unit,projection){
   const [x,y]=project(e.x+1,e.y+1),size=e.sc*unit;
   const frame={x:x-size/2+(e.ox||0)*size,y:y-size+(e.oy||0)*size,size};
-  if(!e.gateAssembly||!e.propProjection||e.propProjection===projection)return frame;
+  if(!e.gateAssembly||!e.propProjection||(e.propProjection===projection&&!e.gateArt))return frame;
   const [a,b]=e.col||[];
   if(!a||!b)return frame;
-  const dx=b.x-a.x,dy=b.y-a.y;
+  const [dx,dy]=e.gateArt||[b.x-a.x,b.y-a.y];
   const [ux,uy]=e.propProjection==='iso'?[.75*(dx-dy),.375*(dx+dy)]:
     e.propProjection==='angle'?[1.5*dx,1.5*ANG_R*dy]:[dx,dy];
   const [ax,ay]=project(e.x+1+a.x,e.y+1+a.y),[bx,by]=project(e.x+1+b.x,e.y+1+b.y);

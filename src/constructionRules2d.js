@@ -1,3 +1,4 @@
+import {WALL_THICKNESS,wallSpan,mountGate} from './wall2d.js';
 import {mapCollision} from './mapCollision.js';
 import {gateLayout} from './gate2d.js';
 import {decoZones,zonesHit} from './zones.js';
@@ -25,23 +26,28 @@ export function constructionContext(map,placementZones=map.placementZones){
       ground[Math.floor(y+dy)*map.w+Math.floor(x+dx)]);
   };
   return {floor,free:collision.free,manual:map.cfg?.zones||[],
-    objects:decoZones(map.ents),gates:(map.ents||[]).filter(e=>e.gateAssembly),markers:(map.ents||[]).filter(e=>['start','goal','door','npc','chest'].includes(e.t))};
+    objects:decoZones(map.ents),walls:(map.ents||[]).filter(e=>e.wallLine),gates:(map.ents||[]).filter(e=>e.gateAssembly),markers:(map.ents||[]).filter(e=>['start','goal','door','npc','chest'].includes(e.t))};
 }
 
 export function gateIssue(e,context){
   if(!e.gateAssembly)return '';
   const g=gateLayout(e);
   if(!g)return 'Cổng cần hai chân trụ đã hiệu chỉnh.';
+  if(e.wallId&&!mountGate(e,context.walls,{distance:.015}))return 'Cổng đã lệch khỏi tuyến tường. Hãy lắp lại trên tường.';
+  if(e.wallId&&context.gates.some(other=>other.id!==e.id&&other.wallId===e.wallId&&
+    Math.hypot(e.x-other.x,e.y-other.y)<g.posts.reduce((sum,p)=>sum+Math.hypot(p[0]-g.center[0],p[1]-g.center[1]),0)/2+
+      Math.hypot(other.col[0].x-other.col[1].x,other.col[0].y-other.col[1].y)/2+.12))
+    return 'Hai lỗ mở trên tường quá gần nhau.';
   if(g.opening<2*clearance)return 'Lối qua cổng quá hẹp. Hãy tăng kích thước.';
   const {floor,free,manual,objects,markers}=context;
-  const others=objects.filter(z=>z.deco!==e.id);
+  const others=objects.filter(z=>z.deco!==e.id&&z.deco!==e.wallId);
   const occupied=(x,y,r)=>zonesHit(manual,x,y,r)||zonesHit(others,x,y,r);
   if(!g.posts.every(([x,y],i)=>floor(x,y,e.col[i].r))||
-    !g.wings.every(([a,b])=>along(a,b,(x,y)=>floor(x,y,g.thickness/2))))
+    (!e.wallId&&!g.wings.every(([a,b])=>along(a,b,(x,y)=>floor(x,y,g.thickness/2)))))
     return 'Hai đoạn tường phải nằm trên sàn. Hãy đổi vị trí hoặc hướng.';
   const clear=(x,y,r)=>free(x,y,r)&&!occupied(x,y,r);
   if(!g.posts.every(([x,y],i)=>clear(x,y,e.col[i].r))||
-    !g.wings.every(([a,b])=>along(a,b,(x,y)=>clear(x,y,g.thickness/2))))
+    (!e.wallId&&!g.wings.every(([a,b])=>along(a,b,(x,y)=>clear(x,y,g.thickness/2)))))
     return 'Chân trụ hoặc tường đang đè lên vùng chặn có sẵn.';
   if(!along(...gateApproach(g),
     (px,py)=>floor(px,py,clearance)&&free(px,py,clearance)&&!occupied(px,py,clearance)))
@@ -63,6 +69,23 @@ export function propIssue(e,context){
     const layout=gateLayout(gate);
     if(layout&&!along(...gateApproach(layout),(x,y)=>!zonesHit(zones,x,y,clearance)))
       return 'Vật thể đang chắn lối qua cổng.';
+  }
+  return '';
+}
+
+export function wallIssue(wall,context){
+  const {a,length,point}=wallSpan(wall),r=WALL_THICKNESS/2;
+  if(length<.24)return 'Chọn hai điểm khác nhau để dựng tường.';
+  const b=point(length);
+  if(!along(a,b,(x,y)=>context.floor(x,y,r)))return 'Toàn bộ chân tường cần có sàn đỡ.';
+  const zones=[...context.manual,...context.objects.filter(z=>!context.walls.some(w=>w.id===z.deco))];
+  if(!along(a,b,(x,y)=>context.free(x,y,r)&&!zonesHit(zones,x,y,r)))return 'Tuyến tường đè lên vùng chặn hoặc vật thể.';
+  if(context.markers.some(m=>zonesHit([{k:'line',pts:[a,b],th:WALL_THICKNESS}],m.x+.5,m.y+.5,clearance)))
+    return 'Tuyến tường đè lên điểm xuất phát, đích hoặc đối tượng tương tác.';
+  for(const gate of context.gates){
+    const layout=gateLayout(gate);
+    if(layout&&!along(...gateApproach(layout),(x,y)=>!zonesHit([{k:'line',pts:[a,b],th:WALL_THICKNESS}],x,y,clearance)))
+      return 'Tuyến tường chắn lối qua cổng đã có.';
   }
   return '';
 }

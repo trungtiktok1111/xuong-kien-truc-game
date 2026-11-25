@@ -1,5 +1,6 @@
+import {builtWallFaces,mountGate} from './wall2d.js';
 import {gateWalls,gateZones} from './gate2d.js';
-import {constructionContext,propIssue} from './constructionRules2d.js';
+import {constructionContext,propIssue,wallIssue} from './constructionRules2d.js';
 import {automaticPaintZones, daXoayArchProfiles, estimateContact, makePaintProfile, paintedGroups, paintFamily, propContact, resizeProp, turnProp} from './placement2d.js';
 import {openArchivePicker} from './archivePicker.js';
 import {DA_XOAY_LEVEL} from './outlineLevels.js';
@@ -84,7 +85,8 @@ export function init2D(root,A){
     if(t==='goal'){b.tile=null;}
     if(t==='door'){Object.assign(b,{name:'Cửa',tile:null,to:Math.min(MAPS.length-1,curMap+1)===curMap?0:curMap+1,tx:null,ty:null});}
     return b;}
-  function drawEnts(z){isoHB=[];for(const e of M.ents){
+  function drawEnts(z){isoHB=[];if(vis[2])for(const wall of builtWallFaces(renderWallEnts(),true))drawGateWall(wall);for(const e of M.ents){
+      if(e.wallLine)continue;
       if(e.placedProp){if(vis[2]){for(const wall of gateWalls(e,true))drawGateWall(wall);drawIndependentProp(e);}continue;}
       const X=view.x+e.x*CELL*z,Y=view.y+e.y*CELL*z,S=CELL*z,col=OT[e.t][2];
       if(e.tile&&e.t!=='deco'){drawTile(cx,enc(e.tile.sid,e.tile.idx),X,Y,S);}else{cx.fillStyle='#0008';cx.fillRect(X+1,Y+1,S-2,S-2);if(S>=14){cx.font='bold '+Math.max(8,S*.32)+'px system-ui';cx.textAlign='center';cx.textBaseline='middle';cx.fillStyle='#fff';cx.fillText((e.name||OT[e.t][1]).slice(0,4),X+S/2,Y+S/2+1);}}
@@ -95,6 +97,7 @@ export function init2D(root,A){
     if(!ex&&!inb(c.x,c.y))return;
     if(!ex&&!objType){selId=null;ui.obj();return;}
     pushUndo();
+    if(ex?.wallLine){undo.pop();toast('Dùng Xóa để bỏ đoạn tường, hoặc Chọn vùng để dời cả tuyến.');return;}
     if(ex){selId=ex.id;const at=s2g(lastPt.x,lastPt.y);drag=ex.placedProp?{ent:true,precise:true,dx:at.x-ex.x,dy:at.y-ex.y,from:[ex.x,ex.y]}:{ent:true,dx:c.x-ex.x,dy:c.y-ex.y};}
     else if(objType==='start'&&M.ents.some(e=>e.t==='start')){const s=M.ents.find(e=>e.t==='start');s.x=c.x;s.y=c.y;selId=s.id;drag={ent:true};}
     else if(objType==='deco'){if(!vatSel){toast('Chọn một vật thể trong danh sách bên dưới trước');return;}const it=vatSel,n={id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),t:'deco',x:c.x,y:c.y,f:it.f,fx:it.fx,fy:it.fy,sc:it.sc,ox:it.ox,oy:it.oy,flat:it.role==='Phủ nền',name:it.name,tile:it.tile,zb:it.zb};if(it.zps)n.zps=JSON.parse(JSON.stringify(it.zps));if(it.col)n.col=JSON.parse(JSON.stringify(it.col));if(it.cal!=null)n.cal=it.cal;if(it.walk||it.role==='Phủ nền')n.walk=true;if(it.estimated)n.estimated=true;if(it.cv)n.cv=it.cv;M.ents.push(n);selId=n.id;drag={ent:true};}
@@ -150,8 +153,9 @@ export function init2D(root,A){
     if(!AG){const wc=B.SL.filter(q=>(dec(q.v).f&4));if(wc.length)shore(cx,wc,(x,y)=>g2s(x,y),S);}
     if(geo)cx.restore();
     const items=geo&&vis[2]?geo.walls.map(wall=>({k:wall.k,wall})):[];
+    if(vis[2])for(const wall of builtWallFaces(renderWallEnts(),AG))items.push({k:wall.k,wall});
     for(const g of B.GR)items.push({k:AG?g.yb:g.yb+g.xc,g});
-    for(const e of M.ents){if(e.placedProp&&!vis[2])continue;for(const wall of gateWalls(e,AG))items.push({k:wall.k,wall});items.push({k:e.placedProp?(AG?e.y+1:e.x+e.y+2):AG?(e.t==='deco'?(e.flat?-1e4+e.y:depthAng(e)):e.y+.5):(e.t==='deco'?(e.flat?-1e4+e.x+e.y:e.x+e.y+1):e.x+e.y+1),e});}
+    for(const e of M.ents){if(e.wallLine||(e.placedProp&&!vis[2]))continue;for(const wall of gateWalls(e,AG))items.push({k:wall.k,wall});items.push({k:e.placedProp?(AG?e.y+1:e.x+e.y+2):AG?(e.t==='deco'?(e.flat?-1e4+e.y:depthAng(e)):e.y+.5):(e.t==='deco'?(e.flat?-1e4+e.x+e.y:e.x+e.y+1):e.x+e.y+1),e});}
     items.sort((a,b)=>a.k-b.k);isoHB=[];const COV=[];const cur=tool==='obj'||tool==='zone';
     for(const it of items){
       if(it.wall){stoneWall(cx,it.wall,g2s,S,w,h,geo);continue;}
@@ -215,7 +219,7 @@ export function init2D(root,A){
     if(!vis[2])return null;
     for(let i=M.ents.length-1;i>=0;i--){
       const e=M.ents[i];
-      if(e.placedProp&&(Math.hypot(g.x-e.x-1,g.y-e.y-1)<.16||gateZones(e).some(z=>zHit(z,g.x,g.y,.08))))return e;
+      if(e.placedProp&&!e.wallLine&&(Math.hypot(g.x-e.x-1,g.y-e.y-1)<.16||gateZones(e).some(z=>zHit(z,g.x,g.y,.08))))return e;
     }
     return null;
   }
@@ -224,7 +228,8 @@ export function init2D(root,A){
     if(cv.width!==Math.round(w*dp)||cv.height!==Math.round(h*dp)){cv.width=Math.round(w*dp);cv.height=Math.round(h*dp);dirty=true;}
     if(!dirty)return;dirty=false;updateDesktop();
     cx.setTransform(dp,0,0,dp,0,0);cx.fillStyle='#10161d';cx.fillRect(0,0,w,h);cx.imageSmoothingEnabled=false;
-    const z=view.z,IS=ISOQ();
+    const z=view.z,IS=ISOQ(), object=activeProp(), target=object&&hov&&lastPt?aimProp(object,lastPt):null;
+    renderGate=target?.piece.wallId&&!target.issue?target.piece:null;
     if(IS){drawIso();cx.strokeStyle='#ffffff55';cx.lineWidth=1;pathQ(0,0,M.w,M.h);cx.stroke();}else{rebuild();cx.drawImage(mc,view.x,view.y,M.w*CELL*z,M.h*CELL*z);cx.strokeStyle='#ffffff55';cx.lineWidth=1;cx.strokeRect(view.x-.5,view.y-.5,M.w*CELL*z+1,M.h*CELL*z+1);}
     if(tool==='zone'||vis[4]||colMode){
       const walk=colMode===2,collision=mapCollision(M);
@@ -247,17 +252,18 @@ export function init2D(root,A){
     }
     drawZ();
     if(grid&&z>=(IS?1.1:2.5)){cx.strokeStyle='rgba(255,255,255,.13)';cx.beginPath();if(IS){for(let x=0;x<=M.w;x++){const a=g2s(x,0),b=g2s(x,M.h);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}for(let y=0;y<=M.h;y++){const a=g2s(0,y),b=g2s(M.w,y);cx.moveTo(a[0],a[1]);cx.lineTo(b[0],b[1]);}}else{for(let x=0;x<=M.w;x++){const X=Math.round(view.x+x*CELL*z)+.5;cx.moveTo(X,view.y);cx.lineTo(X,view.y+M.h*CELL*z);}for(let y=0;y<=M.h;y++){const Y=Math.round(view.y+y*CELL*z)+.5;cx.moveTo(view.x,Y);cx.lineTo(view.x+M.w*CELL*z,Y);}}cx.stroke();}
-    const object=activeProp();
     if(!IS)drawEnts(z);
-    const at=object&&hov&&lastPt&&propPosition(lastPt);
-    if(at){const piece={...object,...at},issue=constructionIssue(piece);
-      drawIndependentProp(piece,true,issue);showPlacementIssue(issue);}
-    else showPlacementIssue('');
+    if(target){drawIndependentProp(target.piece,true,target.issue);showPlacementIssue(target.issue);}
+    else if(tool!=='wall')showPlacementIssue('');
+    if(tool==='wall')drawWallDraft();
+    renderGate=null;
     if(!object&&hov&&(tool==='draw'||tool==='rect'||tool==='fill')&&act<4){cx.globalAlpha=.65;for(let j=0;j<stamp.h;j++)for(let i=0;i<stamp.w;i++){const v=stamp.multi?(stamp.layers.find(l=>l&&l[j*stamp.w+i])||[])[j*stamp.w+i]||0:stamp.tiles[j*stamp.w+i];const vv=paintValue(tool==='draw'?v:stamp.tiles[0]||v,hov.x+i,hov.y+j);if(IS)tileG(vv,hov.x+i,hov.y+j);else drawTile(cx,vv,view.x+(hov.x+i)*CELL*z,view.y+(hov.y+j)*CELL*z,CELL*z);if(tool!=='draw')break;}cx.globalAlpha=1;}
     if(tool==='paste'&&clip&&hov){const o=pOrg();cx.globalAlpha=.7;for(let j=0;j<clip.h;j++)for(let i=0;i<clip.w;i++){for(let l=0;l<4;l++){const v=clip.layers[l][j*clip.w+i];if(v)tileG(v,o.x+i,o.y+j);}if(clip.blk&&clip.blk[j*clip.w+i]){cx.fillStyle='rgba(255,40,40,.4)';pathQ(o.x+i,o.y+j,1,1);cx.fill();}}
-      for(const e of clip.ents){if(e.placedProp){drawIndependentProp({...e,x:o.x+e.dx,y:o.y+e.dy},true);continue;}if(e.tile)tileG(enc(e.tile.sid,e.tile.idx),o.x+e.dx,o.y+e.dy);cx.strokeStyle=OT[e.t]?OT[e.t][2]:'#fff';cx.lineWidth=2;pathQ(o.x+e.dx,o.y+e.dy,1,1);cx.stroke();}
+      const projected=clip.ents.map(e=>({...e,x:o.x+e.dx,y:o.y+e.dy}));
+      for(const wall of builtWallFaces(projected,ANGQ()||!IS))drawGateWall(wall);
+      for(const e of clip.ents){if(e.wallLine)continue;if(e.placedProp){drawIndependentProp({...e,x:o.x+e.dx,y:o.y+e.dy},true);continue;}if(e.tile)tileG(enc(e.tile.sid,e.tile.idx),o.x+e.dx,o.y+e.dy);cx.strokeStyle=OT[e.t]?OT[e.t][2]:'#fff';cx.lineWidth=2;pathQ(o.x+e.dx,o.y+e.dy,1,1);cx.stroke();}
       cx.globalAlpha=1;cx.strokeStyle='#3ddc84';cx.lineWidth=2;cx.setLineDash([5,3]);pathQ(o.x,o.y,clip.w,clip.h);cx.stroke();cx.setLineDash([]);}
-    if(hov&&!object&&tool!=='paste'&&tool!=='obj'){cx.strokeStyle='#ffd24a';cx.lineWidth=2;const ww=(tool==='draw'?stamp.w:1),hh=(tool==='draw'?stamp.h:1);pathQ(hov.x,hov.y,ww,hh);cx.stroke();}
+    if(hov&&!object&&tool!=='paste'&&tool!=='obj'&&tool!=='wall'){cx.strokeStyle='#ffd24a';cx.lineWidth=2;const ww=(tool==='draw'?stamp.w:1),hh=(tool==='draw'?stamp.h:1);pathQ(hov.x,hov.y,ww,hh);cx.stroke();}
     if(sel||drag&&drag.rect){const r=sel||drag.rect;const x0=Math.min(r.x0,r.x1),y0=Math.min(r.y0,r.y1),x1=Math.max(r.x0,r.x1),y1=Math.max(r.y0,r.y1);cx.setLineDash([6,4]);cx.strokeStyle='#4fd1ff';cx.lineWidth=2;pathQ(x0,y0,x1-x0+1,y1-y0+1);cx.stroke();cx.setLineDash([]);}
   }
   (function loop(){render();requestAnimationFrame(loop);})();
@@ -332,36 +338,51 @@ export function init2D(root,A){
     const shift=e.placedProp?1:0,x=e.x+shift,y=e.y+shift;
     return x>=x0&&y>=y0&&x<x1+1&&y<y1+1;
   }
+  function regionEnts(r){
+    const selected=M.ents.filter(e=>e.t!=='start'&&inSelection(e,r.x0,r.y0,r.x1,r.y1));
+    const walls=new Set(selected.filter(e=>e.wallLine).map(e=>e.id));
+    return M.ents.filter(e=>e.wallId?walls.has(e.wallId):selected.includes(e));
+  }
   function copyArea(cut){const r=selRect();if(!r){toast('Chưa chọn vùng — kéo trên bản đồ');return;}
     const grab=l=>{const a=[];for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)a.push(get(r.x0+i,r.y0+j,l));return a;};
     const layers=[0,1,2,3].map(grab),blk=grab(4);
-    const ents=inclEnt?M.ents.filter(e=>e.t!=='start'&&inSelection(e,r.x0,r.y0,r.x1,r.y1)).map(e=>{const c=JSON.parse(JSON.stringify(e));c.dx=e.x-r.x0;c.dy=e.y-r.y0;return c;}):[];
+    const picked=inclEnt?regionEnts(r):[];
+    const ents=picked.map(e=>{const c=JSON.parse(JSON.stringify(e));c.dx=e.x-r.x0;c.dy=e.y-r.y0;return c;});
     clip={w:r.w,h:r.h,layers:layers.map(a=>a.slice()),blk:inclBlk?blk:null,ents};
     stamp={w:r.w,h:r.h,multi:true,layers,tiles:layers[0]};
     if(cut){pushUndo();for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++){for(let l=0;l<4;l++)put(r.x0+i,r.y0+j,0,l);if(inclBlk)put(r.x0+i,r.y0+j,0,4);}
-      if(inclEnt)M.ents=M.ents.filter(e=>e.t==='start'||!inSelection(e,r.x0,r.y0,r.x1,r.y1));selId=null;after();}
+      if(inclEnt)M.ents=M.ents.filter(e=>!picked.includes(e));selId=null;after();}
     toast((cut?'Đã cắt ':'Đã sao chép ')+r.w+'×'+r.h+' ô'+(ents.length?' + '+ents.length+' đối tượng':'')+' — bấm 📥 Dán');ui.tools();ui.stamp();dirty=true;if(simple){tool='paste';draw();toast('Đã '+(cut?'cắt':'sao chép')+' — bấm lên bản đồ để dán');}}
   function startPaste(){if(!clip){toast('Chưa sao chép gì — chọn vùng rồi bấm Sao chép');return;}tool='paste';draw();toast('Chạm/kéo trên bản đồ để dán');}
   const pOrg=()=>hov&&clip?{x:hov.x-Math.floor(clip.w/2),y:hov.y-Math.floor(clip.h/2)}:null;
   function pasteClip(x0,y0){if(!clip)return 0;let n=0;
+    const eligible=clip.ents.filter(e=>{
+      const shift=e.placedProp?1:0,x=x0+e.dx+shift,y=y0+e.dy+shift;
+      return inb(x,y)&&(!e.wallLine||inb(x+e.wallLine.dx,y+e.wallLine.dy));
+    });
+    const ids=new Map(eligible.map(e=>[e.id,newId()]));
     for(let j=0;j<clip.h;j++)for(let i=0;i<clip.w;i++){for(let l=0;l<4;l++){const v=clip.layers[l][j*clip.w+i];if(v)put(x0+i,y0+j,v,l);}if(clip.blk&&clip.blk[j*clip.w+i])put(x0+i,y0+j,1,4);}
-    for(const e of clip.ents){const nx=x0+e.dx,ny=y0+e.dy;if(!inb(nx+(e.placedProp?1:0),ny+(e.placedProp?1:0)))continue;const c=JSON.parse(JSON.stringify(e));delete c.dx;delete c.dy;c.id=newId();c.x=nx;c.y=ny;M.ents.push(c);n++;}
+    for(const e of eligible){const nx=x0+e.dx,ny=y0+e.dy;const c=JSON.parse(JSON.stringify(e));delete c.dx;delete c.dy;c.id=ids.get(e.id);if(c.wallId){c.wallId=ids.get(c.wallId);if(!c.wallId)continue;}c.x=nx;c.y=ny;M.ents.push(c);n++;}
     return n;}
   function clearSel(all){if(!sel)return;pushUndo();const x0=Math.min(sel.x0,sel.x1),y0=Math.min(sel.y0,sel.y1),x1=Math.max(sel.x0,sel.x1),y1=Math.max(sel.y0,sel.y1);
     for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){if(all)for(let l=0;l<5;l++)put(x,y,0,l);else put(x,y,0);}
-    if(all||act===2){M.ents=M.ents.filter(e=>e.t==='start'||(e.placedProp?!inSelection(e,x0,y0,x1,y1):e.x<x0||e.x>x1+1||e.y<y0||e.y>y1+1));selId=null;}after();}
+    if(all||act===2){M.ents=M.ents.filter(e=>e.t==='start'||(e.placedProp?!inSelection(e,x0,y0,x1,y1):e.x<x0||e.x>x1+1||e.y<y0||e.y>y1+1));selId=null;}const wallIds=new Set(M.ents.filter(e=>e.wallLine).map(e=>e.id));M.ents=M.ents.filter(e=>!e.wallId||wallIds.has(e.wallId));after();}
   // ===== thao tác nhanh trên vùng đang chọn (như bên 3D) =====
-  function grabR(r){const g=l=>{const a=[];for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)a.push(get(r.x0+i,r.y0+j,l));return a;};return {L:[0,1,2,3,4].map(g),E:M.ents.filter(e=>e.t!=='start'&&inSelection(e,r.x0,r.y0,r.x1,r.y1))};}
+  function grabR(r){const g=l=>{const a=[];for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)a.push(get(r.x0+i,r.y0+j,l));return a;};return {L:[0,1,2,3,4].map(g),E:regionEnts(r)};}
   function clearR(r){for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)for(let l=0;l<5;l++)put(r.x0+i,r.y0+j,0,l);}
   function putR(g,r,nx,ny,onlySet){for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)for(let l=0;l<5;l++){const v=g.L[l][j*r.w+i];if(!onlySet||v)put(nx+i,ny+j,v,l);}}
   function selMove(dx,dy){const r=selRect();if(!r)return;const nx=r.x0+dx,ny=r.y0+dy;if(nx<0||ny<0||nx+r.w>M.w||ny+r.h>M.h){toast('Chạm mép bản đồ');return;}
     pushUndo();const g=grabR(r);clearR(r);putR(g,r,nx,ny);for(const e of g.E){e.x+=dx;e.y+=dy;}sel={x0:nx,y0:ny,x1:nx+r.w-1,y1:ny+r.h-1};after();ui.sel&&ui.sel();}
   function selDup(){const r=selRect();if(!r)return;let nx=r.x0+r.w,ny=r.y0;if(nx+r.w>M.w){nx=r.x0;ny=r.y0+r.h;}if(ny+r.h>M.h){toast('Không còn chỗ để nhân bản');return;}
-    pushUndo();const g=grabR(r);putR(g,r,nx,ny,true);for(const e of g.E){const c=JSON.parse(JSON.stringify(e));c.id=newId();c.x=nx+(e.x-r.x0);c.y=ny+(e.y-r.y0);M.ents.push(c);}
+    pushUndo();const g=grabR(r);putR(g,r,nx,ny,true);const ids=new Map(g.E.map(e=>[e.id,newId()]));for(const e of g.E){const c=JSON.parse(JSON.stringify(e));c.id=ids.get(e.id);if(c.wallId)c.wallId=ids.get(c.wallId);c.x=nx+(e.x-r.x0);c.y=ny+(e.y-r.y0);M.ents.push(c);}
     sel={x0:nx,y0:ny,x1:nx+r.w-1,y1:ny+r.h-1};after();ui.sel&&ui.sel();toast('Đã nhân bản — bản sao đang được chọn');}
   function selFlip(){const r=selRect();if(!r)return;pushUndo();const g=grabR(r);
     for(let j=0;j<r.h;j++)for(let i=0;i<r.w;i++)for(let l=0;l<5;l++){let v=g.L[l][j*r.w+(r.w-1-i)];if(v&&l<4){const d=dec(v);v=enc(d.sid,d.idx,d.f^1);}put(r.x0+i,r.y0+j,v,l);}
-    for(const e of g.E)e.x=r.x0+(r.x1-e.x);after();toast('Đã lật ngang vùng chọn');}
+    for(const e of g.E){
+      e.x=r.x0+r.x1-e.x-(e.placedProp?1:0);
+      if(e.wallLine)e.wallLine.dx=-e.wallLine.dx;
+      if(e.wallId){e.col=e.col.map(c=>({...c,x:-c.x}));}
+    }after();toast('Đã lật ngang vùng chọn');}
   function selCluster(c0){if(!c0||!inb(c0.x,c0.y))return;const has=(x,y)=>inb(x,y)&&(M.layers[1][y*M.w+x]||M.layers[2][y*M.w+x]||M.layers[3][y*M.w+x]||M.blk[y*M.w+x]||M.ents.some(e=>e.x===x&&e.y===y));
     if(!has(c0.x,c0.y)){toast('Ô này trống — trỏ vào công trình rồi nhấn Enter');return;}
     const seen=new Set([c0.x+','+c0.y]),st=[[c0.x,c0.y]];let x0=c0.x,x1=c0.x,y0=c0.y,y1=c0.y;
@@ -381,6 +402,7 @@ export function init2D(root,A){
     if(P.size===2){drag=null;const [a,b]=[...P.values()];gest={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};return;}
     if(spacePan||e.button===1||e.button===2||tool==='pan'||e.buttons===4){drag={pan:true,x:p.x,y:p.y,vx:view.x,vy:view.y};return;}
     const c=cellAt(p.x,p.y);hov=c;lastPt={...p,snap:e.shiftKey};
+    if(tool==='wall'){wallClick(p);return;}
     if(act!==4&&['draw','rect','fill'].includes(tool)&&!hasBrush()){
       chooseTab('tools');toast('Chọn vật liệu hoặc vật thể trong khung Dựng cảnh trước khi đặt.');return;
     }
@@ -390,13 +412,17 @@ export function init2D(root,A){
     }
     const prop=activeProp();
     if(prop){
-      const at=propPosition(lastPt);
-      if(!at)return;
-      const piece={...structuredClone(prop),...at,id:newId()},issue=constructionIssue(piece);
+      const target=aimProp(prop,lastPt);
+      if(!target)return;
+      const {piece,issue}=target;
       if(issue){showPlacementIssue(issue);toast(issue);dirty=true;return;}
-      pushUndo();M.ents.push(piece);after();return;
+      pushUndo();M.ents.push({...structuredClone(piece),id:newId()});after();return;
     }
-    if(tool==='erase'&&act===2){const ex=entAtScreen(p.x,p.y);if(ex?.placedProp){pushUndo();M.ents=M.ents.filter(q=>q!==ex);after();return;}}
+    if(tool==='erase'&&act===2){
+      const ex=entAtScreen(p.x,p.y);
+      const wall=!ex&&wallAtScreen(p);
+      if(ex?.placedProp||wall){removeStructure(ex||wall);return;}
+    }
     if(tool==='zone'){zDown(p,e);dirty=true;return;}
     if(tool==='obj'){objDown(c);dirty=true;return;}
     if(tool==='draw'||tool==='erase'||tool==='fill'||tool==='pick'){pushUndo();
@@ -407,13 +433,17 @@ export function init2D(root,A){
   cv.addEventListener('pointermove',e=>{const p=pos(e);if(P.has(e.pointerId))P.set(e.pointerId,p);
     if(P.size===2&&gest){const [a,b]=[...P.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),ccx=(a.x+b.x)/2,ccy=(a.y+b.y)/2;const nz=Math.max(.01,Math.min(16,view.z*d/gest.d));const k=nz/view.z;
       view.x=ccx-(gest.cx-view.x)*k;view.y=ccy-(gest.cy-view.y)*k;view.z=nz;gest={d,cx:ccx,cy:ccy};dirty=true;return;}
-    if(activeProp()){lastPt={...p,snap:e.shiftKey};dirty=true;}
+    if(tool==='wall'||activeProp()){lastPt={...p,snap:e.shiftKey};dirty=true;}
     const c=cellAt(p.x,p.y);if(!hov||hov.x!==c.x||hov.y!==c.y){hov=c;dirty=true;}
     if(tool==='zone'&&!(drag&&drag.pan)){zMoveE(p,e);return;}
     if(!drag)return;
     if(drag.pan){view.x=drag.vx+p.x-drag.x;view.y=drag.vy+p.y-drag.y;dirty=true;return;}
     if(drag.rect){drag.rect.x1=c.x;drag.rect.y1=c.y;dirty=true;return;}
-    if(drag.ent){const q=selEnt(),nx=c.x-(drag.dx||0),ny=c.y-(drag.dy||0);if(q&&drag.precise){const g=s2g(p.x,p.y),x=g.x-drag.dx,y=g.y-drag.dy;if(inb(x+1,y+1)){q.x=x;q.y=y;dirty=true;}}
+    if(drag.ent){const q=selEnt(),nx=c.x-(drag.dx||0),ny=c.y-(drag.dy||0);if(q&&drag.precise){const g=s2g(p.x,p.y),x=g.x-drag.dx,y=g.y-drag.dy;if(inb(x+1,y+1)){
+      if(q.wallId){const mounted=mountGate({...q,x,y},ruleCtx().walls);if(mounted)Object.assign(q,mounted);}
+      else {q.x=x;q.y=y;}
+      dirty=true;
+    }}
       else if(q&&inb(nx,ny)&&(q.x!==nx||q.y!==ny)){q.x=nx;q.y=ny;dirty=true;}return;}
     if(e.shiftKey&&tool==='draw'&&drag.sx!=null&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;const dx=c.x-drag.sx,dy=c.y-drag.sy,hz=Math.abs(dx)>=Math.abs(dy),sw=Math.max(1,stamp.w),sh=Math.max(1,stamp.h);const n=hz?Math.floor(Math.abs(dx)/sw):Math.floor(Math.abs(dy)/sh);for(let q=0;q<=n;q++)paste(drag.sx+(hz?Math.sign(dx||1)*q*sw:0),drag.sy+(hz?0:Math.sign(dy||1)*q*sh));after();return;}
     if(drag.last&&(drag.last.x!==c.x||drag.last.y!==c.y)){drag.last=c;if(tool==='draw'){if(stamp.w===1&&stamp.h===1||((c.x-drag.sx)%stamp.w===0&&(c.y-drag.sy)%stamp.h===0))paste(c.x,c.y);}else if(tool==='erase')erase(c.x,c.y);after();}});
@@ -576,9 +606,11 @@ export function init2D(root,A){
       const shortcuts={b:'draw',v:'select',e:'erase',i:'pick',o:'obj',k:'zone',r:'rect',u:'fill'};
       if(shortcuts[k]){useTool(shortcuts[k]);e.preventDefault();return;}
       if(/^[1-5]$/.test(k)){useLayer(Number(k)-1);e.preventDefault();return;}
+      if(k==='w'){useTool('wall');e.preventDefault();return;}
       if(k==='g'){switchGrid();e.preventDefault();return;}
       if(k==='f'&&!sel){fit();e.preventDefault();return;}
     }
+    if(tool==='wall'&&!m&&(k==='escape'||k==='enter')){wallChain=null;dirty=true;draw();e.preventDefault();return;}
     if(tool==='zone'&&!m){const sz=zsel&&zget(zsel);
       if(k==='enter'&&zpend){zFinish();e.preventDefault();return;}
       if(k==='escape'){if(zpend){zpend=null;draw();dirty=true;}else if(zsel){zsel=null;draw();dirty=true;}return;}
@@ -690,7 +722,7 @@ export function init2D(root,A){
   }
   let pickAndDraw=false;
   function useTool(id){
-    pickAndDraw=false;tool=id;fillArm=false;if(id!=='zone'){zpend=null;zsel=null;}
+    pickAndDraw=false;tool=id;fillArm=false;wallChain=null;if(id==='wall'){act=2;tab='tools';}if(id!=='zone'){zpend=null;zsel=null;}
     if(id==='obj')tab='obj';
     else if(desktop()||id==='zone'||tab==='obj')tab='tools';
     renderTabs();draw();dirty=true;cv.focus({preventScroll:true});
@@ -773,13 +805,74 @@ export function init2D(root,A){
     return /(?:^|[\s_./-])(?:cổng vòm|cổng|gate|archway|arch)\d*(?:$|[\s_./-])/i.test(constructionTile(sid,idx,0).source)?'unknown':'';
   }
   function stampHasGate(){return (stamp.tiles||[]).some(value=>value&&gateKind(value));}
-  function constructionIssue(piece,fresh=false){
-    if(piece.gateUncalibrated)return 'Ảnh cổng này cần dữ liệu hai chân trụ để ghép tường. Hãy dùng cổng Đá Xoáy hoặc mẫu cổng đã dựng.';
-    if(!piece.gateAssembly&&(!piece.buildChecks||piece.walk))return '';
-    if(fresh||ruleContext?.map!==M||ruleContext.revision!==buildRevision){
+  let wallChain=null,renderGate=null;
+  const renderWallEnts=()=>renderGate?[...M.ents,renderGate]:M.ents;
+  function ruleCtx(fresh=false){
+    if(fresh||ruleContext?.map!==M||ruleContext.revision!==buildRevision)
       ruleContext={map:M,revision:buildRevision,context:constructionContext(M,currentPaintZones())};
+    return ruleContext.context;
+  }
+  function constructionIssue(piece,fresh=false){
+    if(piece.gateUncalibrated)return 'Ảnh cổng này cần dữ liệu hai chân trụ. Có thể lắp ngay bằng cổng Đá Xoáy.';
+    if(!piece.gateAssembly&&(!piece.buildChecks||piece.walk))return '';
+    return propIssue(piece,ruleCtx(fresh));
+  }
+  function aimProp(prop,p){
+    const at=propPosition(p);
+    if(!at)return null;
+    const piece={...prop,...at,id:'preview-gate'};
+    if(!piece.wallGateBrush)return {piece,issue:constructionIssue(piece)};
+    const mounted=mountGate(piece,ruleCtx().walls);
+    return mounted?{piece:mounted,issue:constructionIssue(mounted)}:
+      {piece,issue:'Dựng tuyến tường trước, rồi rê cổng lên đoạn đủ dài để lắp.'};
+  }
+  function chooseGateBrush(){
+    const sid=sheets.findIndex(sh=>sh.img&&/^Đá Xoáy · cổng, cột, rương/.test(sh.name));
+    if(sid<0){toast('Bộ cổng Đá Xoáy chưa tải xong.');return;}
+    useTool('draw');selectBuildMaterial(enc(sid,0),2);
+  }
+  function wallPoint(p){
+    const g=s2g(p.x,p.y),x=Math.round(g.x*4)/4,y=Math.round(g.y*4)/4;
+    if(wallChain&&Math.hypot(x-wallChain.first[0],y-wallChain.first[1])<=.45)return wallChain.first;
+    return [x,y];
+  }
+  function wallPiece(a,b){
+    return {id:newId(),t:'deco',name:'Tuyến tường đá',placedProp:true,x:a[0]-1,y:a[1]-1,
+      wallLine:{dx:b[0]-a[0],dy:b[1]-a[1],height:1.25}};
+  }
+  function wallClick(p){
+    const b=wallPoint(p),ctx=ruleCtx();
+    if(!wallChain){
+      if(!ctx.floor(...b,.12)){toast('Chọn điểm bắt đầu trên sàn.');return;}
+      wallChain={a:b,first:b};draw();dirty=true;return;
     }
-    return propIssue(piece,ruleContext.context);
+    const w=wallPiece(wallChain.a,b),issue=wallIssue(w,ctx);
+    if(issue){toast(issue);return;}
+    pushUndo();M.ents.push(w);
+    wallChain=b===wallChain.first?null:{...wallChain,a:b};
+    after();draw();
+  }
+  function drawWallDraft(){
+    if(!hov||!lastPt)return;
+    const b=wallPoint(lastPt),a=wallChain?.a||b,[x,y]=g2s(...a),[u,v]=g2s(...b);
+    const issue=wallChain?wallIssue(wallPiece(a,b),ruleCtx()):'';
+    cx.strokeStyle=issue?'#ff7979':'#ffdb74';cx.lineWidth=3;
+    cx.beginPath();cx.moveTo(x,y);cx.lineTo(u,v);cx.stroke();
+    cx.beginPath();cx.arc(u,v,4,0,Math.PI*2);cx.stroke();
+    showPlacementIssue(issue);
+  }
+  function wallAtScreen(p){
+    return M.ents.find(w=>w.wallLine&&builtWallFaces([w],true).some(face=>{
+      const [x,y]=g2s(...face.a),[u,v]=g2s(...face.b),height=face.height*CELL*view.z;
+      if(Math.abs(u-x)<=.5)return Math.abs(p.x-x)<=5&&p.y>=Math.min(y,v)-height&&p.y<=Math.max(y,v)+4;
+      const t=Math.max(0,Math.min(1,(p.x-x)/(u-x))),base=y+(v-y)*t;
+      return Math.abs(p.x-x-(u-x)*t)<=5&&p.y>=base-height-4&&p.y<=base+4;
+    }));
+  }
+  function removeStructure(e){
+    pushUndo();M.ents=M.ents.filter(q=>q!==e&&q.wallId!==e.id);
+    if(selId===e.id)selId=null;
+    after();draw();
   }
   function showPlacementIssue(issue){
     const line=body.querySelector('[data-placement-rule]');
@@ -798,7 +891,7 @@ export function init2D(root,A){
     const propProjection=ANGQ()?'angle':ISOQ()?'iso':'top',kind=gateKind(value);
     return {t:'deco',name:tag.label,tile:{sid,idx},spriteFlip:f,placedProp:true,spriteBounds:bounds,
       sc,sizeBase:sc,walk:!parts.length,estimated:parts.some(p=>p.estimated!==false),
-      propProjection,buildChecks:true,gateAssembly:kind==='stone'&&parts.length===2,gateUncalibrated:!!kind&&parts.length!==2,
+      propProjection,buildChecks:true,gateAssembly:kind==='stone'&&parts.length===2,wallGateBrush:kind==='stone'&&parts.length===2,gateUncalibrated:!!kind&&parts.length!==2,
       ...propContact(parts,contact||{u:.5,v:1},sc,propProjection)};
   }
   function activeProp(){
@@ -837,7 +930,7 @@ export function init2D(root,A){
     for(const index of group.cells){
       const x=index%M.w,y=Math.floor(index/M.w),prop=propTemplate(M.layers[2][index]);
       resizeProp(prop,.95/prop.sc);
-      delete prop.gateAssembly;delete prop.gateUncalibrated;delete prop.buildChecks;
+      delete prop.gateAssembly;delete prop.wallGateBrush;delete prop.gateUncalibrated;delete prop.buildChecks;
       const g=s2g(x0+(x-group.x0+.5-prop.ox)*size,y0+(y-group.y0+1-prop.oy)*size);
       M.layers[2][index]=0;
       const id=newId();
@@ -857,12 +950,17 @@ export function init2D(root,A){
   const limitSize=v=>Math.max(25,Math.min(400,v));
   function activeTransform(){return activeProp()||(tool==='obj'&&selEnt()?.placedProp?selEnt():null);}
   function editPlacedProp(e,action){
-    const next=structuredClone(e);
+    let next=structuredClone(e);
     if(typeof action==='function')action(next);
     else if(action==='turn'){next.propProjection??=ANGQ()?'angle':ISOQ()?'iso':'top';turnProp(next);}
     else{
       const base=e.sizeBase||e.sc||3;
       next.sizeBase=base;resizeProp(next,(base*action/100)/(e.sc||3));
+    }
+    if(next.wallId||next.wallGateBrush){
+      const mounted=mountGate(next,ruleCtx(true).walls,{distance:next.wallId ? .025 : 1.05});
+      if(!mounted){toast('Cổng cần một đoạn tường đủ dài.');draw();return;}
+      next=mounted;
     }
     const issue=constructionIssue(next,true);
     if(issue){toast(issue);draw();return;}
@@ -896,7 +994,7 @@ export function init2D(root,A){
     if(!brushAsset(value))return;
     stamp={w:1,h:1,multi:false,tiles:[value]};
     act=layer;pickAndDraw=false;
-    if(!brushTools.includes(tool))tool='draw';
+    if(!brushTools.includes(tool)||gateKind(value))tool='draw';wallChain=null;
     draw();dirty=true;cv.focus({preventScroll:true});
   }
   function materialButton({value,label},layer){
@@ -920,13 +1018,17 @@ export function init2D(root,A){
     const chosen=hasBrush()?(stamp.multi||stamp.w*stamp.h>1?'Cụm '+stamp.w+' × '+stamp.h+' ô':
       asset?constructionTile(dec(current).sid,dec(current).idx,0).label:'Đã chọn mảnh'):'Chọn một mảnh bên dưới';
     const prop=activeProp();
-    const advice=prop?'Shift bám ¼ ô · Shift + cuộn đổi cỡ · Alt + cuộn đổi hướng.':hasBrush()?tool==='rect'?'Kéo một khung trên bản đồ.':
+    const advice=tool==='wall'?'Bấm lần lượt các góc trên sàn để dựng tuyến. Enter hoặc Esc để kết thúc.':prop?'Shift bám ¼ ô · Shift + cuộn đổi cỡ · Alt + cuộn đổi hướng.':hasBrush()?tool==='rect'?'Kéo một khung trên bản đồ.':
       tool==='fill'?'Bấm vào vùng liền muốn thay.':'Bấm để đặt một mảnh hoặc kéo để đặt một dãy.':
       'Chọn mảnh, rồi bấm vị trí trên bản đồ.';
     panel.append(el('div',{class:'build-heading'},el('h2',{},'Dựng cảnh'),btn('Nhập ZIP/RAR',chooseArchiveFiles)),
-      categoryBar,el('div',{class:'build-selection',role:'status'},el('strong',{},chosen),el('span',{},advice)));
+      el('div',{class:'row'},btn('Dựng tuyến tường · W',()=>useTool('wall'),tool==='wall'?'on':''),
+        btn('Lắp cổng vào tường',chooseGateBrush),
+        tool==='wall'&&wallChain?btn('Kết thúc tuyến',()=>{wallChain=null;dirty=true;draw();}):null),
+      categoryBar,el('div',{class:'build-selection',role:'status'},el('strong',{},tool==='wall'?'Dựng tường':chosen),el('span',{},advice)));
+    if(tool==='wall')panel.append(el('p',{class:'hint','data-placement-rule':'',role:'status'}));
     if(prop){
-      const note=prop.gateAssembly?'Cổng kèm hai đoạn tường. Chọn chỗ có sàn và đường đi hai phía.':
+      const note=prop.gateAssembly?'Rê cổng lên một tuyến tường đã dựng. Xưởng mở đúng khoảng giữa hai trụ.':
         prop.gateUncalibrated?constructionIssue(prop):'';
       panel.append(propSizeField(propSizes.get(current)||100,n=>{propSizes.set(current,n);dirty=true;}),
         el('div',{class:'row'},el('button',{class:'b',type:'button','data-prop-turn':'','aria-pressed':String(propTurns.has(current)),
@@ -1004,7 +1106,7 @@ export function init2D(root,A){
   function draw(){updateDesktop();[...tabs.querySelectorAll('button[data-t]')].forEach(b=>b.classList.toggle('on',b.dataset.t===tab));body.innerHTML='';
     body.append(...drawGuides());
     if(tab==='tools'){
-      const building=brushTools.includes(tool)&&act<4;
+      const building=(brushTools.includes(tool)||tool==='wall')&&act<4;
       if(building)body.append(buildPalette());
       const TL=simple?[['draw','Đặt mảnh'],['erase','🧽 Xóa'],['select','⬚ Chọn vùng'],['paste','📥 Dán'],['pan','✋ Kéo']]:[['draw','Đặt mảnh'],['erase','🧽 Xóa'],['fill','Thay vùng'],['rect','Đặt theo khung'],['pick','💧 Hút'],['select','⬚ Chọn vùng'],['paste','📥 Dán'],['zone','🚧 Vùng chặn'],['pan','✋ Kéo']];
       body.append(el('div',{class:'row legacy-panel-tools'},TL.map(([k,n])=>btn(n,()=>{tool=k;if(k!=='zone')zpend=null;if(k==='obj')tab='obj';draw();dirty=true;},tool===k?'on':''))));
@@ -1121,9 +1223,9 @@ export function init2D(root,A){
           ...(e.t==='deco'&&e.door?[el('div',{class:'row'},el('span',{class:'lbl'},'Trạng thái cửa'),(()=>{const sl=el('select',{class:'num'},el('option',{value:'dong'},'Đóng (chặn lối)'),el('option',{value:'mo'},'Mở (đi qua được)'));sl.value=e.door.st;sl.onchange=()=>{const v=e.door.v[sl.value];e.door.st=sl.value;e.tile=v.tile;if(v.col&&v.col.length)e.col=v.col;else delete e.col;after();draw();};return sl;})()),el('div',{class:'row'},el('label',{style:'font-size:13px'},(()=>{const c=el('input',{type:'checkbox'});c.checked=!!e.door.auto;c.onchange=()=>{e.door.auto=c.checked?1:0;after();};return c;})(),' Tự đóng lại khi nhân vật đi xa')),el('div',{class:'hint'},'Khi chơi: cửa tự mở khi lại gần, phím E đóng/mở. Vùng chặn riêng từng trạng thái.')]:[]),
           ...(e.t==='deco'?[propSizeField(sizePercent(e),n=>{if(n!==sizePercent(e))editPlacedProp(e,n);}),
             e.placedProp?el('div',{class:'row'},btn('Đổi hướng · T',()=>{editPlacedProp(e,'turn');cv.focus({preventScroll:true});}),
-              !e.gateAssembly&&e.col?.length===2&&e.tile&&gateKind(enc(e.tile.sid,e.tile.idx))==='stone'?
-                btn('Ghép tường vào cổng cũ',()=>editPlacedProp(e,next=>{next.gateAssembly=true;next.walk=false;})):null):null,
-            e.gateAssembly?el('p',{class:'hint'},'Hai tường và hai chân trụ chặn đường. Lối giữa luôn để trống.'):
+              !e.wallId&&e.col?.length===2&&e.tile&&gateKind(enc(e.tile.sid,e.tile.idx))==='stone'?
+                btn('Lắp cổng cũ lên tường',()=>editPlacedProp(e,next=>{next.gateAssembly=true;next.wallGateBrush=true;next.walk=false;})):null):null,
+            e.gateAssembly?el('p',{class:'hint'},e.wallId?'Cổng gắn trên tuyến tường. Xóa cổng sẽ khép lại lỗ mở.':'Cổng kiểu cũ có hai đoạn tường ngắn. Có thể lắp lại vào tuyến tường.'):
             el('label',{class:'row'},(()=>{const c=el('input',{type:'checkbox'});
               c.checked=!!e.walk;c.onchange=()=>{pushUndo();e.walk=c.checked;after();draw();};return c;
             })(),'Cho đi qua'),
@@ -1133,7 +1235,7 @@ export function init2D(root,A){
           ...(e.tile!==undefined&&(e.t==='enemy'||e.t==='npc')?[el('div',{class:'lbl'},'Hình nhân vật:'),picker(()=>e.tile,t=>{e.tile=t;}),btn('🎨 Dùng ô tileset đang chọn làm hình',()=>{const d=stamp.tiles&&stamp.tiles[0];if(!d){toast('Chọn 1 ô trong tab Tileset trước');return;}const q=dec(d);e.tile={sid:q.sid,idx:q.idx};after();draw();})]:[]),
           ...(e.t==='enemy'||e.t==='npc'?[animPick(e,'anim',M.cfg,after)]:[]),
           ...entExtra(e,after,draw),
-          el('div',{class:'row'},btn('⧉ Nhân bản',()=>{pushUndo();const c=JSON.parse(JSON.stringify(e));c.id=Date.now().toString(36);c.x=Math.min(M.w-1,e.x+1);if(e.t==='start')return toast('Chỉ có 1 điểm xuất phát');M.ents.push(c);selId=c.id;after();draw();}),btn('🗑 Xoá',()=>{pushUndo();M.ents=M.ents.filter(q=>q.id!==e.id);selId=null;after();draw();}))));
+          el('div',{class:'row'},e.wallId?null:btn('⧉ Nhân bản',()=>{pushUndo();const c=JSON.parse(JSON.stringify(e));c.id=Date.now().toString(36);c.x=Math.min(M.w-1,e.x+1);if(e.t==='start')return toast('Chỉ có 1 điểm xuất phát');M.ents.push(c);selId=c.id;after();draw();}),btn('🗑 Xoá',()=>{pushUndo();M.ents=M.ents.filter(q=>q.id!==e.id);selId=null;after();draw();}))));
       }
       body.append(el('div',{class:'row'},btn('🗑 Xoá hết đối tượng',async()=>{if(await yes('Xoá toàn bộ đối tượng?')){pushUndo();M.ents=[];selId=null;after();draw();}})));
       const C=M.cfg;
@@ -1401,7 +1503,7 @@ export function init2D(root,A){
       let bm=it.decoded;
       if(!bm)try{const im=new Image();await new Promise((ok,no)=>{im.onload=ok;im.onerror=no;im.src=it.url;});bm=im;}catch(e){if(detail)throw e;continue;}
       HS.add(ih);
-      const W=bm.naturalWidth,H=bm.naturalHeight;let boxes=[[0,0,W,H]];const c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(bm,0,0);
+      const W=bm.naturalWidth||bm.width,H=bm.naturalHeight||bm.height;let boxes=[[0,0,W,H]];const c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(bm,0,0);
       if(W>=16&&H>=16){try{const dd=g.getImageData(0,0,W,H).data,np=W*H;let op=0,wt=0;for(let q=0;q<np;q++){if(dd[q*4+3]>=250){op++;if(dd[q*4]>=240&&dd[q*4+1]>=240&&dd[q*4+2]>=240)wt++;}}
         if(op>=np*0.97){if(wt>np*0.9){dupW++;continue;}if(W>256||H>256){dupX++;continue;}const gh='o'+fnv(dd,dd.length)+'-'+W+'x'+H;if(HS.has(gh)){dupO++;continue;}HS.add(gh);GR.push(bm);continue;}}catch(e){}}
       if(W>T||H>T){try{const B=4,gw=Math.ceil(W/B),gh=Math.ceil(H/B);const d=g.getImageData(0,0,W,H).data;
@@ -1562,7 +1664,7 @@ export function init2D(root,A){
       archiveResults.map(result=>{
         const detail=el('details',{class:'pack-result',open:''},el('summary',{},result.name));
         if(result.error)detail.append(el('p',{},result.error));
-        else detail.append(el('p',{},result.total+' ảnh trong gói · '+result.selected+' đã chọn · '+
+        else detail.append(el('p',{},result.total+' ảnh trong gói · '+(result.available??result.total)+' dùng được · '+result.selected+' đã chọn · '+
           result.imported+' đã nhập ('+result.pieces+' mảnh) · '+result.skipped+' bỏ qua · '+result.failed+' lỗi'));
         for(const error of result.errors||[])detail.append(el('p',{},error));
         return detail;
@@ -1580,12 +1682,19 @@ export function init2D(root,A){
           p.status='image_done';p.errors=[];
         }else if(related.length&&related.every(r=>r.error)){
           p.status='error';p.readFailed=true;p.errors=related.map(r=>r.error);
-        }else if(related.length&&related.every(r=>!r.error&&!r.total)){
-          p.status='empty';p.errors=['Gói này có thể chứa mô hình, bản đồ hoặc tài liệu.'];
+        }else if(related.length&&related.every(r=>!r.error&&!r.available)){
+          p.status='empty';p.errors=['Gói này chỉ có tài liệu, mô hình hoặc ảnh tham khảo.'];
         }
       }
-      if(tab==='tools'&&act<4&&results.some(r=>r.imported)&&visibleBuildSheets(act).includes(curSheet)&&materialCards(act,curSheet).length){
-        buildSources.set(act,curSheet);buildPages.set(act,0);buildQuery='';
+      const imported=results.reduce((total,r)=>total+(r.pieces||0),0);
+      if(imported){
+        const layer=[act,2,0,1,3].find(l=>l<4&&materialCards(l,curSheet).length);
+        if(layer!=null){
+          act=layer;tool='draw';tab='tools';wallChain=null;
+          stamp={w:1,h:1,multi:false,tiles:[0]};
+          buildSources.set(act,curSheet);buildPages.set(act,0);buildQuery='';renderTabs();
+        }
+        toast('Đã nhập '+imported+' mảnh. Xem bộ vừa nhập trong Dựng cảnh.');
       }
       draw();
     });

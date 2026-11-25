@@ -1,3 +1,4 @@
+import {builtWallFaces} from './wall2d.js';
 import {gateWalls} from './gate2d.js';
 import {paintedGroups} from './placement2d.js';
 import {tileFoot} from './spriteFoot.js';
@@ -270,8 +271,8 @@ export function play2D(o){
        Quy tắc isometric: đứng ngoài khung ở phía gần camera (x>=x1 hoặc y>=y1) thì vẽ SAU nhà; ở phía xa (x<=x0 hoặc y<=y0) thì vẽ TRƯỚC. */
     const RC=ISO?DCL.filter(d=>!d.flat&&d.zb).map(d=>{const z=d.zb,x0=d.x+1+z[0],y0=d.y+1+z[1];return {x0,y0,x1:x0+z[2],y1:y0+z[3],K:d.x+d.y+2};}):[];
     const kk=(x,y)=>{let k=ANG?y:x+y;if(ANG||!RC.length)return k;for(const r of RC){if(x<r.x0-2||x>r.x1+2||y<r.y0-2||y>r.y1+2)continue;const fr=x>=r.x1||y>=r.y1,bh=x<=r.x0||y<=r.y0;if(fr&&!bh)k=Math.max(k,r.K+.001);else if(bh&&!fr)k=Math.min(k,r.K-.001);}return k;};
-    const builtWalls=DCL.flatMap(e=>gateWalls(e,ANG||!ISO)).map(wall=>({wall,k:wall.k,y:(wall.a[1]+wall.b[1])/2}));
-    const ents=[...builtWalls,...(geo?geo.walls.map(wall=>({wall,k:wall.k})):[]),{y:P.y,x:P.x,p:1,k:kk(P.x,P.y)},...E.map(e=>({y:e.y,x:e.x,e,k:kk(e.x,e.y)})),...NP.map(n=>({y:n.y,x:n.x,n,k:kk(n.x,n.y)})),...CH.map(c=>({y:c.y,x:c.x,c,k:kk(c.x,c.y)})),...(GL?[{y:GL.y,x:GL.x,g:GL,k:kk(GL.x,GL.y)}]:[]),...(ISO?GR.map(g=>({y:g.yb,x:g.xc,grp:g})):[]),...DCL.map(d=>({y:d.flat?-1e4+d.y:d.y,x:d.flat?-1e4+d.x:d.x+1,dc:d,k:d.placedProp?(ANG?d.y+1:d.x+d.y+2):ANG?(d.flat?-1e4+d.y:depthAng(d)):undefined}))].sort(ISO?((a,b)=>(a.k!=null?a.k:a.x+a.y)-(b.k!=null?b.k:b.x+b.y)):((a,b)=>a.y-b.y));
+    const builtWalls=[...builtWallFaces(DCL,ANG||!ISO),...DCL.flatMap(e=>gateWalls(e,ANG||!ISO))].map(wall=>({wall,k:wall.k,y:(wall.a[1]+wall.b[1])/2}));
+    const ents=[...builtWalls,...(geo?geo.walls.map(wall=>({wall,k:wall.k})):[]),{y:P.y,x:P.x,p:1,k:kk(P.x,P.y)},...E.map(e=>({y:e.y,x:e.x,e,k:kk(e.x,e.y)})),...NP.map(n=>({y:n.y,x:n.x,n,k:kk(n.x,n.y)})),...CH.map(c=>({y:c.y,x:c.x,c,k:kk(c.x,c.y)})),...(GL?[{y:GL.y,x:GL.x,g:GL,k:kk(GL.x,GL.y)}]:[]),...(ISO?GR.map(g=>({y:g.yb,x:g.xc,grp:g})):[]),...DCL.filter(d=>!d.wallLine).map(d=>({y:d.flat?-1e4+d.y:d.y,x:d.flat?-1e4+d.x:d.x+1,dc:d,k:d.placedProp?(ANG?d.y+1:d.x+d.y+2):ANG?(d.flat?-1e4+d.y:depthAng(d)):undefined}))].sort(ISO?((a,b)=>(a.k!=null?a.k:a.x+a.y)-(b.k!=null?b.k:b.x+b.y)):((a,b)=>a.y-b.y));
     const ox1=ox,oy1=oy,TC=[];
     const grounded=!!geo;
     function actorShadow(q){

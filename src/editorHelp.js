@@ -82,6 +82,7 @@ export function guideFor(view,key,options){
  return guideBox(view+'-'+key,list[key],options);
 }
 const keys=[
+ ['W','Dựng tuyến tường theo các điểm bấm. Enter hoặc Esc kết thúc tuyến.'],
  ['B · V · E · I','Đặt mảnh · Chọn vùng · Xóa · Lấy mẫu'],
  ['R · U · O · K','Đặt theo khung · Thay vùng liền · Đối tượng · Va chạm'],
  ['1–5 · G · F','Đổi lớp · Bật/tắt lưới · Vừa khung hoặc đến vùng chọn'],

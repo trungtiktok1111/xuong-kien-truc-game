@@ -145,6 +145,7 @@ export function resizeProp(e,factor){
     return next;
   });
   e.sc=(e.sc||3)*factor;
+  if(e.gateArt)e.gateArt=pair(e.gateArt);
   if(e.zb)e.zb=pair(e.zb);
   if(e.zp)e.zp=e.zp.map(pair);
   if(e.zps)e.zps=e.zps.map(p=>p.map(pair));
@@ -159,6 +160,7 @@ export function turnProp(e){
   e.spriteFlip=(e.spriteFlip||0)^1;
   e.ox=-(e.ox||0);
   if(e.spriteBounds){const [l,t,r,b]=e.spriteBounds;e.spriteBounds=[1-r,t,1-l,b];}
+  if(e.gateArt)e.gateArt=flip(e.gateArt);
   if(e.col)e.col=e.col.map(c=>{
     if(c.k==='circle'){const [x,y]=flip([c.x,c.y]);return {...c,x,y};}
     if(c.k==='rect')return iso?{...c,x:c.y,y:c.x,w:c.h,h:c.w}:{...c,x:-c.x-c.w};

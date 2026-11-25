@@ -20,6 +20,7 @@ const options = (label, values, change) => el('select',{'aria-label':label,oncha
   values.map(([value,title])=>el('option',{value},title)));
 const searchKey = text => text.toLowerCase().trim();
 const shortSize = entry => entry.size?.join('×') || '';
+const importable = e => !heldArchiveKinds.has(e.kind);
 
 export async function openArchivePicker(files, receive, publishResults) {
   const box = el('dialog',{class:'asset-import','aria-label':'Nhập tài nguyên từ ZIP/RAR'});
@@ -62,11 +63,12 @@ export async function openArchivePicker(files, receive, publishResults) {
   for (const group of groups) {
     group.entries.sort((a,b)=>a.path.localeCompare(b.path,undefined,{numeric:true}));
     for (const entry of group.entries) Object.assign(entry,classifyArchiveImage(group.name,entry.path,group.tilesets,related));
+    group.ready=group.entries.filter(importable).length;
   }
   const catalog = groups.flatMap(g=>g.entries), chosen = new Set();
-  let focused = null, selectedGroup = groups.findIndex(g=>g.entries.length), page = 0, previewToken = 0;
+  let focused = null, selectedGroup = Math.max(0,groups.findIndex(g=>g.ready)), page = 0, previewToken = 0;
   const reportBase = () => [
-    ...groups.map(group=>({name:group.name,total:group.entries.length,selected:0,imported:0,skipped:0,failed:0,pieces:0})),
+    ...groups.map(group=>({name:group.name,total:group.entries.length,available:group.ready,selected:0,imported:0,skipped:0,failed:0,pieces:0})),
     ...failed
   ];
 
@@ -78,9 +80,14 @@ export async function openArchivePicker(files, receive, publishResults) {
   }
 
   const query = el('input',{type:'search',placeholder:'Tìm theo tên hoặc thư mục','aria-label':'Tìm ảnh',oninput:()=>{reset();showFirst();}});
-  const groupFilter = options('Gói',groups.map((g,i)=>[i,g.name+' · '+g.entries.length+' ảnh']),()=>{
-    selectedGroup = Number(groupFilter.value);kindFilter.value='';rebuildSizes();reset();showFirst();
-  });
+  const groupLabel = g => g.name+' · '+(g.ready?g.ready+' ảnh dùng được':g.entries.length?'chỉ tham khảo ('+g.entries.length+')':'không có ảnh');
+  const groupFilter=el('select',{'aria-label':'Gói',onchange:()=>{
+    selectedGroup=Number(groupFilter.value);query.value='';kindFilter.value='';rebuildSizes();reset();showFirst();
+  }});
+  for(const [label,test] of [['Có thể nhập',g=>g.ready],['Tham khảo / không có ảnh',g=>!g.ready]]){
+    const items=groups.flatMap((g,i)=>test(g)?[el('option',{value:i},groupLabel(g))]:[]);
+    if(items.length)groupFilter.append(el('optgroup',{label},items));
+  }
   groupFilter.value = String(selectedGroup);
   const kindFilter = options('Loại tài nguyên',[['','Mọi loại'],...Object.entries(archiveKinds)],()=>{rebuildSizes();reset();showFirst();});
   const sizeFilter = options('Kích thước ô',[],()=>{reset();showFirst();});
@@ -97,16 +104,26 @@ export async function openArchivePicker(files, receive, publishResults) {
   const next = btn('Trang sau',()=>{page++;render();});
   const count = el('span',{role:'status'});
   const useViewed = btn('Nhập ảnh đang xem',()=>importEntries([focused]));
-  const useChosen = btn('Nhập ảnh đã chọn',()=>importEntries([...chosen]),{class:'btn on'});
-  const pickVisible = btn('Chọn nhóm đang lọc',()=>{filtered().filter(e=>!heldArchiveKinds.has(e.kind)).forEach(e=>chosen.add(e));render();});
+  const usePack = btn('Nhập ảnh dùng được trong gói',()=>importEntries(groups[selectedGroup].entries.filter(importable)),{class:'btn on'});
+  const useChosen = btn('Nhập ảnh đã chọn',()=>importEntries([...chosen]),{class:'btn'});
+  const pickVisible = btn('Chọn nhóm đang lọc',()=>{filtered().filter(importable).forEach(e=>chosen.add(e));render();});
   const clearChosen = btn('Bỏ chọn tất cả',()=>{chosen.clear();render();});
-  const footer = el('footer',{},el('div',{class:'row'},pickVisible,clearChosen,count),el('div',{class:'row'},useViewed,useChosen));
+  const footer = el('footer',{},el('div',{class:'row'},pickVisible,clearChosen,count),el('div',{class:'row'},usePack,useChosen,useViewed));
   const paging = el('div',{class:'row'},prev,pageText,next);
   const results = el('details',{},el('summary',{},'Tình trạng đọc gói ('+files.length+')'));
-  groups.forEach(g=>results.append(el('p',{},g.name+' · '+g.entries.length+' ảnh'+(g.entries.length?'':' · Không có ảnh để nhập'))));
-  failed.forEach(g=>results.append(el('p',{},g.name+' · '+g.error)));
+  const statusList=el('div',{class:'asset-import-report'});
+  groups.forEach(g=>statusList.append(el('p',{},groupLabel(g))));
+  failed.forEach(g=>statusList.append(el('p',{},g.name+' · '+g.error)));
+  results.append(statusList);
+  const groupHint=el('p',{class:'hint',role:'status'});
+  const nextGroup=btn('Chuyển tới gói có ảnh dùng được',()=>{
+    groupFilter.value=String(groups.findIndex(g=>g.ready));groupFilter.dispatchEvent(new Event('change'));
+  });
   percent.remove();
-  box.append(controls,advanced,results,el('div',{class:'asset-import-body'},el('div',{class:'asset-import-browser'},list,paging),preview),footer);
+  box.classList.add('asset-import-ready');
+  const content=el('div',{class:'asset-import-scroll'},controls,el('div',{class:'asset-import-next'},groupHint,nextGroup),advanced,results,
+    el('div',{class:'asset-import-body'},el('div',{class:'asset-import-browser'},list,paging),preview));
+  box.append(content,footer);
   function byGroup() {
     return groups[selectedGroup].entries.filter(e=>!kindFilter.value || e.kind===kindFilter.value);
   }
@@ -122,15 +139,23 @@ export async function openArchivePicker(files, receive, publishResults) {
     return order.value==='size'?found.sort((a,b)=>b.bytes-a.bytes):found;
   }
   function reset() {page=0;render();}
-  function showFirst() {void showPreview(filtered()[0] || null);}
+  function showFirst() {const rows=filtered();void showPreview(rows.find(importable)||rows[0]||null);}
   function updateButtons() {
     count.textContent = 'Đã chọn '+chosen.size+' ảnh';
     clearChosen.disabled = chosen.size===0;
     useChosen.disabled = chosen.size===0;
+    const group=groups[selectedGroup];
+    nextGroup.hidden=!!group.ready||!groups.some(g=>g.ready);
+    usePack.hidden=!group.ready;
+    usePack.textContent='Nhập '+group.ready+' ảnh dùng được của gói';
     useViewed.disabled = !focused || !filtered().includes(focused) || heldArchiveKinds.has(focused.kind) || !focused.ready;
   }
   function render() {
-    const visible = filtered(), start = page*80;
+    const group=groups[selectedGroup],visible = filtered(), start = page*80;
+    groupHint.textContent=group.ready?
+      'Bấm nút Nhập để đưa ảnh vào Xưởng. Có thể tích từng ảnh nếu chỉ muốn nhập một phần.':
+      group.entries.length?'Gói chỉ có ảnh tham khảo, mặt nạ hoặc vật liệu nguồn. Chọn gói ở nhóm Có thể nhập.':
+        'Gói này không chứa ảnh mà Xưởng có thể nhập.';
     list.replaceChildren();
     for (const entry of visible.slice(start,start+80)) {
       const check = el('input',{type:'checkbox','aria-label':'Chọn '+entry.path,onchange:()=>{
@@ -205,6 +230,7 @@ export async function openArchivePicker(files, receive, publishResults) {
   }
 
   async function importEntries(entries) {
+    entries=entries.filter(e=>e&&importable(e));
     if (!entries.length || !box.open) return;
     // Large image sheets can expand to dozens of pieces each. Process sequentially within a pack.
     const reports = reportBase();
@@ -249,7 +275,13 @@ export async function openArchivePicker(files, receive, publishResults) {
       }
     }
     publishResults(reports);
-    box.close();
+    box.classList.remove('asset-import-ready');
+    if(reports.some(r=>r.pieces)){box.close();return;}
+    close.disabled=false;box.removeEventListener('cancel',preventCancel);
+    percent.textContent='Chưa thêm mảnh mới. Kiểm tra ảnh trùng, ảnh lỗi hoặc gói tham khảo trong phần Tài nguyên.';
+    box.append(btn('Quay lại danh sách gói',()=>{
+      box.replaceChildren(header,content,footer);box.classList.add('asset-import-ready');render();
+    }));
   }
   rebuildSizes();
   render();

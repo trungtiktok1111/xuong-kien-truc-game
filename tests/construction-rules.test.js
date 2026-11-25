@@ -61,3 +61,34 @@ test('solid props preserve the way through an already assembled gate',()=>{
   assert.match(propIssue({...prop,x:-1,y:-1},constructionContext(m)),/trên sàn/);
   assert.equal(propIssue({...prop,walk:true},constructionContext(m)),'');
 });
+
+import {builtWallFaces,mountGate,wallRuns} from '../src/wall2d.js';
+import {wallIssue} from '../src/constructionRules2d.js';
+
+const wall={id:'wall',t:'deco',placedProp:true,x:2,y:7,wallLine:{dx:10,dy:0,height:1.25}};
+
+test('a wall blocks first, a mounted gate cuts only the opening, deletion closes the opening',()=>{
+  const m=map(),candidate=arch(8,8.3);
+  assert.equal(mountGate(candidate,[]),null);
+  assert.equal(wallIssue(wall,constructionContext(m)),'');
+  assert.match(wallIssue({...wall,x:-1},constructionContext(m)),/sàn đỡ/);
+  assert.ok(zonesHit(decoZones([wall]),8,8,.28));
+  const gate=mountGate(candidate,[wall]);
+  assert.equal(gate.wallId,'wall');
+  assert.equal(gate.y+1,8);
+  m.ents=[wall];
+  assert.equal(gateIssue(gate,constructionContext(m)),'');
+  m.ents.push(gate);
+  assert.equal(gateIssue(gate,constructionContext(m)),'');
+  const runs=wallRuns(wall,m.ents);
+  assert.equal(runs.length,2);
+  assert.equal(runs[0][1][0],gate.x+1+Math.min(...gate.col.map(c=>c.x)));
+  assert.equal(builtWallFaces(m.ents,false).length,builtWallFaces([wall],false).length-2);
+  const colliders=decoZones(m.ents);
+  assert.ok(!zonesHit(colliders,8,8,.28));
+  assert.ok(zonesHit(colliders,5,8,.28));
+  assert.ok(zonesHit(decoZones([wall]),8,8,.28));
+  assert.match(gateIssue(gate,constructionContext(map())),/lệch khỏi tuyến/);
+  assert.match(gateIssue({...gate,id:'another'},constructionContext(m)),/quá gần/);
+  assert.equal(gateWalls(gate,false).length,0);
+});

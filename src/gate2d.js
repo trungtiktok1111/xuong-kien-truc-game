@@ -17,7 +17,7 @@ export function gateLayout(e){
 }
 
 export function gateWalls(e,angle,layout=gateLayout(e)){
-  if(!layout)return [];
+  if(!layout||e.wallId||e.wallGateBrush)return [];
   return layout.wings.flatMap(([a,b],side)=>{
     const n=Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])*2);
     const p=t=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
@@ -29,6 +29,7 @@ export function gateWalls(e,angle,layout=gateLayout(e)){
 }
 
 export function gateZones(e,layout=gateLayout(e)){
+  if(e.wallId||e.wallGateBrush)return [];
   return layout?.wings.map((pts,i)=>({id:'gate-'+e.id+'-wing-'+i,k:'line',pts,
     th:layout.thickness,closed:false,deco:e.id}))||[];
 }

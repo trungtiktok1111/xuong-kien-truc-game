@@ -1,4 +1,4 @@
-import {constructionContext,gateIssue} from './constructionRules2d.js';
+import {constructionContext,gateIssue,wallIssue} from './constructionRules2d.js';
 import {mapCollision} from './mapCollision.js';
 import {guideBox,appGuides} from './editorHelp.js';
 import {zRaster,decoZones} from './zones.js';
@@ -39,8 +39,14 @@ export function check2D(d0){
     out.push(E.some(e=>{const dx=e.placedProp?1:0,x=e.x+dx,y=e.y+dx;return x<0||y<0||x>=W||y>=H;})?R('F8','broken','Có đối tượng nằm ngoài bản đồ'):R('F8','pass','Mọi đối tượng nằm trong bản đồ'));
   }
   const gates=E.filter(e=>e.gateAssembly);
+  const walls=E.filter(e=>e.wallLine);
+  const context=(walls.length||gates.length)?constructionContext(d0):null;
+  if(walls.length){
+    const invalid=walls.filter(e=>wallIssue(e,{...context,objects:context.objects.filter(z=>!context.gates.some(g=>g.wallId===e.id&&g.id===z.deco)),gates:context.gates.filter(g=>g.wallId!==e.id)}));
+    out.push(invalid.length?R('WALL','broken',invalid.length+' đoạn tường cần chỉnh','Kiểm tra sàn đỡ và các vùng chặn dọc chân tường.'):
+      R('WALL','pass','Các tuyến tường có sàn đỡ'));
+  }
   if(gates.length){
-    const context=constructionContext(d0);
     const lost=gates.map(e=>[e,gateIssue(e,context)]).filter(([,issue])=>issue);
     out.push(lost.length?R('GATE','broken',lost.length+'/'+gates.length+' cổng cần chỉnh',
       lost.slice(0,5).map(([e,why])=>(e.name||'Cổng')+' ('+(e.x+1).toFixed(1)+', '+(e.y+1).toFixed(1)+') · '+why).join(' | ')):

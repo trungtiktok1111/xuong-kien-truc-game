@@ -32,11 +32,12 @@ Giữ va chạm sát chân vật và kiểm với kích thước nhân vật. Ch
 
 | Quy tắc | Hành vi trong Xưởng |
 |---|---|
-| Cổng vòm Đá Xoáy lắp với tường | Hai đoạn tường đá nối từ hai chân trụ về phía ngoài. Xem trước, chỉnh cỡ, đổi hướng, di chuyển và xóa theo cả cụm. |
-| Chân tường cần sàn đỡ | Kiểm tra dọc toàn bộ hai đoạn tường và lấy đường bao sàn làm chuẩn nếu màn có đường bao. Với bản đồ ô, kiểm tra lớp Nền. |
+| Tuyến tường dựng trước | Dùng **W** hoặc **Dựng tuyến tường**, bấm lần lượt các góc. Bấm lại điểm đầu để khép vòng. Enter hoặc Esc kết thúc tuyến. |
+| Cổng vòm Đá Xoáy lắp sau | Bấm **Lắp cổng vào tường** rồi rê lên đoạn tường đủ dài. Xưởng căn hai trụ theo tuyến và chỉ mở khoảng giữa hai trụ. Xóa cổng sẽ khép lỗ mở. |
+| Chân tường cần sàn đỡ | Kiểm tra dọc tuyến tường và lấy đường bao sàn làm chuẩn nếu màn có đường bao. Với bản đồ ô, kiểm tra lớp Nền. |
 | Cổng phải đi xuyên được | Khe giữa hai trụ rộng ít nhất 0,64 ô. Kiểm tra phần đường ở cả hai phía với bán kính 0,32 ô, bao gồm khoảng dự phòng cho bán kính nhân vật 0,28 ô. |
 | Giữ khoảng trống quanh lối đi | Vùng chặn đã có, kể cả vùng vẽ tay và vật cảnh, không được chồng vào chân tường hoặc hành lang xuyên cổng. Công trình tránh che điểm xuất phát, đích, cửa chuyển màn, NPC và rương. |
-| Bảo toàn dự án cũ | Cổng đã đặt giữ bố cục cũ. Có thể chọn vật cảnh đủ hai chân và bấm **Ghép tường vào cổng cũ**. Ảnh cổng nhận diện theo tên cần hồ sơ hai chân trụ trước khi đặt theo quy tắc này. |
+| Bảo toàn dự án cũ | Cổng đã đặt giữ bố cục cũ. Có thể chọn vật cảnh đủ hai chân và bấm **Lắp cổng cũ lên tường** khi ở gần tuyến. Ảnh cổng nhận diện theo tên cần hồ sơ hai chân trụ trước khi đặt theo quy tắc này. |
 | Vật thể rắn đặt riêng | Điểm chân cần nằm trên sàn. Không đặt đè lên điểm tương tác hoặc chắn hành lang xuyên qua cổng đã lắp. |
 | Kiểm tra sau khi đổi bố cục | Nút **Kiểm** kiểm lại sàn, tường và lối đi của các cổng đã lắp, kể cả sau khi sửa sàn hoặc dán vùng. Chế độ Chơi và bản xuất dùng cùng hình học chặn với trình sửa. |
 
