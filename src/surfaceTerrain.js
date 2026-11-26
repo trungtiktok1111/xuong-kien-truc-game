@@ -98,7 +98,7 @@ export function planSurface(w,h,spec,style={}){
   }
  }
  if(layout){
-  const shapes=layout.shapes.filter(({kind})=>K[kind]>=K.main&&K[kind]<=K.trail?spec.roads:isWet(K[kind])?waters.has(kind):spec.land);
+  const shapes=layout.shapes.filter(({kind})=>K[kind]>=K.main&&K[kind]<=K.trail||kind==='bridge'?spec.roads:isWet(K[kind])?waters.has(kind):spec.land);
   stamp(shapes,[0,0,w,h],0,false);
  }
  for(const patch of patches){

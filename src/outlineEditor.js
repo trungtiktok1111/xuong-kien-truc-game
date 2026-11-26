@@ -11,7 +11,7 @@ import {play3D} from './play3d.js';
 import {fitGate3D,inOutline} from './outline3d.js';
 import {combineOutline,ellipseLoop,fitShape,outlineShapes,rectangleLoop,cropOutline,moveOutline,corridorLoop,relatedLoops} from './outlineShapes.js';
 import {guideBox,appGuides} from './editorHelp.js';
-import {el,toast,yes,ask} from './util.js';
+import {el,toast,yes,ask,idbGet,idbSet} from './util.js';
 import {listOutlinePresets,loadOutlinePreset,saveOutlinePreset,deleteOutlinePreset} from './outlinePresets.js';
 
 export const MAX_MAP_SIDE=600;
@@ -24,6 +24,25 @@ export function validOutline(loops,w,h){
 }
 let outlineClipboard=null;
 const outlineZipFiles=new Map();
+const outlineZipIndexKey='outline-zip-library-index-v1';
+let outlineZipWrite=Promise.resolve();
+async function restoreOutlineZipLibrary(){
+ const ids=await idbGet(outlineZipIndexKey)||[];
+ for(const id of ids){
+  const entry=await idbGet('outline-zip-library-v1:'+id);
+  if(entry?.blob)outlineZipFiles.set(id,new File([entry.blob],entry.name,{type:entry.type||'application/zip',lastModified:entry.lastModified||Date.now()}));
+ }
+ return outlineZipFiles.size;
+}
+function persistOutlineZip(id,file){
+ outlineZipWrite=outlineZipWrite.catch(()=>{}).then(async()=>{
+  const entry={name:file.name,type:file.type,lastModified:file.lastModified,blob:file.slice(0,file.size,'application/zip')};
+  if(!await idbSet('outline-zip-library-v1:'+id,entry))throw Error('Không lưu được '+file.name+' trong thư viện ZIP của trình duyệt.');
+  const ids=await idbGet(outlineZipIndexKey)||[];
+  if(!ids.includes(id)&&!await idbSet(outlineZipIndexKey,[...ids,id]))throw Error('Không cập nhật được danh mục ZIP dùng chung.');
+ }).catch(error=>{throw error;});
+ return outlineZipWrite;
+}
 export function openOutlineEditor(editor,initialTab='shapes'){
  const is3D=editor.kind==='3d';
  const map=editor.map(),minSide=is3D?16:4,maxSide=is3D?320:MAX_MAP_SIDE;
@@ -770,6 +789,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  }
  const dressing=el('input',{type:'checkbox','aria-label':'Tự phối vật liệu'});
  const saved=map.cfg.outlineMaterials||{};
+ if(surface?.finish===false&&saved.layers)surface={...surface,finish:true};
  dressing.checked=!!saved.layers;
  const scaleOverrides=new Map(Object.entries(saved.scaleOverrides||{}));
  const scaleViaLabel={door:'cửa',wall:'tường',character:'nhân vật trong gói',manual:'tay',none:'chưa nhận ra'};
@@ -781,7 +801,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  floorScale.value=String(saved.floorScale||1);
  const matchJoints=el('input',{type:'checkbox','aria-label':'Tự khớp mạch',...(saved.matchJoints?{checked:''}:{})});
  const surfaceStyle=()=>({floorScale:+floorScale.value,matchJoints:matchJoints.checked});
- const catalogNote=el('p',{class:'hint',role:'status'});
+ const catalogNote=el('p',{class:'hint',role:'status'},'ZIP nhập ở đây được dùng chung cho nền, phủ nền, tường, vật dụng, nhà và nhân vật. Chọn gói trong từng lớp để duyệt tài nguyên; không cần nhập lại.');
  let stockSources=[],sequence=null,sequenceTimer;
  function stopSequence(){
   clearTimeout(sequenceTimer);
@@ -794,7 +814,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const addSource=B('Thêm gói',()=>{
    const id=source.value;
    if(!control.sources.includes(id))control.sources.push(id);
-   renderSources(control);dressing.checked=true;void refreshLayer(control,control.ids);
+   renderSources(control);dressing.checked=true;activateSurfaceMaterials();void refreshLayer(control,control.ids);
   });
   const sourceList=el('div',{class:'outline-source-list','aria-label':'Gói đã chọn cho '+label.toLowerCase()});
   const note=el('span',{class:'hint',role:'status'});
@@ -834,7 +854,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    testImage(control,i<0?(delta<0?control.items.length-1:0):(i+delta+control.items.length)%control.items.length);
   }
   source.onchange=()=>{
-   clearTrials();dressing.checked=true;control.limits=[24,24];
+   clearTrials();dressing.checked=true;activateSurfaceMaterials();control.limits=[24,24];
    renderSources(control);syncScaleInputs();
    void refreshLayer(control,control.ids);
   };
@@ -848,7 +868,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   search.oninput=()=>{control.limits=[24,24];renderGallery(control);};
   picker.ontoggle=()=>{if(picker.open)renderGallery(control);else gallery.replaceChildren();};
   control.element=el('div',{class:'outline-stage'},
-   el('strong',{},label),el('label',{},'Gói ZIP',source),addSource,sourceList,scaleLabel,selected,picker,
+   el('strong',{},label),el('label',{},'Gói ZIP · thư viện dùng chung',source),sourceList,scaleLabel,selected,picker,
    el('div',{class:'row'},prev,next,run),el('div',{class:'row'},clear,keep,restore),note);
   control.initialSource=saved.layers?.[key]?.sources?.[0]||saved.layers?.[key]?.source||(key==='character'?'builtin:character':defaultSource);
   control.initialSources=saved.layers?.[key]?.sources||[control.initialSource];
@@ -893,7 +913,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    if(!group.length)continue;
    const cards=group.slice(0,control.limits[index]).map(item=>{
     const card=B('',()=>{
-     clearTrials();dressing.checked=true;
+     clearTrials();dressing.checked=true;activateSurfaceMaterials();
      const at=control.ids.indexOf(item.id);
      if(at<0){control.ids.push(item.id);if(!control.sources.includes(item.source)){control.sources.push(item.source);renderSources(control);}}
      else control.ids.splice(at,1);
@@ -954,7 +974,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   syncScaleInputs();
  }
  function testImage(control,index){
-  dressing.checked=true;control.trial=control.items[index]?.id||null;
+  dressing.checked=true;activateSurfaceMaterials();control.trial=control.items[index]?.id||null;
   syncLayer(control);queueLivePreview(true);
  }
  function refreshSources(control,wanted){
@@ -1034,12 +1054,18 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   renderGallery(control);syncLayer(control);queueLivePreview(true);
  }
  zipFiles.onchange=()=>{
+  const imported=[];
   for(const file of zipFiles.files){
    const id='zip:'+file.name+'|'+file.size+'|'+file.lastModified;
    outlineZipFiles.set(id,file);
+   imported.push(persistOutlineZip(id,file));
   }
   zipFiles.value='';
-  catalogNote.textContent=outlineZipFiles.size+' ZIP đã thêm. Chọn gói trong lớp cần ráp.';
+  catalogNote.textContent=outlineZipFiles.size+' ZIP trong thư viện dùng chung; các lớp đều có thể chọn.';
+  Promise.allSettled(imported).then(results=>{
+   const failed=results.filter(result=>result.status==='rejected');
+   if(failed.length)catalogNote.textContent='Không lưu được '+failed.length+' ZIP: '+failed.map(result=>result.reason?.message||'lỗi bộ nhớ').join(' ');
+  });
   for(const control of layerControls){
    const source=control.source.value;
    refreshSources(control,source);
@@ -1048,7 +1074,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   }
  };
  for(const control of [floorScale,matchJoints])control.onchange=()=>{
-  clearTrials();dressing.checked=true;
+  clearTrials();dressing.checked=true;activateSurfaceMaterials();
   for(const row of layerControls){row.catalogs.clear();void refreshLayer(row,row.ids);}
  };
  for(const control of [dressing,front,rear,thickness,collision])control.addEventListener('change',()=>{
@@ -1067,9 +1093,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    const assets=ids.map(token=>splitAssetToken(token)).filter(Boolean);
    return [key,{source:source.value,sources:[...new Set([...sources,...assets.map(asset=>asset.source)])],assets}];
   }));
-  const sources=new Set(Object.values(layers).flatMap(layer=>layer.sources));
   return {layers,...surfaceStyle(),scaleOverrides:Object.fromEntries(scaleOverrides),
-   zips:[...outlineZipFiles].filter(([id])=>sources.has(id)),
    wall:{front:+front.value,rear:+rear.value,thickness:+thickness.value,collision:collision.checked}};
  };
  let presetList=[],openPreset=null;
@@ -1087,7 +1111,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const data=await loadOutlinePreset(id);
   if(!data){toast('Không mở được bộ đã lưu, có thể đã bị xoá.');await refreshPresetList();return;}
   clearTrials();
-  for(const [id,file] of data.zips||[])outlineZipFiles.set(id,file);
+  for(const [id,file] of data.zips||[]){outlineZipFiles.set(id,file);void persistOutlineZip(id,file);}
   if(data.wall){
    front.value=data.wall.front;rear.value=data.wall.rear;thickness.value=data.wall.thickness;
    collision.checked=data.wall.collision;
@@ -1163,6 +1187,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const surfaceBrush=el('select',{'aria-label':'Loại vùng cần ráp'},...surfaceTypes
   .map(([key,label])=>el('option',{value:key},label)));
  function changeSurface(change){if(!surface)return;record();surface={...surface,...change};draw();}
+ function activateSurfaceMaterials(){if(surface?.finish===false)changeSurface({finish:true});}
  const surfaceMode=B('Phủ kín hình thoi',()=>{
   record();armedSurfacePiece=null;previewAt=null;
   if(surface){
@@ -1268,19 +1293,23 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   livePanel,materialsPanel,editShape,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons,actionStatus);
  ov.append(box);document.body.append(ov);
  if(!is3D){
- for(const row of layerControls){
-  const initSources=row.initialSources?.length?row.initialSources:[row.initialSource];
-  row.sources=[];
-  refreshSources(row,row.initialSource);
-  if(Array.isArray(row.initialAsset)&&row.initialAsset.some(asset=>typeof asset==='object')){
-   const bySource=new Map();for(const asset of row.initialAsset){if(asset?.source&&asset?.id){if(!bySource.has(asset.source))bySource.set(asset.source,[]);bySource.get(asset.source).push(asset.id);}}
-   void (async()=>{for(const sourceId of initSources)await selectLayerSource(row,sourceId,bySource.get(sourceId)||[]);for(const [sourceId,ids] of bySource)if(!initSources.includes(sourceId))await selectLayerSource(row,sourceId,ids);})();
-  }else{
-   const legacyAssets=(row.initialAsset||[]).map(id=>({source:row.initialSource,id}));
-   const bySource=new Map();for(const asset of legacyAssets){if(!bySource.has(asset.source))bySource.set(asset.source,[]);bySource.get(asset.source).push(asset.id);}
-   void (async()=>{for(const sourceId of initSources)await selectLayerSource(row,sourceId,row.initialAsset===true&&sourceId===row.initialSource?true:(bySource.get(sourceId)||[]));})();
+ void (async()=>{
+  await restoreOutlineZipLibrary();
+  catalogNote.textContent=outlineZipFiles.size+' ZIP trong thư viện dùng chung; các lớp đều có thể chọn.';
+  for(const row of layerControls){
+   const initSources=row.initialSources?.length?row.initialSources:[row.initialSource];
+   row.sources=[];refreshSources(row,row.initialSource);
+   if(Array.isArray(row.initialAsset)&&row.initialAsset.some(asset=>typeof asset==='object')){
+    const bySource=new Map();for(const asset of row.initialAsset){if(asset?.source&&asset?.id){if(!bySource.has(asset.source))bySource.set(asset.source,[]);bySource.get(asset.source).push(asset.id);}}
+    for(const sourceId of initSources)await selectLayerSource(row,sourceId,bySource.get(sourceId)||[]);
+    for(const [sourceId,ids] of bySource)if(!initSources.includes(sourceId))await selectLayerSource(row,sourceId,ids);
+   }else{
+    const legacyAssets=(row.initialAsset||[]).map(id=>({source:row.initialSource,id}));
+    const bySource=new Map();for(const asset of legacyAssets){if(!bySource.has(asset.source))bySource.set(asset.source,[]);bySource.get(asset.source).push(asset.id);}
+    for(const sourceId of initSources)await selectLayerSource(row,sourceId,row.initialAsset===true&&sourceId===row.initialSource?true:(bySource.get(sourceId)||[]));
+   }
   }
-  }
+ })().catch(error=>{catalogNote.textContent=error.message;});
   void editor.outlinePackSources().then(packs=>{
    if(!ov.isConnected)return;
    stockSources=packs;

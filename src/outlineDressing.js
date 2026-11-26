@@ -13,6 +13,13 @@ export const kenneyOutlinePacks=[
 
 const steps=[[1,0],[-1,0],[0,1],[0,-1]];
 const isMarker=e=>['start','goal','chest','npc','enemy','door'].includes(e.t)||isMapLink(e);
+function surfaceUse(art){
+  const name=[art.label,art.name,art.id,art.assetId,art.source].filter(Boolean).join(' ').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[_./\\-]+/g,' ');
+  if(/(boat|ship|vessel|barge|canoe|kayak|raft|sampan|thuyen|tau|ghe|xuong)(\b|$)/.test(name))return 'water';
+  if(/(dock|pier|jetty|wharf|cau ben|ben tau|ben thuyen)(\b|$)/.test(name))return 'shore';
+  return 'land';
+}
 
 export function dressOutline(map,materials,value,placementZones=[],arrivals=[],stages=null,preserve=new Set(),mixSelected=false){
   const stage=name=>stages?stages[name]||0:1;
@@ -163,6 +170,13 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
   for(const i of candidates){
     if(reservations.length>=budget)break;
     const x=i%w+.5,y=Math.floor(i/w)+.5,art=variants[reservations.length%variants.length],r=art.radius;
+    const use=surface&&surfaceUse(art);
+    if(use==='water')continue;
+    if(use==='shore'){
+      let besideWater=false;
+      around(i,j=>{if([ground.sea,ground.river,ground.canal,ground.stream,ground.lake,ground.pond].includes(surface[j]))besideWater=true;});
+      if(!besideWater)continue;
+    }
     if(!walk.free(x,y,r+.35)||zonesHit(addedZones,x,y,r+.35))continue;
     if((stages&&((i*7)%13+stage('props'))%3===0)||markers.some(([a,b])=>Math.hypot(a-x,b-y)<2.5)||
       reservations.some(([a,b])=>Math.hypot(a-x,b-y)<3))continue;
@@ -175,6 +189,26 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
     ents.push(entity);addedZones.push(...decoZones([entity]));coverage.add(art.source);
     placedProps.add(art);
     reservations.push([x,y]);
+  }
+  if(surface&&variants.some(art=>surfaceUse(art)==='water')){
+    const waterProps=variants.filter(art=>surfaceUse(art)==='water');
+    const wet=new Set([ground.sea,ground.river,ground.canal,ground.stream,ground.lake,ground.pond]);
+    let placed=0;
+    const waterBudget=Math.min(8,Math.floor(mask.reduce((count,v)=>count+v,0)/450));
+    for(let i=0;i<n&&placed<waterBudget;i++){
+      if(!mask[i]||!wet.has(surface[i]))continue;
+      const x=i%w+.5,y=Math.floor(i/w)+.5,art=waterProps[placed%waterProps.length],r=Math.min(.75,art.radius||.4);
+      const edge=Math.ceil(r+.5);
+      let fits=true;
+      for(let dy=-edge;dy<=edge&&fits;dy++)for(let dx=-edge;dx<=edge;dx++){
+        const px=Math.floor(y+dy)*w+Math.floor(x+dx);
+        if(px<0||px>=n||!mask[px]||!wet.has(surface[px])){fits=false;break;}
+      }
+      if(!fits||markers.some(([a,b])=>Math.hypot(a-x,b-y)<2.5)||reservations.some(([a,b])=>Math.hypot(a-x,b-y)<3))continue;
+      const entity=art.create(x,y,'outline-water-prop-'+i);
+      entity.walk=false;entity.outlineAutoProp=true;entity.surfaceWaterProp=true;
+      ents.push(entity);coverage.add(art.source);placedProps.add(art);reservations.push([x,y]);placed++;
+    }
   }
   return {sources:[...coverage],rooms:room+1,props:reservations.length,propKinds:placedProps.size,overlays:overlayCount,houses:houseCount};
 }
