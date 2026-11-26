@@ -1,4 +1,5 @@
 import {referencePlan,farmBarn,cityBuilding,cityBuildings} from './stockScenes.js';
+import {REFERENCE_HEIGHT} from './outlineAnchors.js';
 import {mapCollision} from './mapCollision.js';
 import {decoZones,zonesHit} from './zones.js';
 import {unzipSync} from 'fflate';
@@ -255,6 +256,13 @@ export async function reconstructPack(packs,{sample=false}={}){
 }
 
 const ignored=/preview|sample|spritesheet|tilesheet|kenneynl|(?:^|\/)(?:angle|characters?|masks?|examples?)\/|bang-mau|canh-rap|changelog|logo|isoguide|(?:^|\/)textures\/(?:tree|bush)/i;
+// Not anchored with lookbehind (unsupported by this codebase's regex usage elsewhere):
+// the boundary alternation also accepts a preceding "/" so a keyword after a folder
+// separator (e.g. "sprites/nhan-vat-nu.png") still counts as a character name.
+export const characterName=/(?:^|\/)characters?\/|(?:^|[\/_-])(?:hero|npc|person|human|nhan-?vat|nguoi)(?:[_-]|\.[^.]+$)/i;
+export function catalogCharacters(pack){
+ return pack.paths.filter(p=>isImage(p)&&characterName.test(p)).map(path=>({pack,path,label:stem(path),layer:2}));
+}
 const groundName=/^(?:base|square)[_-](?:grass|dirt|stone|wood|snow)|(?:^|\/)(?:nen[_-]|ground|floor|grass|path|road|dirt|terrain|landscape|beach|snow|water|river|duong|boong)/i;
 const structure=/roof|mai[_-]|wall|doorway|tuong|vach|fence|lan-can|chimney|buom/;
 function catalog(pack,{outline=false}={}){
@@ -382,7 +390,7 @@ async function outlineWallMaterial(result,pack,path,wood=false){
 // Profiles may supply exact roles for any ZIP. Otherwise use recognized floor
 // tiles and small props from the existing archive catalogue.
 export async function outlinePackMaterials(pack,profile,style){
-  const result={sheets:[],floors:[],overlays:[],props:[],houses:[],walls:[],source:pack.name};
+  const result={sheets:[],floors:[],overlays:[],props:[],houses:[],walls:[],characters:[],source:pack.name};
   const file=pack.paths.find(path=>/(^|\/)outline-materials\.json$/.test(path));
   const settings=file?readJSON(pack.files,file):null;
   const folder=file?file.slice(0,file.lastIndexOf('/')+1):'';
@@ -465,6 +473,8 @@ export async function outlinePackMaterials(pack,profile,style){
     props=assets.filter(a=>a.layer===2&&!overlays.includes(a)&&(a.native||
       /^(?:barrel|crate|chest|chair|bookstand|lamp|statue|ruong|thung|chum|den|table|bench|hay|sack|plant|tree|bush)/i.test(stem(a.path))));
   }
+  const characters=settings?(settings.characters||[]).map(row=>named(row,2)):catalogCharacters(pack);
+  const doors=settings?(settings.doors||[]).map(row=>named(row,2)):[];
   for(const a of floors)await attempt(a,async()=>{
     const sid=await groundTile(result,a,style);
     result.floors.push({sid,id:a.path,label:a.label,source:pack.name});
@@ -479,6 +489,12 @@ export async function outlinePackMaterials(pack,profile,style){
     const radius=Math.max(.22,Math.min(.46,art.w/tileWidth*.55));
     const piece=addSprite(result,{...a,tileWidth,collision:{shape:'circle',radius}},art);
     result.props.push({sid:piece.sid,id:a.path,label:a.label,source:pack.name,radius,create:(x,y,id)=>({...entity(piece,x,y,0,id),outlineAutoProp:true})});
+  });
+  for(const a of characters)await attempt(a,async()=>{
+    const art=await sprite(a);
+    const tileWidth=art.h/REFERENCE_HEIGHT.character;
+    const piece=addSprite(result,{...a,tileWidth,collision:null},art);
+    result.characters.push({sid:piece.sid,id:a.path,label:a.label,source:pack.name,create:(x,y,id)=>entity(piece,x,y,0,id)});
   });
   // Only assemble structural parts when a complete calibrated kit is present.
   const farmFloor=pack.paths.find(path=>/(^|\/)isometric\/planks_e\.png$/.test(path));
