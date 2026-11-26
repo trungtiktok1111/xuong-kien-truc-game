@@ -43,6 +43,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const gateDest=el('select',{'aria-label':'Màn đích của cổng 3D'},el('option',{value:''},'Không chuyển màn'),...(editor.sceneChoices?.()||[]).map(m=>el('option',{value:m.id},m.name)));
  const originLevel=outlineLevels.find(level=>level.id===map.cfg.outlineTemplate)||
   outlineLevels.find(level=>level.sample&&level.w===map.w&&level.h===map.h&&JSON.stringify(level.loops)===JSON.stringify(original));
+ const undergroundLevels=outlineLevels.filter(level=>!['Thôn trang','Thành trấn','Bang phái','Bến nước','Quan ải','Vườn và đền'].includes(level.group));
  const levelTiles=new Map();
  let applyButton,clearButton,restoreLevelButton,createLabel,tryLabel,commitBusy=false;
  const ov=el('section',{class:'outline-overlay',style:'position:fixed;inset:0;z-index:180;background:#101820f5;overflow:auto;display:grid;place-items:center;padding:16px;touch-action:pan-y'});
@@ -599,12 +600,12 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const levelHint=el('p',{class:'hint'},'Bấm một màn để xem bố cục, chơi thử hoặc tạo bản sao.');
  const levelCards=el('div',{class:'outline-levels'});
  const levelGroup=el('select',{'aria-label':'Nhóm màn mẫu'},
-  ...['Tất cả',...new Set(outlineLevels.map(level=>level.group))].map(v=>el('option',{value:v},v)));
+  ...['Tất cả',...new Set(undergroundLevels.map(level=>level.group))].map(v=>el('option',{value:v},v)));
  levelGroup.onchange=()=>{
-  for(const level of outlineLevels)levelTiles.get(level.id).hidden=levelGroup.value!=='Tất cả'&&level.group!==levelGroup.value;
+  for(const level of undergroundLevels)levelTiles.get(level.id).hidden=levelGroup.value!=='Tất cả'&&level.group!==levelGroup.value;
   levelCards.scrollTop=0;
  };
- for(const level of outlineLevels){
+ for(const level of undergroundLevels){
   const icon=el('canvas',{width:92,height:58,'aria-hidden':'true'}),ctx=icon.getContext('2d');
   const z=Math.min(86/level.w,52/level.h),x=(92-level.w*z)/2,y=(58-level.h*z)/2;
   const project=([a,b])=>[x+a*z,y+b*z];
@@ -692,7 +693,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   levelPanel.hidden=!!surface||!levels;shapePanel.hidden=!!surface||levels;
   outdoorPanel.hidden=!surface||!levels;piecePanel.hidden=!surface||levels;
   shapesTab.textContent=surface?'Mảnh mặt đất · '+surfacePieces.length:'Mảnh ghép';
-  levelsTab.textContent='Màn mẫu · '+(surface?surfaceLevels.length:outlineLevels.length);
+  levelsTab.textContent='Màn mẫu · '+(surface?surfaceLevels.length:undergroundLevels.length);
   levelsTab.setAttribute('aria-pressed',String(levels));shapesTab.setAttribute('aria-pressed',String(!levels));
  }
  const library=el('aside',{class:'outline-library'},el('div',{class:'row'},shapesTab,levelsTab),shapePanel,levelPanel,piecePanel,outdoorPanel);
