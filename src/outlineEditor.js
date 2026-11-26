@@ -1382,12 +1382,24 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   ctx.save();ctx.strokeStyle='#ffda43cc';ctx.setLineDash([5,5]);
   for(const [dx,dy] of [[1,0],[0,1],[2,1],[2,-1]])guide(...(guidePointer||center),dx,dy);
   if(gesture?.parts){
-   ctx.strokeStyle='#ff4848ee';
    const bounds=gesture.parts.flatMap(propFootprint).map(zBounds);
    const [x0,y0,x1,y1]=[Math.min(...bounds.map(b=>b[0])),Math.min(...bounds.map(b=>b[1])),
     Math.max(...bounds.map(b=>b[2])),Math.max(...bounds.map(b=>b[3]))];
-   for(const x of [x0,x1])guide(...project(x,y0),-2,1);
-   for(const y of [y0,y1])guide(...project(x0,y),2,1);
+   const movingIds=new Set(gesture.parts.map(part=>part.id));
+   const targets=liveView.M.ents.filter(other=>canArrangeProp(other)&&!movingIds.has(other.id))
+    .flatMap(propFootprint).map(zBounds);
+   // Keep the matching tolerance in map units so the result is independent of zoom.
+   const tolerance=.025;
+   const matches=(axis,value)=>targets.some(b=>[b[axis],b[axis+2]].some(edge=>Math.abs(edge-value)<=tolerance))||
+    liveProjection.wallEdges.some(([a,b])=>Math.abs(a[axis]-b[axis])<1e-6&&Math.abs(a[axis]-value)<=tolerance);
+   for(const x of [x0,x1]){
+    ctx.strokeStyle=matches(0,x)?'#35e96b':'#ff4848ee';
+    guide(...project(x,y0),-2,1);
+   }
+   for(const y of [y0,y1]){
+    ctx.strokeStyle=matches(1,y)?'#35e96b':'#ff4848ee';
+    guide(...project(x0,y),2,1);
+   }
   }
   ctx.restore();
   if(!entity)return;

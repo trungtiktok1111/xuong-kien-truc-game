@@ -1,5 +1,5 @@
 import {drawSurfaceTerrain,surfaceTerrainTile} from './surfaceContours.js';
-import {clipOutline,outline2D,outlineWallImage,stoneBackdrop,drawFloorSlab,stoneWall} from './outline2d.js';
+import {clipOutline,outline2D,outlineWallImage,stoneBackdrop,drawFloorSlab,stoneWall,wallSurface} from './outline2d.js';
 import {slab,tile192,mirF} from './isoslab.js';
 import {drawPlacedProp,placedPropFrame} from './proj.js';
 import {builtWallFaces} from './wall2d.js';
@@ -45,8 +45,8 @@ export function drawOutlineDraft(canvas,{M:map,sheets},camera={zoom:1,x:0,y:0}){
   }
  }
  cx.restore();
- const items=[...geo.walls,...builtWallFaces(ents,false),...ents.flatMap(e=>gateWalls(e,false))]
-  .map(wall=>({depth:wall.k,wall}));
+ const walls=[...geo.walls,...builtWallFaces(ents,false),...ents.flatMap(e=>gateWalls(e,false))];
+ const items=walls.map(wall=>({depth:wall.k,wall}));
  const roofs=[];
  const spawn=ents.find(e=>e.t==='start');
  if(spawn&&map.cfg.outlineHero){
@@ -86,7 +86,11 @@ export function drawOutlineDraft(canvas,{M:map,sheets},camera={zoom:1,x:0,y:0}){
      px+(i%w-group.xc)*side,py+(Math.floor(i/w)-group.yb)*side,side,side);
   }
  }
- return {project,hits,unproject:(px,py)=>{
+ const wallEdges=walls.flatMap(wall=>{
+  const shape=wallSurface(wall,(x,y)=>[x,y],1,geo);
+  return shape?.high>0?[shape.front,shape.back]:[];
+ });
+ return {project,hits,wallEdges,unproject:(px,py)=>{
   const [ox,oy]=project(0,0),dx=(px-ox)/s,dy=(py-oy)/s;
   return [dy+dx/2,dy-dx/2];
  }};
