@@ -2473,6 +2473,7 @@ export function init2D(root,A){
     if(stockArchiveIndex)return stockArchiveIndex;
     if(!stockArchiveRequest){
       stockArchiveRequest=fetch('packs/index.json').then(response=>{
+        if(response.status===404)return [];
         if(!response.ok)throw Error('Không tải được danh sách gói.');
         return response.json();
       }).then(index=>stockArchiveIndex=index).finally(()=>{stockArchiveRequest=null;});
@@ -3378,7 +3379,9 @@ export function init2D(root,A){
   const outlineRoles={floor:'floors',overlay:'overlays',wall:'walls',props:'props',house:'houses',character:'characters'};
   async function outlineLayerPack(source,files,style){
     if(source==='builtin:character'){
-      const sh=sheets[2],idx=88,step=sh.tw+(sh.margin||0);
+      const sample=builtinOutlineSample(),{sid,idx}=sample.cfg.hero;
+      const sh={...sample.sheets[sid]};await loadSheet(sh);
+      const step=sh.tw+(sh.margin||0);
       const canvas=Object.assign(document.createElement('canvas'),{width:sh.tw,height:sh.tw});
       canvas.getContext('2d').drawImage(sh.img,(idx%sh.cols)*step,Math.floor(idx/sh.cols)*step,sh.tw,sh.tw,0,0,sh.tw,sh.tw);
       const image=new Uint8Array(await (await new Promise(resolve=>canvas.toBlob(resolve))).arrayBuffer());
