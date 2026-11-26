@@ -26,12 +26,14 @@ export function validOutline(loops,w,h){
 }
 let outlineClipboard=null;
 const outlineZipFiles=new Map();
+const retainedOutlineZips=new Set();
 const outlineZipIndexKey='outline-zip-library-index-v1';
 let outlineZipWrite=Promise.resolve();
 async function restoreOutlineZipLibrary(){
  const ids=await idbGet(outlineZipIndexKey)||[];
  for(const id of ids){
   const entry=await idbGet('outline-zip-library-v1:'+id);
+  if(entry?.retained)retainedOutlineZips.add(id);
   if(entry?.blob)outlineZipFiles.set(id,new File([entry.blob],entry.name,{type:entry.type||'application/zip',lastModified:entry.lastModified||Date.now()}));
  }
  return outlineZipFiles.size;
@@ -45,16 +47,24 @@ function persistOutlineZip(id,file){
  }).catch(error=>{throw error;});
  return outlineZipWrite;
 }
-function removeOutlineZips(ids){
+function removeOutlineZips(ids,used){
  const operation=outlineZipWrite.catch(()=>{}).then(async()=>{
-  const removed=[];
+  const removed=[],purged=[];
   for(const id of ids){
-   if(await idbDel('outline-zip-library-v1:'+id)){
-    outlineZipFiles.delete(id);removed.push(id);
+   const key='outline-zip-library-v1:'+id;
+   if(used.has(id)){
+    const entry=await idbGet(key);
+    const file=outlineZipFiles.get(id);
+    const retained=entry||{name:file.name,type:file.type,lastModified:file.lastModified,blob:file.slice()};
+    if(await idbSet(key,{...retained,retained:true})){
+     retainedOutlineZips.add(id);removed.push(id);
+    }
+   }else if(await idbDel(key)){
+    outlineZipFiles.delete(id);removed.push(id);purged.push(id);
    }
   }
   const saved=await idbGet(outlineZipIndexKey)||[];
-  const indexSaved=await idbSet(outlineZipIndexKey,saved.filter(id=>!removed.includes(id)));
+  const indexSaved=await idbSet(outlineZipIndexKey,[...new Set([...saved.filter(id=>!purged.includes(id)),...removed.filter(id=>retainedOutlineZips.has(id))])]);
   return {removed,indexSaved};
  });
  outlineZipWrite=operation;
@@ -260,8 +270,35 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    }
    aim.textContent=(gatePreview?'Bám tường':location)+' · X '+at[0].toFixed(2)+' · '+(is3D?'Z ':'Y ')+at[1].toFixed(2)+link;
    const [x,y]=at;
-   c.save();c.strokeStyle='#e8d69e99';c.lineWidth=1;c.setLineDash([3,5]);c.beginPath();
-   c.moveTo(xp(x),yp(0));c.lineTo(xp(x),yp(H));c.moveTo(xp(0),yp(y));c.lineTo(xp(W),yp(y));c.stroke();c.restore();
+   const tolerance=Math.min(.35,6/s);
+   function bisects(axis){
+    const along=1-axis;
+    return loops.some(loop=>{
+     const cuts=[];
+     for(let i=0;i<loop.length;i++){
+      const a=loop[i],b=loop[(i+1)%loop.length];
+      if((a[along]>at[along])===(b[along]>at[along]))continue;
+      const fraction=(at[along]-a[along])/(b[along]-a[along]);
+      cuts.push(a[axis]+fraction*(b[axis]-a[axis]));
+     }
+     cuts.sort((a,b)=>a-b);
+     for(let i=0;i+1<cuts.length;i+=2){
+      const left=cuts[i],right=cuts[i+1];
+      if(at[axis]>=left&&at[axis]<=right&&Math.abs(at[axis]-(left+right)/2)<=tolerance)return true;
+     }
+     return false;
+    });
+   }
+   c.save();
+   for(const axis of [0,1]){
+    const centered=bisects(axis);
+    c.strokeStyle=centered?'#21dc65':'#e8d69e99';c.lineWidth=centered?2:1;
+    c.setLineDash([3,5]);c.beginPath();
+    if(axis===0){c.moveTo(xp(x),yp(0));c.lineTo(xp(x),yp(H));}
+    else{c.moveTo(xp(0),yp(y));c.lineTo(xp(W),yp(y));}
+    c.stroke();
+   }
+   c.restore();
   }
   const op=operation.selectedOptions[0].textContent;
   status.textContent=surface?(surfaceLevelById.get(surface.layout)?.name||'Mặt đất')+' · Nước và vách đá chặn đi. Đường qua sông, kênh, suối, hồ hoặc ao được ráp cầu.':placement?(placement.name+' · '+angleValue()+'° · '+
@@ -1030,7 +1067,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const groups=[
    ['Bộ tích hợp',[...(control.key==='character'?[['character','Nhân vật của Xưởng']]:[]),...builtins].map(([id,label])=>['builtin:'+id,label])],
    ['Kho gói của Xưởng',stockSources.map(pack=>['stock:'+pack.file,pack.name])],
-   ['ZIP đã thêm',[...outlineZipFiles].map(([id,file])=>[id,file.name])]
+   ['ZIP đã thêm',[...outlineZipFiles].filter(([id])=>!retainedOutlineZips.has(id)).map(([id,file])=>[id,file.name])],
+   ['ZIP giữ cho thiết kế',[...outlineZipFiles].filter(([id])=>retainedOutlineZips.has(id)).map(([id,file])=>[id,file.name])]
   ];
   control.source.replaceChildren(...groups.filter(([,options])=>options.length).map(([label,options])=>
    el('optgroup',{label},...options.map(([value,title])=>el('option',{value},title)))));
@@ -1104,21 +1142,22 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  }
  const zipPicker=el('select',{'aria-label':'Gói ZIP cần xóa'});
  const deleteZip=B('Xóa gói đã chọn',()=>deleteZipSelection([zipPicker.value]));
- const deleteAllZips=B('Xóa tất cả ZIP đã nhập',()=>deleteZipSelection([...outlineZipFiles.keys()]));
+ const deleteAllZips=B('Xóa tất cả ZIP đã nhập',()=>deleteZipSelection([...outlineZipFiles.keys()].filter(id=>!retainedOutlineZips.has(id))));
  let managingZips=false;
  function refreshZipManager(){
   const selected=zipPicker.value;
   const mb=bytes=>new Intl.NumberFormat('vi-VN',{maximumFractionDigits:2}).format(bytes/1048576)+' MB';
-  const files=[...outlineZipFiles];
+  const files=[...outlineZipFiles].filter(([id])=>!retainedOutlineZips.has(id));
   zipPicker.replaceChildren(el('option',{value:''},'Chọn gói ZIP'),
    ...files.map(([id,file])=>el('option',{value:id},file.name+' · '+mb(file.size))));
   zipPicker.value=outlineZipFiles.has(selected)?selected:'';
-  catalogNote.textContent=files.length+' ZIP đã nhập · '+mb(files.reduce((sum,[,file])=>sum+file.size,0));
+  const retained=[...retainedOutlineZips].reduce((sum,id)=>sum+(outlineZipFiles.get(id)?.size||0),0);
+  catalogNote.textContent=files.length+' ZIP đã nhập · '+mb(files.reduce((sum,[,file])=>sum+file.size,0))+(retained?' · Giữ cho thiết kế: '+mb(retained):'');
   syncZipButtons();
  }
  function syncZipButtons(){
   deleteZip.disabled=managingZips||!zipPicker.value;
-  deleteAllZips.disabled=managingZips||!outlineZipFiles.size;
+  deleteAllZips.disabled=managingZips||![...outlineZipFiles.keys()].some(id=>!retainedOutlineZips.has(id));
   zipFiles.disabled=managingZips;
   openPresetButton.disabled=managingZips;
  }
@@ -1129,16 +1168,21 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   managingZips=true;syncZipButtons();
   try{
    const label=ids.length===1?outlineZipFiles.get(ids[0]).name:ids.length+' gói ZIP';
-   if(!await yes('Xóa '+label+' khỏi kho Đường Bao trên trình duyệt này? Các lớp dùng gói đó sẽ bỏ lựa chọn ảnh từ gói đã xóa.'))return;
-   const {removed,indexSaved}=await removeOutlineZips(ids);
-   const deleted=new Set(removed);
-   clearTrials();
+   if(!await yes('Xóa '+label+' khỏi kho Đường Bao? Gói có ảnh đang dùng sẽ được giữ riêng cho thiết kế.'))return;
+   const used=new Set(editor.outlineUsedSources?.()||[]);
+   for(const row of layerControls)for(const token of row.ids)used.add(splitAssetToken(token)?.source);
+   for(const preset of await listOutlinePresets()){
+    const data=await loadOutlinePreset(preset.id);
+    for(const layer of Object.values(data?.layers||{}))
+     for(const asset of layer.assets||[])used.add(typeof asset==='string'?layer.source:asset.source||layer.source);
+   }
+   const {removed,indexSaved}=await removeOutlineZips(ids,used);
+   const purged=new Set(removed.filter(id=>!retainedOutlineZips.has(id)));
    for(const row of layerControls){
     const previous=row.source.value;
-    row.sources=row.sources.filter(id=>!deleted.has(id));
-    row.ids=row.ids.filter(token=>!deleted.has(splitAssetToken(token)?.source));
-    for(const id of deleted)row.catalogs.delete(id);
-    if(deleted.has(previous)){
+    for(const id of purged)row.catalogs.delete(id);
+    row.sources=row.sources.filter(id=>!purged.has(id));
+    if(purged.has(previous)){
      refreshSources(row,row.sources[0]||(row.key==='character'?'builtin:character':defaultSource));
      void refreshLayer(row,row.ids);
     }else{
@@ -1154,7 +1198,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const imported=[];
   for(const file of zipFiles.files){
    const id='zip:'+file.name+'|'+file.size+'|'+file.lastModified;
-   outlineZipFiles.set(id,file);
+   retainedOutlineZips.delete(id);outlineZipFiles.set(id,file);
    imported.push(persistOutlineZip(id,file));
   }
   zipFiles.value='';

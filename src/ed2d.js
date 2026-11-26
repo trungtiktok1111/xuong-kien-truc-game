@@ -3766,5 +3766,7 @@ export function init2D(root,A){
     toast('Đã tạo '+fresh.name+(source?' và nối hai chiều với '+source.name:'.')+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
   }
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
-  return {ready,connectMap,mapConnectionBox,outlineConnectionTargets,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
+    .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
+  return {ready,connectMap,mapConnectionBox,outlineConnectionTargets,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
 }
