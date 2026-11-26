@@ -124,14 +124,15 @@ export function stoneWall(cx,wall,project,unit,w,h,geometry,texture=null){
   // faces and corner caps so assets do not become decoration on a backing wall.
   const length=Math.hypot(wall.b[0]-wall.a[0],wall.b[1]-wall.a[1]);
   const phase=wall.phase||0,end=phase+length;
-  // Treat the selected sprite as a calibrated construction block. Height follows the
-  // wall setting; width follows the same anchor-derived aspect ratio and adjacent
-  // blocks overlap slightly so curves and corners cannot expose gaps.
+  // Calibrate each construction block to the wall height and anchor-derived width.
+  // Use one shared pitch to keep the sequence regular, and modestly widen narrow
+  // pieces to close seams. Sprites stay upright: rotating the image tilts its axis.
   const targetHigh=high/unit,widths=modules.map(module=>{
    const body=Math.max(.05,module.bodyHeight||1),scale=targetHigh/body;
    return Math.max(.08,body*(module.aspect||.55)*scale,(wall.thickness??WALL_THICKNESS)*1.1);
   });
-  const pitch=Math.max(.08,widths.reduce((sum,width)=>sum+width,0)/widths.length*.82);
+  const sortedWidths=[...widths].sort((a,b)=>a-b),blockWidth=sortedWidths[Math.floor(sortedWidths.length/2)];
+  const pitch=Math.max(.08,blockWidth*.72);
   {
    const first=Math.ceil((phase-pitch*.5)/pitch);
    for(let n=first;;n++){
@@ -140,15 +141,14 @@ export function stoneWall(cx,wall,project,unit,w,h,geometry,texture=null){
     if(center<phase||center>=end)continue;
     const t=(center-phase)/Math.max(.001,length);
     if(t<0||t>1)continue;
-    const module=modules[((Math.floor(center/pitch)%modules.length)+modules.length)%modules.length];
-    const blockWidth=widths[((Math.floor(center/pitch)%modules.length)+modules.length)%modules.length];
+    const moduleIndex=((Math.floor(center/pitch)%modules.length)+modules.length)%modules.length;
+    const module=modules[moduleIndex];
     const x=wall.a[0]+(wall.b[0]-wall.a[0])*t,y=wall.a[1]+(wall.b[1]-wall.a[1])*t;
-    const [px,py]=project(x,y),[qx,qy]=project(wall.b[0],wall.b[1]),[ax,ay]=project(wall.a[0],wall.a[1]);
-    const angle=Math.atan2(qy-ay,qx-ax),sheet=module.sheetData,tw=sheet.tw,step=tw+(sheet.margin||0),idx=0;
+    const [px,py]=project(x,y),sheet=module.sheetData,tw=sheet.tw,step=tw+(sheet.margin||0),idx=0;
     const cols=sheet.cols||1,sx=(idx%cols)*step,sy=Math.floor(idx/cols)*step,bounds=module.bounds||[0,0,1,1];
     const sw=(bounds[2]-bounds[0])*tw,sh=(bounds[3]-bounds[1])*tw;
-    const dw=blockWidth*unit,dh=targetHigh*unit;
-    cx.save();cx.translate(px,py);cx.rotate(angle);
+    const dw=Math.max(widths[moduleIndex],pitch)*unit*1.12,dh=targetHigh*unit;
+    cx.save();cx.translate(px,py);
     cx.drawImage(sheet.img,sx+bounds[0]*tw,sy+bounds[1]*tw,sw,sh,-dw/2,-dh,dw,dh);
     cx.restore();
    }

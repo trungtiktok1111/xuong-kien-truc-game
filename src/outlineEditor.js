@@ -791,6 +791,12 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const rows=[['floor','Nền',true],['overlay','Phủ nền',false],['wall','Tường bao',true],['props','Vật dụng',true],['house','Nhà',false],['character','Nhân vật',true]];
  const layerControls=rows.map(([key,label,active])=>{
   const source=el('select',{'aria-label':'Gói cho '+label.toLowerCase()});
+  const addSource=B('Thêm gói',()=>{
+   const id=source.value;
+   if(!control.sources.includes(id))control.sources.push(id);
+   renderSources(control);dressing.checked=true;void refreshLayer(control,control.ids);
+  });
+  const sourceList=el('div',{class:'outline-source-list','aria-label':'Gói đã chọn cho '+label.toLowerCase()});
   const note=el('span',{class:'hint',role:'status'});
   const search=el('input',{type:'search',placeholder:'Tìm theo tên hoặc thư mục','aria-label':'Tìm mảnh '+label.toLowerCase()});
   const gallery=el('div',{class:'outline-gallery'});
@@ -801,7 +807,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const scaleInput=el('input',{type:'number',min:'.2',max:'5',step:'.05',placeholder:'tự động',
    'aria-label':'Chỉnh tay tỉ lệ gói cho '+label.toLowerCase()});
   scaleLabel.append(scaleInput);
-  const control={key,source,note,picker,search,gallery,summary,selected,scaleInput,scaleLabel,items:[],ids:[],trial:null,revision:0,loading:false,urls:new Map(),limits:[24,24]};
+  const control={key,source,addSource,sourceList,sources:[],catalogs:new Map(),note,picker,search,gallery,summary,selected,scaleInput,scaleLabel,items:[],ids:[],trial:null,revision:0,loading:false,urls:new Map(),limits:[24,24]};
   const prev=B('Trước',()=>step(-1)),next=B('Sau',()=>step(1));
   const run=B('Thử lần lượt',()=>{
    if(sequence?.control===control){stopSequence();return;}
@@ -828,23 +834,24 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    testImage(control,i<0?(delta<0?control.items.length-1:0):(i+delta+control.items.length)%control.items.length);
   }
   source.onchange=()=>{
-   clearTrials();dressing.checked=true;
-   syncScaleInputs();
-   void refreshLayer(control,true);
+   clearTrials();dressing.checked=true;control.limits=[24,24];
+   renderSources(control);syncScaleInputs();
+   void refreshLayer(control,control.ids);
   };
   scaleInput.onchange=()=>{
    const v=Number(scaleInput.value);
    if(Number.isFinite(v)&&v>0)scaleOverrides.set(control.source.value,v);
    else scaleOverrides.delete(control.source.value);
    clearTrials();
-   for(const other of layerControls)if(other.source.value===control.source.value)void refreshLayer(other,other.ids);
+   for(const other of layerControls)if(other.source.value===control.source.value){other.catalogs.delete(control.source.value);void refreshLayer(other,other.ids);}
   };
   search.oninput=()=>{control.limits=[24,24];renderGallery(control);};
   picker.ontoggle=()=>{if(picker.open)renderGallery(control);else gallery.replaceChildren();};
   control.element=el('div',{class:'outline-stage'},
-   el('strong',{},label),el('label',{},'Gói ZIP',source),scaleLabel,selected,picker,
+   el('strong',{},label),el('label',{},'Gói ZIP',source),addSource,sourceList,scaleLabel,selected,picker,
    el('div',{class:'row'},prev,next,run),el('div',{class:'row'},clear,keep,restore),note);
-  control.initialSource=saved.layers?.[key]?.source||(key==='character'?'builtin:character':defaultSource);
+  control.initialSource=saved.layers?.[key]?.sources?.[0]||saved.layers?.[key]?.source||(key==='character'?'builtin:character':defaultSource);
+  control.initialSources=saved.layers?.[key]?.sources||[control.initialSource];
   control.initialAsset=saved.layers?.[key]?(saved.layers[key].assets??[saved.layers[key].asset].filter(Boolean)):(saved.stages?.[key]??active)?true:[];
   return control;
  });
@@ -879,7 +886,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  function renderGallery(control){
   if(!control.picker.open)return;
   const term=control.search.value.trim().toLowerCase();
-  const visible=control.items.filter(item=>(item.label+' '+item.id).toLowerCase().includes(term));
+  const visible=control.items.filter(item=>(item.label+' '+item.assetId+' '+item.packageName).toLowerCase().includes(term));
   const groups=[visible.filter(a=>a.recommended),visible.filter(a=>!a.recommended)];
   control.gallery.replaceChildren();
   for(const [index,group] of groups.entries()){
@@ -888,11 +895,12 @@ export function openOutlineEditor(editor,initialTab='shapes'){
     const card=B('',()=>{
      clearTrials();dressing.checked=true;
      const at=control.ids.indexOf(item.id);
-     if(at<0)control.ids.push(item.id);else control.ids.splice(at,1);
+     if(at<0){control.ids.push(item.id);if(!control.sources.includes(item.source)){control.sources.push(item.source);renderSources(control);}}
+     else control.ids.splice(at,1);
      syncLayer(control);queueLivePreview(true);
     });
     card.classList.add('outline-material-card');
-    card.title=item.id;card.dataset.item=item.id;
+    card.title=item.packageName+' · '+item.assetId;card.dataset.item=item.id;
     card.setAttribute('aria-label',item.label);
     card.append(thumbFor(control,item),el('span',{},item.label));
     return card;
@@ -929,8 +937,12 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   control.keep.disabled=ids.includes(trial);
   control.summary.textContent=ids.length?'Chọn ảnh · '+ids.length+' mảnh':'Chọn mảnh bằng hình';
   control.selected.replaceChildren(...(trial?[trial]:ids.slice(0,4)).map(id=>{
-   const item=items.find(a=>a.id===id);
-   return item?el('span',{title:item.label},thumbFor(control,item)):el('span',{class:'hint'},'Cần nạp lại ZIP');
+   const key=splitAssetToken(id),item=items.find(a=>a.id===id)||(()=>{
+    if(!key)return null;
+    const cached=control.catalogs.get(key.source)?.items?.find(a=>a.id===key.id);
+    return cached?{...cached,source:key.source,assetId:key.id,id,packageName:sourceTitle(control,key.source)}:null;
+   })();
+   return item?el('span',{title:item.packageName+' · '+item.label},thumbFor(control,item)):el('span',{class:'hint'},'Cần chọn lại hoặc nạp ZIP');
   }));
   const item=items.find(a=>a.id===trial);
   const first=layerControls.findIndex(c=>c.source.value===control.source.value)===layerControls.indexOf(control);
@@ -959,14 +971,30 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   }
   control.source.value=wanted;
  }
+ function sourceTitle(control,id){
+  return [...control.source.options].find(option=>option.value===id)?.textContent||id.replace(/^builtin:/,'').replace(/^stock:/,'');
+ }
+ function renderSources(control){
+  control.sourceList.replaceChildren(...control.sources.map(id=>el('button',{type:'button',class:'outline-source-chip',title:'Bỏ gói '+sourceTitle(control,id),onclick:()=>{
+   control.sources=control.sources.filter(sourceId=>sourceId!==id);
+   control.ids=control.ids.filter(token=>splitAssetToken(token)?.source!==id);
+   if(!control.sources.includes(control.source.value)&&control.sources.length)control.source.value=control.sources[0];
+   renderSources(control);void refreshLayer(control,control.ids);
+  }},sourceTitle(control,id)+' ×')));
+ }
+ const assetToken=(source,id)=>JSON.stringify([source,id]);
+ function splitAssetToken(token){try{const value=JSON.parse(token);return Array.isArray(value)?{source:value[0],id:value[1]}:null;}catch{return null;}}
  async function refreshLayer(control,wanted){
   const revision=++control.revision;
   control.loading=true;control.gallery.replaceChildren();syncLayer(control);
-  const style={...surfaceStyle(),manualScale:scaleOverrides.get(control.source.value)};
+  const currentSource=control.source.value;
+  const style={...surfaceStyle(),manualScale:scaleOverrides.get(currentSource)};
   try{
-   const result=await editor.outlineLayerChoices(control.key,control.source.value,outlineZipFiles,style);
+   let result=control.catalogs.get(currentSource);
+   if(!result){result=await editor.outlineLayerChoices(control.key,currentSource,outlineZipFiles,style);control.catalogs.set(currentSource,result);}
    if(revision!==control.revision||!ov.isConnected)return;
-   control.items=result.items;control.message=result.message;control.scale=result.scale;
+   control.items=result.items.map(item=>({...item,source:currentSource,assetId:item.id,id:assetToken(currentSource,item.id),packageName:sourceTitle(control,currentSource)}));
+   control.message=result.message;control.scale=result.scale;
   }catch(error){
    if(revision!==control.revision||!ov.isConnected)return;
    control.items=[];control.message=error.message;control.scale=null;
@@ -974,8 +1002,35 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   releaseGallery(control);
   const suggested=control.items.find(item=>item.recommended);
   const known=new Set(control.items.map(item=>item.id));
-  control.ids=wanted===true?(suggested?[suggested.id]:[]):wanted.filter(id=>known.has(id)||(!known.size&&control.message));
+  if(wanted===true){control.ids=suggested?[suggested.id]:[];}
+  else if(Array.isArray(wanted))control.ids=[...new Set([...wanted,...control.ids])];
+  if(suggested&&wanted===true&&!control.sources.includes(currentSource))control.sources.push(currentSource);
+  if(control.ids.some(token=>splitAssetToken(token)?.source===currentSource)&&!control.sources.includes(currentSource))control.sources.push(currentSource);
   control.trial=null;control.loading=false;control.limits=[24,24];
+  renderSources(control);renderGallery(control);syncLayer(control);queueLivePreview(true);
+ }
+ async function selectLayerSource(control,sourceId,assets){
+  refreshSources(control,sourceId);control.source.value=sourceId;
+  if(!control.sources.includes(sourceId))control.sources.push(sourceId);
+  renderSources(control);
+  const revision=++control.revision;control.loading=true;syncLayer(control);
+  const style={...surfaceStyle(),manualScale:scaleOverrides.get(sourceId)};
+  try{
+   let result=control.catalogs.get(sourceId);
+   if(!result){result=await editor.outlineLayerChoices(control.key,sourceId,outlineZipFiles,style);control.catalogs.set(sourceId,result);}
+   if(revision!==control.revision||!ov.isConnected)return;
+   const items=result.items.map(item=>({...item,source:sourceId,assetId:item.id,id:assetToken(sourceId,item.id),packageName:sourceTitle(control,sourceId)}));
+   control.items=items;control.message=result.message;control.scale=result.scale;
+   if(assets===true){const preferred=items.find(item=>item.recommended);control.ids=preferred?[preferred.id]:[];}
+   else if(Array.isArray(assets)){
+    const next=assets.map(asset=>typeof asset==='string'?assetToken(sourceId,asset):assetToken(asset.source||sourceId,asset.id));
+    control.ids=[...new Set([...control.ids,...next])];
+   }
+  }catch(error){
+   if(revision!==control.revision||!ov.isConnected)return;
+   control.items=[];control.message=error.message;control.scale=null;
+  }
+  releaseGallery(control);control.trial=null;control.loading=false;control.limits=[24,24];
   renderGallery(control);syncLayer(control);queueLivePreview(true);
  }
  zipFiles.onchange=()=>{
@@ -994,19 +1049,25 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  };
  for(const control of [floorScale,matchJoints])control.onchange=()=>{
   clearTrials();dressing.checked=true;
-  for(const row of layerControls)void refreshLayer(row,row.ids);
+  for(const row of layerControls){row.catalogs.clear();void refreshLayer(row,row.ids);}
  };
  for(const control of [dressing,front,rear,thickness,collision])control.addEventListener('change',()=>{
   clearTrials();queueLivePreview();
  });
  const materials=(preview=false)=>{
   if(is3D||!dressing.checked)return null;
-  const layers=Object.fromEntries(layerControls.map(({key,source,ids,trial})=>[key,{source:source.value,assets:preview&&trial?[trial]:[...ids]}]));
+  const layers=Object.fromEntries(layerControls.map(({key,source,sources,ids,trial})=>{
+   const chosen=preview&&trial?[trial]:[...ids],assets=chosen.map(token=>splitAssetToken(token)).filter(Boolean);
+   return [key,{source:source.value,sources:[...new Set([...sources,...assets.map(asset=>asset.source)])],assets}];
+  }));
   return {layers,files:new Map(outlineZipFiles),scaleOverrides:Object.fromEntries(scaleOverrides),...surfaceStyle()};
  };
  const presetData=()=>{
-  const layers=Object.fromEntries(layerControls.map(({key,source,ids})=>[key,{source:source.value,assets:[...ids]}]));
-  const sources=new Set(Object.values(layers).map(layer=>layer.source));
+  const layers=Object.fromEntries(layerControls.map(({key,source,sources,ids})=>{
+   const assets=ids.map(token=>splitAssetToken(token)).filter(Boolean);
+   return [key,{source:source.value,sources:[...new Set([...sources,...assets.map(asset=>asset.source)])],assets}];
+  }));
+  const sources=new Set(Object.values(layers).flatMap(layer=>layer.sources));
   return {layers,...surfaceStyle(),scaleOverrides:Object.fromEntries(scaleOverrides),
    zips:[...outlineZipFiles].filter(([id])=>sources.has(id)),
    wall:{front:+front.value,rear:+rear.value,thickness:+thickness.value,collision:collision.checked}};
@@ -1037,8 +1098,21 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   for(const [k,v] of Object.entries(data.scaleOverrides||{}))scaleOverrides.set(k,v);
   for(const control of layerControls){
    const choice=data.layers?.[control.key];
-   refreshSources(control,choice?.source??control.source.value);
-   void refreshLayer(control,choice?.assets??[]);
+   const sources=choice?.sources?.length?choice.sources:[choice?.source??control.source.value];
+   const assets=choice?.assets??[];
+   control.ids=[];control.sources=[];
+   const bySource=new Map();
+   for(const asset of assets){
+    if(typeof asset==='string'){
+     const source=choice?.source??sources[0];
+     if(!bySource.has(source))bySource.set(source,[]);bySource.get(source).push(asset);
+    }else if(asset?.source&&asset?.id){
+     if(!bySource.has(asset.source))bySource.set(asset.source,[]);bySource.get(asset.source).push(asset.id);
+    }
+   }
+   const queue=sources.length?sources:[choice?.source??control.source.value];
+   for(const sourceId of queue)await selectLayerSource(control,sourceId,bySource.get(sourceId)||[]);
+   for(const [sourceId,ids] of bySource)if(!queue.includes(sourceId))await selectLayerSource(control,sourceId,ids);
   }
   dressing.checked=true;
   openPreset={id,name:presetList.find(p=>p.id===id)?.name||''};
@@ -1073,7 +1147,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   clearTrials();dressing.checked=true;
   for(const row of layerControls)if(!row.ids.length&&!row.loading){
    const preferred=row.items.find(item=>item.recommended);
-   if(preferred){row.ids=[preferred.id];syncLayer(row);}
+   if(preferred){row.ids=[preferred.id];if(!row.sources.includes(preferred.source)){row.sources.push(preferred.source);renderSources(row);}syncLayer(row);}
   }
   queueLivePreview(true);
  });
@@ -1194,9 +1268,18 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   livePanel,materialsPanel,editShape,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons,actionStatus);
  ov.append(box);document.body.append(ov);
  if(!is3D){
-  for(const row of layerControls){
-   refreshSources(row,row.initialSource);
-   void refreshLayer(row,row.initialAsset);
+ for(const row of layerControls){
+  const initSources=row.initialSources?.length?row.initialSources:[row.initialSource];
+  row.sources=[];
+  refreshSources(row,row.initialSource);
+  if(Array.isArray(row.initialAsset)&&row.initialAsset.some(asset=>typeof asset==='object')){
+   const bySource=new Map();for(const asset of row.initialAsset){if(asset?.source&&asset?.id){if(!bySource.has(asset.source))bySource.set(asset.source,[]);bySource.get(asset.source).push(asset.id);}}
+   void (async()=>{for(const sourceId of initSources)await selectLayerSource(row,sourceId,bySource.get(sourceId)||[]);for(const [sourceId,ids] of bySource)if(!initSources.includes(sourceId))await selectLayerSource(row,sourceId,ids);})();
+  }else{
+   const legacyAssets=(row.initialAsset||[]).map(id=>({source:row.initialSource,id}));
+   const bySource=new Map();for(const asset of legacyAssets){if(!bySource.has(asset.source))bySource.set(asset.source,[]);bySource.get(asset.source).push(asset.id);}
+   void (async()=>{for(const sourceId of initSources)await selectLayerSource(row,sourceId,row.initialAsset===true&&sourceId===row.initialSource?true:(bySource.get(sourceId)||[]));})();
+  }
   }
   void editor.outlinePackSources().then(packs=>{
    if(!ov.isConnected)return;
