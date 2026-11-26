@@ -269,33 +269,45 @@ export function openOutlineEditor(editor,initialTab='shapes'){
     link=connected?' · Hai đầu bám sàn':' · Còn đầu ngoài sàn';
    }
    aim.textContent=(gatePreview?'Bám tường':location)+' · X '+at[0].toFixed(2)+' · '+(is3D?'Z ':'Y ')+at[1].toFixed(2)+link;
-   const [x,y]=at;
-   const tolerance=Math.min(.35,6/s);
-   function bisects(axis){
-    const along=1-axis;
-    return loops.some(loop=>{
-     const cuts=[];
-     for(let i=0;i<loop.length;i++){
-      const a=loop[i],b=loop[(i+1)%loop.length];
-      if((a[along]>at[along])===(b[along]>at[along]))continue;
-      const fraction=(at[along]-a[along])/(b[along]-a[along]);
-      cuts.push(a[axis]+fraction*(b[axis]-a[axis]));
-     }
-     cuts.sort((a,b)=>a-b);
-     for(let i=0;i+1<cuts.length;i+=2){
-      const left=cuts[i],right=cuts[i+1];
-      if(at[axis]>=left&&at[axis]<=right&&Math.abs(at[axis]-(left+right)/2)<=tolerance)return true;
-     }
-     return false;
-    });
+   // The capture radius is independent of the stroke width. Draw a captured
+   // guide at the exact midpoint of the interval, not at the pointer.
+   const tolerance=Math.min(.18,2/s);
+   function midpoint(loop,axis){
+    const along=1-axis,cuts=[];
+    for(let i=0;i<loop.length;i++){
+     const a=loop[i],b=loop[(i+1)%loop.length];
+     if((a[along]>at[along])===(b[along]>at[along]))continue;
+     const fraction=(at[along]-a[along])/(b[along]-a[along]);
+     cuts.push(a[axis]+fraction*(b[axis]-a[axis]));
+    }
+    cuts.sort((a,b)=>a-b);
+    for(let i=0;i+1<cuts.length;i+=2){
+     const left=cuts[i],right=cuts[i+1],center=(left+right)/2;
+     if(at[axis]>=left&&at[axis]<=right&&Math.abs(at[axis]-center)<=tolerance)return center;
+    }
+    return null;
+   }
+   let guides=[null,null],bestAxes=0,bestDistance=Infinity;
+   for(const loop of loops){
+    const candidate=[midpoint(loop,0),midpoint(loop,1)];
+    const axes=candidate.filter(value=>value!==null).length;
+    const distance=candidate.reduce((sum,value,axis)=>sum+(value===null?0:Math.abs(value-at[axis])),0);
+    if(axes>bestAxes||axes===bestAxes&&axes>0&&distance<bestDistance){
+     guides=candidate;bestAxes=axes;bestDistance=distance;
+    }
+   }
+   if(bestAxes){
+    const coordinates=guides.map((value,axis)=>value===null?'':(axis===0?'X ':is3D?'Z ':'Y ')+value.toFixed(2)).filter(Boolean);
+    aim.textContent+=' · Trung điểm '+coordinates.join(' · ');
    }
    c.save();
    for(const axis of [0,1]){
-    const centered=bisects(axis);
+    const centered=guides[axis]!==null;
+    const position=guides[axis]??at[axis];
     c.strokeStyle=centered?'#21dc65':'#e8d69e99';c.lineWidth=centered?2:1;
     c.setLineDash([3,5]);c.beginPath();
-    if(axis===0){c.moveTo(xp(x),yp(0));c.lineTo(xp(x),yp(H));}
-    else{c.moveTo(xp(0),yp(y));c.lineTo(xp(W),yp(y));}
+    if(axis===0){c.moveTo(xp(position),yp(0));c.lineTo(xp(position),yp(H));}
+    else{c.moveTo(xp(0),yp(position));c.lineTo(xp(W),yp(position));}
     c.stroke();
    }
    c.restore();
