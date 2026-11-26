@@ -11,6 +11,7 @@ test('the exterior ground fills every cell and each standard setting connects sp
    assert.ok(plan.tiles.every(kind=>kind<surfaceTypes.length));
    const route=surfaceReachable(w,h,plan.blocked,plan.start);
    assert.ok(route.some(p=>p.x===plan.goal[0]&&p.y===plan.goal[1]),[w,h,name,seed].join(' '));
+   if(name==='blank'){assert.ok(plan.blocked.every(n=>!n));continue;}
    assert.ok(plan.tiles.some((tile,i)=>tile===K.bridge&&!plan.blocked[i]),name);
    assert.ok(plan.tiles.some((tile,i)=>tile>=K.sea&&tile<=K.pond&&plan.blocked[i]),name);
   }

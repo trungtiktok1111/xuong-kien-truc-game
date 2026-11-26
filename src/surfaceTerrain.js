@@ -11,6 +11,7 @@ export const surfaceTypes=[
 export const surfaceKinds=Object.fromEntries(surfaceTypes.map(([id],i)=>[id,i]));
 const K=surfaceKinds;
 export const surfaceProfiles={
+ blank:{name:'Nền trống · đi được toàn khung',waters:[],settle:false,blank:true},
  plain:{name:'Đồng bằng và rừng núi',waters:['river','lake','stream'],settle:false},
  city:{name:'Thành phố ven sông',waters:['river','canal'],settle:true},
  village:{name:'Thôn trang',waters:['stream','pond'],settle:true},
@@ -20,7 +21,8 @@ export const surfaceProfiles={
 export const surfaceWater=['sea','river','canal','stream','lake','pond'];
 export const diamondOutline=(w,h)=>[[[0,0],[w,0],[w,h],[0,h]]];
 export function newSurface(profile='plain'){
- return {profile,water:[...surfaceProfiles[profile].waters],roads:true,land:true,buildings:surfaceProfiles[profile].settle,seed:1,patches:[]};
+ const {waters,settle,blank}=surfaceProfiles[profile];
+ return {profile,water:[...waters],roads:!blank,land:!blank,buildings:settle,seed:1,patches:[]};
 }
 export function surfaceHash(x,y,z){
  let n=Math.imul(x+19,374761393)^Math.imul(y+31,668265263)^Math.imul(z+1,1274126177);

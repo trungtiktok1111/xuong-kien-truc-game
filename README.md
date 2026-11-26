@@ -4,7 +4,7 @@
 
 ## Mặt đất trong Đường Bao 2D
 
-Chọn **Đường bao → Mặt đất → Phủ kín hình thoi** để phủ đất toàn bộ lưới. Chọn mẫu đồng bằng, thành phố, thôn trang, tông môn hoặc ven biển. Có thể bật hoặc tắt địa hình, công trình, mạng đường và từng loại mặt nước.
+Chọn **Đường bao → Mặt đất → Phủ kín hình thoi** để tạo nền trống đi được trên toàn bộ lưới. Chọn mẫu đồng bằng, thành phố, thôn trang, tông môn hoặc ven biển. Có thể bật hoặc tắt địa hình, công trình, mạng đường và từng loại mặt nước.
 
 Trong **Ráp vùng**, chọn một loại đất, đường, nước hoặc cầu rồi kéo trên lưới. Các vùng được ráp theo thứ tự đặt và có thể hoàn tác. Nước và vách núi chặn bước chân. Đường qua vùng nước trong đất liền được nối bằng cầu. Với cảnh biển, dùng vùng **Cầu** để đặt lối vượt nước tại vị trí mong muốn.
 
