@@ -52,7 +52,7 @@ test('every named surface layout has its own repeatable route and belongs to a c
   assert.ok(!signatures.has(signature),level.name);
   signatures.add(signature);
  }
- assert.equal(signatures.size,30);
+ assert.equal(signatures.size,35);
  assert.equal(new Set(surfacePieces.map(item=>item.id)).size,30);
 });
 
