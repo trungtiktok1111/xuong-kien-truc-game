@@ -3329,37 +3329,38 @@ export function init2D(root,A){
   const outlineSourceError=(source,error)=>({
     source,floors:[],props:[],skipReason:error.message==='invalid zip data'?'không đọc được tệp ZIP':error.message||'không đọc được gói'
   });
-  function loadBuiltinOutlinePack(profile){
-    const [id]=profile;
-    if(!outlinePackCache.has(id)){
+  function loadBuiltinOutlinePack(profile,style){
+    const [id]=profile,key=id+'|'+style.floorScale+'|'+style.matchJoints;
+    if(!outlinePackCache.has(key)){
       const source='Kenney Miniature '+id[0].toUpperCase()+id.slice(1);
       const job=Promise.resolve().then(()=>{
         builtinOutlinePacks??=unzipSync(builtinOutlineArchive);
-        return outlinePackMaterials(openScenePack(source,builtinOutlinePacks[id+'.zip']),profile);
+        return outlinePackMaterials(openScenePack(source,builtinOutlinePacks[id+'.zip']),profile,style);
       }).catch(error=>{
-        outlinePackCache.delete(id);
+        outlinePackCache.delete(key);
         return outlineSourceError(source,error);
       });
-      outlinePackCache.set(id,job);
+      outlinePackCache.set(key,job);
     }
-    return outlinePackCache.get(id);
+    return outlinePackCache.get(key);
   }
-  async function readOutlineFile(file){
+  async function readOutlineFile(file,style){
     try{
       const pack=openScenePack(file.name,new Uint8Array(await file.arrayBuffer()));
       const profile=kenneyOutlinePacks.find(item=>outlineMiniatureFolder(pack,item)!==null);
-      const materials=await outlinePackMaterials(pack,profile);
+      const materials=await outlinePackMaterials(pack,profile,style);
       return {id:profile?.[0],materials};
     }catch(error){return {materials:outlineSourceError(file.name,error)};}
   }
   async function prepareOutlineDressing(map,target,options,arrivals=[]){
     if(!options)return null;
     const profiles=options.preset==='mix'?kenneyOutlinePacks:options.preset==='dungeon'?kenneyOutlinePacks.slice(0,1):[];
-    const uploads=await Promise.all(options.files.map(readOutlineFile));
+    const style={floorScale:[2,4].includes(options.floorScale)?options.floorScale:1,matchJoints:!!options.matchJoints};
+    const uploads=await Promise.all(options.files.map(file=>readOutlineFile(file,style)));
     const used=new Set();
     const tasks=profiles.map(profile=>{
       const local=uploads.find(item=>item.id===profile[0]&&item.materials.floors.length);
-      if(!local)return loadBuiltinOutlinePack(profile);
+      if(!local)return loadBuiltinOutlinePack(profile,style);
       used.add(local);
       return local.materials;
     });
@@ -3381,7 +3382,7 @@ export function init2D(root,A){
     map.cfg.proj='iso';map.cfg.smooth=false;
     const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)),arrivals);
     map.cfg.outline.wallMaterial=materials.find(pack=>pack.wallMaterial)?.wallMaterial;
-    map.cfg.outlineMaterials={...info,preset:options.preset};
+    map.cfg.outlineMaterials={...info,preset:options.preset,...style};
     return {
       summary:'Đã phối '+info.sources.length+' gói và đặt '+info.props+' vật thể.',
       warnings:skipped.length?'Đã bỏ qua '+skipped.join('. ')+'.':''

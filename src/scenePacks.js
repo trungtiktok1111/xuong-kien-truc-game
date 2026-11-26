@@ -297,9 +297,40 @@ function random(seed){
   for(const c of seed)state=Math.imul(state^c.charCodeAt(0),16777619);
   return ()=>((state=Math.imul(1664525,state)+1013904223|0)>>>0)/4294967296;
 }
-async function groundTile(result,a){
+// Undo the 2:1 projection before resizing the surface in map coordinates.
+function outlineFloorTexture(diamond,scale,matchJoints,brickGrid){
+  const sourceSize=diamond.width,surface=canvas(sourceSize,sourceSize),g=surface.getContext('2d');
+  g.setTransform(1,-1,2,2,-sourceSize/2,sourceSize/2);
+  g.drawImage(diamond,0,0);
+  const size=128,tile=canvas(size,size),ctx=tile.getContext('2d');
+  const width=sourceSize/scale,inset=scale===1?5:0,center=(sourceSize-width)/2;
+  const brick=sourceSize/brickGrid;
+  const start=brickGrid?Math.round(center/brick)*brick:center;
+  ctx.drawImage(surface,start+inset,start+inset,width-2*inset,width-2*inset,0,0,size,size);
+  if(matchJoints){
+    const texture=ctx.getImageData(0,0,size,size),pixels=texture.data,blend=4;
+    const join=(a,b,offset)=>{
+      for(let channel=0;channel<4;channel++){
+        const i=a*4+channel,j=b*4+channel;
+        const correction=(pixels[j]-pixels[i])*(1-offset/blend)/2;
+        pixels[i]+=correction;pixels[j]-=correction;
+      }
+    };
+    for(let depth=0;depth<blend;depth++)for(let n=0;n<size;n++)
+      join(n*size+depth,n*size+size-1-depth,depth);
+    for(let depth=0;depth<blend;depth++)for(let n=0;n<size;n++)
+      join(depth*size+n,(size-1-depth)*size+n,depth);
+    ctx.putImageData(texture,0,0);
+  }
+  return tile;
+}
+
+async function groundTile(result,a,style){
   const art=await sprite(a);
-  const sh=canvas(128,128),g=sh.getContext('2d');
+  const scale=style?.floorScale||1,matchJoints=!!style?.matchJoints;
+  const flat=scale!==1||matchJoints;
+  const size=flat?256:128,sh=canvas(size,size),g=sh.getContext('2d');
+  if(flat)g.scale(2,2);
   if(a.material){
     g.save();g.transform(64,32,-64,32,64,0);
     g.drawImage(art.out,0,art.side-art.h,art.w,art.h,0,0,1,1);g.restore();
@@ -311,7 +342,9 @@ async function groundTile(result,a){
     const [l,t,r,b]=art.bounds;
     g.drawImage(art.out,l*art.side,t*art.side,(r-l)*art.side,(b-t)*art.side,0,0,128,Math.min(128,128*art.h/art.w));
   }
-  result.sheets.push({name:a.pack.name+' · '+a.label,tw:128,margin:0,iso:1,url:sh.toDataURL()});
+  const texture=flat?outlineFloorTexture(sh,scale,matchJoints,a.brickGrid):sh;
+  const label=a.label+(scale!==1?' · '+scale+'×':'')+(matchJoints?' · Tự khớp mạch':'');
+  result.sheets.push({name:a.pack.name+' · '+label,tw:128,margin:0,iso:flat?0:1,url:texture.toDataURL()});
   return result.sheets.length-1;
 }
 export function outlineMiniatureFolder(pack,profile){
@@ -341,7 +374,7 @@ async function dungeonWallMaterial(result,pack,path){
 
 // Profiles may supply exact roles for any ZIP. Otherwise use recognized floor
 // tiles and small props from the existing archive catalogue.
-export async function outlinePackMaterials(pack,profile){
+export async function outlinePackMaterials(pack,profile,style){
   const result={sheets:[],floors:[],props:[],source:pack.name};
   const file=pack.paths.find(path=>/(^|\/)outline-materials\.json$/.test(path));
   const settings=file?readJSON(pack.files,file):null;
@@ -370,6 +403,7 @@ export async function outlinePackMaterials(pack,profile){
     if(root===null)throw Error('Thiếu mảnh isometric của '+pack.name+'.');
     const path=id=>root+'isometric/'+id.toLowerCase()+'_e.png';
     const tile=named(path(floor),0);
+    if(profile[0]==='dungeon')tile.brickGrid=4;
     if(floor==='floorCarpet')tile.underlay='#5a473d';
     floors=[tile];
     props=extras.map(id=>named({path:path(id),anchor:[128,437],tileWidth:256},2));
@@ -386,7 +420,7 @@ export async function outlinePackMaterials(pack,profile){
       .slice(0,4);
   }
   for(const a of floors){
-    const sid=await groundTile(result,a);
+    const sid=await groundTile(result,a,style);
     result.floors.push({sid,source:pack.name});
   }
   for(const a of props){
