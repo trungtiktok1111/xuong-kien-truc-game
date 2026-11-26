@@ -243,14 +243,17 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    surfaceMode.textContent=surface?'Dùng đường bao hầm / tự vẽ':'Phủ kín hình thoi';
    materialsPanel.hidden=false;
    if(surface){
+    materialSummary.textContent='Lớp vật liệu mặt đất · chọn riêng nền, phủ nền, tường, vật dụng, nhà và nhân vật';
     surfaceSketch.setAttribute('aria-pressed',String(surface.finish===false));
     surfaceFinish.setAttribute('aria-pressed',String(surface.finish!==false));
-    materialsPanel.hidden=surface.finish===false;
+    materialsPanel.hidden=false;
     for(const [key,check] of surfaceFlags)check.checked=!!surface[key];
     for(const [key,check] of surfaceWaters)check.checked=surface.water.includes(key);
     surfaceInfo.textContent=surface.patches.length+' vùng tự ráp · '+(armedSurfacePiece?armedSurfacePiece.name+' · '+surfaceTurn*90+'°':'Kéo trên lưới để đặt vùng.');
     for(const [tile,item] of pieceTiles)tile.setAttribute('aria-pressed',String(item===armedSurfacePiece));
     for(const [tile,item] of outdoorTiles)tile.setAttribute('aria-pressed',String(item.id===surface.layout));
+   }else{
+    materialSummary.textContent='Lớp vật liệu hầm ngục · chọn riêng nền, phủ nền, tường, vật dụng, nhà và nhân vật';
    }
   }
   setTab(activeTab);
@@ -1073,7 +1076,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   }
   queueLivePreview(true);
  });
- const materialsPanel=is3D?null:el('details',{open:''},el('summary',{},'Tự phối vật liệu Đường Bao'),
+ const materialSummary=el('summary',{},'Lớp vật liệu hầm ngục');
+ const materialsPanel=is3D?null:el('details',{open:''},materialSummary,
   el('div',{class:'row'},el('label',{},dressing,' Tự phối vật liệu'),assembly,
    el('label',{},'Thêm ZIP ',zipFiles)),
   presetPanel,
@@ -1110,7 +1114,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   return [key,input,label];
  });
  const surfaceSketch=B('Bố cục thô',()=>changeSurface({finish:false}));
- const surfaceFinish=B('Phối vật liệu',()=>{
+ const surfaceFinish=B('Chọn lớp vật liệu',()=>{
   if(surface.finish===false)changeSurface({finish:true});
   materialsPanel.open=true;
   materialsPanel.scrollIntoView({block:'nearest'});

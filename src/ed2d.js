@@ -3562,7 +3562,12 @@ export function init2D(root,A){
         for(const id of new Set(ids)){
           try{
             const item=pack[key]?.find(a=>a.id===id);
-            if(item){items.push({item,sheets:pack.sheets});continue;}
+            if(item){
+              // A chosen wall ZIP image is a construction block, not a flattened wall texture.
+              if(role==='wall'&&pack.raw?.files?.[id])items.push(await outlineManualImage(pack.raw,id,'wall',{...style,packScale:pack.scale}));
+              else items.push({item,sheets:pack.sheets});
+              continue;
+            }
             if(!pack.raw)throw Error(pack.skipReason||'Thiếu ảnh trong '+source+'.');
             const cacheKey=role+'|'+id;
             if(!pack.manual.has(cacheKey))pack.manual.set(cacheKey,outlineManualImage(pack.raw,id,role,{...style,packScale:pack.scale}));

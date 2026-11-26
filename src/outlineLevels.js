@@ -142,34 +142,9 @@ definitions.push(
   [92,76]]]
 );
 
-const outdoor=[
- ['bamboo-village','Thôn Trúc Ven Suối','Thôn trang',88,68,'Đường làng qua chợ, ruộng và cầu sang xóm đông.',[12,48],[77,20],
-  [box(6,9,34,52),box(49,7,32,52),box(34,29,20,7)],[oval(23,27,7,5)],[[18,44]],0,'#829c60',
-  [['Chợ làng',18,46],['Ruộng quê',26,14],['Cầu qua suối',44,32],['Xóm đông',67,18]]],
- ['river-market-town','Trấn Bạch Sa','Thành trấn',106,86,'Từ cửa nam theo trục chợ đến công đường. Hai nhánh bên dẫn đến bến và khu dân cư.',[53,76],[53,14],
-  [box(9,8,88,70),box(46,74,14,9),box(91,28,10,21)],[box(16,13,15,16),box(73,13,14,16),box(20,55,14,12),box(72,54,15,13)],[[52,41]],2.6,'#a29a85',
-  [['Cửa nam',53,77],['Phố chợ',53,47],['Công đường',53,16],['Khu dân cư',24,40],['Bến hàng',87,40]]],
- ['qingyun-sect','Thanh Vân Môn','Bang phái',90,92,'Sân nhập môn, hai viện bên, sân luyện và chính điện trên cùng một trục.',[44,82],[45,13],
-  [box(28,69,34,16),box(40,17,10,64),box(19,34,53,27),box(30,7,30,20),box(8,36,16,22),box(67,36,15,22)],
-  [oval(30,49,5,5),oval(61,49,5,5)],[[45,41]],1.55,'#a79b84',
-  [['Sân nhập môn',45,77],['Sân luyện',45,48],['Tàng thư',16,47],['Dược viện',74,47],['Chính điện',45,13]]],
- ['willow-wharf','Bến Liễu và Kho Hàng','Bến nước',92,72,'Đường ven bờ chia ra khu kho, chợ cá và ba cầu tàu.',[11,53],[81,26],
-  [box(6,12,75,44),box(61,16,23,23),box(17,51,7,14),box(42,51,7,16),box(65,51,7,13)],
-  [oval(29,31,8,6)],[[58,25]],0,'#a99a75',
-  [['Kho hàng',62,23],['Chợ cá',21,47],['Cầu tàu',45,61],['Trạm tuần',77,26]]],
- ['mountain-pass','Ải Lưng Núi','Quan ải',94,76,'Đường men núi qua ba trạm canh và một sân tập kết.',[9,63],[83,14],
-  [box(5,54,20,17),box(34,29,25,20),box(72,7,17,16),...path(9,[13,62],[31,55],[41,40],[56,39],[67,19],[80,15])],[],[[47,36]],1.7,'#9a866a',
-  [['Trạm dưới',14,62],['Sân tập kết',47,38],['Trạm đỉnh',80,15]]],
- ['west-lake-garden','Viên Lâm Tây Hồ','Vườn và đền',88,72,'Hai tuyến quanh hồ gặp nhau ở sân đền, có cầu và lầu ngắm nước.',[14,54],[71,16],
-  [oval(43,38,35,26),box(59,8,21,19),box(7,46,20,15),box(34,33,27,9)],[oval(41,26,13,6),oval(44,49,14,6)],[[63,38]],.55,'#86a173',
-  [['Hồ bắc',41,26],['Cầu đá',47,37],['Lầu ngắm nước',64,47],['Sân đền',68,16]]]
-].map(([id,name,group,w,h,description,start,goal,parts,holes,chests,height,color,areas])=>({
- id,name,group,w,h,description,start,goal,chests,loops:loopsOf(parts,holes),height,color,areas
-}));
-
-export const outlineLevels=[...outdoor,...definitions.map(([id,name,group,w,h,description,start,goal,parts,holes,chests])=>({
+export const outlineLevels=definitions.map(([id,name,group,w,h,description,start,goal,parts,holes,chests])=>({
  id,name,group,w,h,description,start,goal,chests,theme:group===complex,loops:loopsOf(parts,holes)
-}))];
+}));
 
 export const DA_XOAY_LEVEL='da-xoay-goc';
 export function levelLibrary(sample){
@@ -184,5 +159,5 @@ export function levelLibrary(sample){
   start:position('start'),goal:position('goal'),chests:[position('chest')],
   loops:sample.cfg.outline.loops,sample
  };
- return [original,...outdoor,...outlineLevels.filter(l=>l.theme),...outlineLevels.slice(outdoor.length).filter(l=>!l.theme)];
+ return [original,...outlineLevels.filter(l=>l.theme),...outlineLevels.filter(l=>!l.theme)];
 }

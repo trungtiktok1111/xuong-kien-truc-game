@@ -120,16 +120,8 @@ export function stoneWall(cx,wall,project,unit,w,h,geometry,texture=null){
  const moduleWall=modules.length>0&&wall.phase!==undefined;
  const textured=!moduleWall&&texture&&wall.phase!==undefined;
  if(moduleWall){
-  face(cx,[front[0],front[1],[front[1][0],front[1][1]-high],[front[0][0],front[0][1]-high]],wall.near?'#4c3b2d':'#574938');
-  face(cx,[back[0],back[1],[back[1][0],back[1][1]-high],[back[0][0],back[0][1]-high]],wall.near?'#403326':'#494032');
-  face(cx,[...front,...back.slice().reverse()].map(([px,py])=>[px,py-high]),'#806246');
-  if(wall.joinStart||wall.joinEnd){
-   const r=(wall.thickness??WALL_THICKNESS)*unit*.56;cx.save();cx.fillStyle='#806246';
-   for(const p of [...(wall.joinStart?[wall.a]:[]),...(wall.joinEnd?[wall.b]:[])]){
-    const [x0,y0]=project(p[0],p[1]);cx.beginPath();cx.ellipse(x0,y0-high/2,Math.max(1,r),high/2+r*.35,0,0,Math.PI*2);cx.fill();
-   }
-   cx.restore();
-  }
+  // The selected objects are the perimeter wall itself; omit the ordinary wall
+  // faces and corner caps so assets do not become decoration on a backing wall.
   const length=Math.hypot(wall.b[0]-wall.a[0],wall.b[1]-wall.a[1]);
   const phase=wall.phase||0,end=phase+length;
   // Treat the selected sprite as a calibrated construction block. Height follows the
