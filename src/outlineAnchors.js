@@ -45,7 +45,9 @@ export function outlineHeight(label,role,meters){
  return heights.find(([pattern])=>pattern.test(name))?.[1];
 }
 export function outlineObjectSize(art,label,role,scale,declaredWidth,meters){
- const base=declaredWidth||scale?.pixelsPerCell||guessTileWidth(art.w,art.h);
+ // An image's projected tile width spans two vertical half-tile units.
+ const anchoredWidth=scale?.pixelsPerCell&&2*scale.pixelsPerCell;
+ const base=declaredWidth||anchoredWidth||guessTileWidth(art.w,art.h);
  const height=outlineHeight(label,role,meters),measured=2*art.h/base;
  const standard=height&&(role==='character'||meters||!scale?.pixelsPerCell&&!declaredWidth||measured<height*.65||measured>height*1.55);
  const factor=scale?.via==='manual'?scale.factor:1;

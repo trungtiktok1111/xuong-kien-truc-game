@@ -66,3 +66,11 @@ test('a house scale changes the graphic and wall segments with the footprint',()
  assert.deepEqual([scaled.w,scaled.h,scaled.ents[0].x,scaled.ents[0].sc],[4,6,1,2]);
  assert.deepEqual(scaled.ents[0].col[0].b,[2,2]);
 });
+
+
+test('a prop follows its pack door anchor using the same projected vertical unit',()=>{
+ const scale=packScale({door:{w:120,h:147}});
+ const item=outlineObjectSize({w:50,h:85},'obj','props',scale);
+ assert.equal(item.tileWidth,200);
+ assert.equal(item.bodyHeight,.85);
+});
