@@ -33,7 +33,7 @@ const heights=[
  [/dog|cho|wolf|soi|sheep|cuu|goat|heode/, .49],
  [/cat|meo|rabbit|tho|chicken|hen|duck|vit|bird|chim/, .24],
  [/shrub|bush|bui-cay|corn|ngo|crop/, .65],
- [/tree|pine|palm|cay-co-thu|cay-lon|cay-thong/, 2.85],
+ [/tree|pine|palm|tung|cay-co-thu|cay-lon|cay-thong/, 2.85],
  [/flower|grass|hoa|co-dai|plant/, .25],
  [/statue|tuong-da/, 1]
 ];
@@ -46,19 +46,20 @@ export function outlineHeight(label,role,meters){
 }
 export function outlineObjectSize(art,label,role,scale,declaredWidth,meters){
  const base=declaredWidth||scale?.pixelsPerCell||guessTileWidth(art.w,art.h);
- const height=outlineHeight(label,role,meters),measured=art.h/base;
+ const height=outlineHeight(label,role,meters),measured=2*art.h/base;
  const standard=height&&(role==='character'||meters||!scale?.pixelsPerCell&&!declaredWidth||measured<height*.65||measured>height*1.55);
  const factor=scale?.via==='manual'?scale.factor:1;
- const tileWidth=(standard?art.h/height:base)/factor;
+ const tileWidth=(standard?2*art.h/height:base)/factor;
  const slender=/tree|pine|palm|cay|column|cot/i.test(label);
  const radius=Math.max(.10,Math.min(2.2,art.w/tileWidth*(slender?.17:.43)));
- return {tileWidth,radius,bodyHeight:art.h/tileWidth};
+ return {tileWidth,radius,bodyHeight:2*art.h/tileWidth};
 }
 
 export function scaleOutlineHouse(house,factor){
  if(factor===1)return house;
  const pair=([x,y])=>[x*factor,y*factor];
  const ents=house.ents.map(e=>({...e,x:(e.x+1)*factor-1,y:(e.y+1)*factor-1,sc:e.sc*factor,
+  ...(e.housePart?{housePart:{...e.housePart,scale:e.housePart.scale*factor}}:{}),
   col:e.col?.map(c=>c.k==='seg'?{...c,a:pair(c.a),b:pair(c.b),th:c.th*factor}:c)}));
  return {...house,w:Math.ceil(house.w*factor),h:Math.ceil(house.h*factor),ents};
 }

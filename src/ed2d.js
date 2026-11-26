@@ -1,3 +1,5 @@
+import {drawSurfaceTerrain,surfaceTerrainTile} from './surfaceContours.js';
+import {outlineHeight} from './outlineAnchors.js';
 import {surfaceLevelById} from './surfaceLibrary.js';
 import {planSurface,surfaceReachable,surfaceKinds,surfaceHash,surfaceProfiles} from './surfaceTerrain.js';
 import {surfaceSheet,surfaceRock,SURFACE_VARIANTS} from './surfaceArt.js';
@@ -144,11 +146,11 @@ export function init2D(root,A){
   function isoBuild(){const W=M.w,H=M.h,nl=sheets.filter(s=>s&&s.img).length;let h=0;
     for(let l=0;l<4;l++){const a=M.layers[l];for(let i=0;i<a.length;i++)h=(h*31+a[i]+i)|0;}
     const want=CELL*view.z*(window.devicePixelRatio||1)*(smoothOn()?1.6:1.1);let CQ=[32,48,64,96,128].find(t=>t>=want)||128;while(W*H*CQ*CQ>3e7&&CQ>8)CQ-=8;
-    const key=W+'x'+H+'|'+vis.slice(0,4).join('')+'|'+nl+'|'+h+'|'+CQ+'|'+(smoothOn()?1:0)+'|'+(ANGQ()?'A'+sheets.filter(q=>q&&q.A).length:'I');if(isoC&&isoK===key)return isoC;
+    const key=W+'x'+H+'|'+JSON.stringify(M.cfg.outline?.surface)+'|'+(M.cfg.outline?.surfaceMaterials||[]).join('|')+'|'+vis.slice(0,4).join('')+'|'+nl+'|'+h+'|'+CQ+'|'+(smoothOn()?1:0)+'|'+(ANGQ()?'A'+sheets.filter(q=>q&&q.A).length:'I');if(isoC&&isoK===key)return isoC;
     const gnd=document.createElement('canvas');gnd.width=W*CQ;gnd.height=H*CQ;const g=gnd.getContext('2d');g.imageSmoothingEnabled=true;
     const SL=[];
     const SM=smoothOn()&&!ANGQ();
-    for(const l of [0,1]){if(!vis[l])continue;const a=M.layers[l];
+    for(const l of [0,1]){if(!vis[l])continue;const a=l===0&&M.cfg.outline?.surface?M.layers[l].map(v=>surfaceTerrainTile(M,sheets[dec(v).sid])?0:v):M.layers[l];
       if(l===0&&SM){const okB=v=>{const d=dec(v),sh=sheets[d.sid];return !!(sh&&sh.img&&(!sh.iso||(sh.iso===2?!(sh.wat&&sh.wat.includes(d.idx)):!(d.f&4))));};
         for(let i=0;i<a.length;i++){const v=a[i];if(!v)continue;const sh=sheets[dec(v).sid];if(sh&&sh.img&&sh.iso&&!okB(v))SL.push({x:i%W,y:(i/W)|0,v,l});}
         const paintB=(g2,v,dx,dy,s)=>{const d=dec(v),sh=sheets[d.sid];if(sh.iso){const sx=(d.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(d.idx/sh.cols)*(sh.tw+sh.margin);paintSlab(g2,sh.img,sx,sy,sh.tw,sh.iso===2?(sh.cy||0):0,dx,dy,s,d.f&3);}else drawTile(g2,v,dx,dy,s);};
@@ -182,6 +184,7 @@ export function init2D(root,A){
     const wallImage=outlineWallImage(M.cfg.outline,sheets);
     if(geo)stoneBackdrop(cx,w,h);
     if(geo){cx.save();clipOutline(cx,geo,g2s);}
+    if(vis[0]&&M.cfg.outline?.surface)drawSurfaceTerrain(cx,M.w,M.h,M.cfg.outline.surface,g2s,{sheets,materials:M.cfg.outline.surfaceMaterials});
     cx.save();cx.imageSmoothingEnabled=true;if(AG)cx.transform(2*S/B.CQ,0,0,2*S*ANG_R/B.CQ,O[0],O[1]);else cx.transform(S/B.CQ,S/(2*B.CQ),-S/B.CQ,S/(2*B.CQ),O[0],O[1]);cx.drawImage(B.gnd,0,0);cx.restore();cx.imageSmoothingEnabled=false;
     for(const q of B.SL){const p=g2s(q.x,q.y);if(p[0]>w+S||p[0]<-2*S||p[1]>h||p[1]<-2*S)continue;tileG(q.v,q.x,q.y);}
     if(!AG){const wc=B.SL.filter(q=>(dec(q.v).f&4));if(wc.length)shore(cx,wc,(x,y)=>g2s(x,y),S);}
@@ -3260,7 +3263,7 @@ export function init2D(root,A){
       m.blk[i]=Number(plan.blocked[i]||!!(former&&m.blk[i]&&!former[i]));
     }
     const generated=[];
-    if(plan.trees.length){
+    if(spec.finish!==false&&plan.trees.length){
       const rock=await loadBuiltinSheet(outdoorStone??=surfaceRock(),target);
       const props=await Promise.all([vatPack('thieu-lam').catch(()=>null),vatPack('kenney-nong-trai').catch(()=>null)]);
       const leaf=new Map();
@@ -3274,19 +3277,33 @@ export function init2D(root,A){
         if(!art&&kind!=='rock')continue;
         generated.push({t:'deco',id:`surface-${kind}-${x}-${y}`,name:kind==='rock'?'Vách đá':tree?'Tùng':'Ruộng ngô',
           x:x-.5,y:y-.5,placedProp:true,tile:{sid:art?.sid??rock,idx:art?.a.i??0},
-          sc:(kind==='rock'?3.1:(art.a.sc||2.4)*(tree?1.5:.80))*(.84+shade*.29),oy:art?.a.oy||0,
+          sc:(kind==='rock'?3.1:tree?2.85*.75/(198/336):.65*.75/(110/296))*(.93+shade*.14),
+          bodyHeight:kind==='rock'?1.9:outlineHeight(tree?'Tùng':'corn','props'),oy:art?.a.oy||0,
           walk:!tree,col:tree?[{k:'circle',x:0,y:0,r:.20}]:[],surfaceGenerated:true});
       }
     }
-    if(plan.houseLots.length){
+    if(spec.finish!==false&&plan.houseLots.length){
       const farm=kenneyOutlinePacks.find(p=>p[0]==='farm');
       const kit=await loadBuiltinOutlinePack(farm,{floorScale:1,matchJoints:false});
       const house=kit.houses?.[0];
       if(house){
+        const occupied=new Set();
         const ids=new Map();
         for(const id of new Set(house.ents.map(e=>e.tile.sid)))ids.set(id,await loadBuiltinSheet(kit.sheets[id],target));
-        for(const {x,y} of plan.houseLots){
-          if(m.ents.some(e=>!e.surfaceGenerated&&e.t==='deco'&&Math.abs(e.x+1-x-1)<2&&Math.abs(e.y+1-y-1)<2))continue;
+        const patch=plan.tiles;
+        const validLot=(x,y)=>Array.from({length:house.w*house.h},(_,i)=>[x+i%house.w,y+Math.floor(i/house.w)])
+          .every(([a,b])=>{
+            if(a<1||b<1||a>=w-1||b>=h-1||occupied.has(b*w+a))return false;
+            const k=patch[b*w+a];
+            return [K.plain,K.meadow,K.farm,K.plaza,K.sand,K.lot].includes(k);
+          });
+        for(const anchor of plan.houseLots){
+          const candidates=[[anchor.x,anchor.y],[anchor.x-1,anchor.y],[anchor.x,anchor.y-2],[anchor.x-2,anchor.y-2],[anchor.x+2,anchor.y+1]];
+          const fit=candidates.find(([x,y])=>validLot(x,y)&&!m.ents.some(e=>!e.surfaceGenerated&&e.t==='deco'&&
+            e.x+1>x-.5&&e.x+1<x+house.w+.5&&e.y+1>y-.5&&e.y+1<y+house.h+.5));
+          if(!fit)continue;
+          const [x,y]=fit;
+          for(let yy=y;yy<y+house.h;yy++)for(let xx=x;xx<x+house.w;xx++)occupied.add(yy*w+xx);
           house.ents.forEach((e,i)=>generated.push({...e,x:e.x+x,y:e.y+y,
             tile:{...e.tile,sid:ids.get(e.tile.sid)},id:`surface-house-${x}-${y}-${i}`,surfaceGenerated:true}));
         }
@@ -3332,7 +3349,7 @@ export function init2D(root,A){
     }else validateResize(w,h);
     const m=origin.some(Boolean)?rebaseOutlineSource(M,w,h,origin,curMap):
       w===M.w&&h===M.h?clone(M):resizedMap(M,w,h);
-    if(outline.surface&&!m.cfg.outline?.surface){
+    if(outline.surface&&(!m.cfg.outline?.surface||outline.surface.finish===false)){
       m.ents=m.ents.filter(e=>!(e.outlineAutoProp||e.outlineAutoHouse||e.outlineCast)&&(!e.wallId?.startsWith('outline:')||isMapLink(e)));
     }
     const edgeGates=m.ents.filter(e=>e.wallId?.startsWith('outline:'));
@@ -3580,6 +3597,8 @@ export function init2D(root,A){
       map.cfg.outline.wallMaterial=wallNames[0];
       map.cfg.outline.wallMaterials=wallNames;
     }
+    const floors=materials.flatMap(part=>part.floors);
+    if(map.cfg.outline.surface)map.cfg.outline.surfaceMaterials=[...new Set(floors.map(item=>target[item.sid].name))];
     map.cfg.proj='iso';map.cfg.smooth=false;
     const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)),arrivals,stages,preserve,true);
     if(stages.overlay&&!info.overlays)warnings.push('Phủ nền chưa có chỗ phù hợp.');
@@ -3612,7 +3631,7 @@ export function init2D(root,A){
     return {summary:`${info.props} vật dụng · ${info.overlays} ô phủ · ${info.houses} nhà${characters.length?' · '+characters.length+' nhân vật':''}.`,warnings:warnings.join(' ')};
   }
   async function prepareOutlineDressing(map,target,options,arrivals=[]){
-    if(!options)return null;
+    if(!options||map.cfg.outline?.surface?.finish===false)return null;
     if(options.layers)return prepareOutlineLayerDressing(map,target,options,arrivals);
     const stages=options.stages||null;
     const profiles=options.preset==='mix'?kenneyOutlinePacks:kenneyOutlinePacks.filter(profile=>profile[0]===options.preset);
@@ -3644,6 +3663,8 @@ export function init2D(root,A){
       throw Error('Chưa có sàn phù hợp. Hãy chọn Kenney Dungeon 2.3 hoặc dùng ZIP có sàn 2D.'+
         (skipped.length?' '+skipped.join('. ')+'.':''));
     }
+    const floors=materials.flatMap(part=>part.floors);
+    if(map.cfg.outline.surface)map.cfg.outline.surfaceMaterials=[...new Set(floors.map(item=>target[item.sid].name))];
     map.cfg.proj='iso';map.cfg.smooth=false;
     const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)),arrivals,stages);
     const walls=materials.filter(pack=>pack.wallMaterial);

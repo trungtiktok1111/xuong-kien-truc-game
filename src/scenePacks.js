@@ -1,3 +1,4 @@
+import {FARM_HOUSE_SCALE} from './miniatureHouse.js';
 import {referencePlan,farmBarn,cityBuilding,cityBuildings} from './stockScenes.js';
 import {outlineObjectSize, packScale, scaleOutlineHouse} from './outlineAnchors.js';
 import {mapCollision} from './mapCollision.js';
@@ -157,6 +158,8 @@ async function miniaturePiece(result,packs,p,cache,folder=''){
   const a={...cache.get(key),layer:p.roof?3:2,block:p.solid};
   const e=entity(a,p.x+.5,p.y+.5,p.z,'scene-'+result.ents.length);
   if(p.wall){e.col=wallSegments(p.dir,p.open);e.walk=false;}
+  if(p.open&&p.asset==='woodWallDoorway'&&p.dir==='W')e.housePart={door:true,side:1,scale:1};
+  if(/^roof(?:single(?:wall)?)?$/i.test(p.asset))e.housePart={roof:true,scale:1};
   return e;
 }
 
@@ -534,7 +537,7 @@ export async function outlinePackMaterials(pack,profile,style){
       const ents=[],assembly={sheets:result.sheets,ents};
       for(const part of parts)ents.push(await miniaturePiece(assembly,[pack],part,cache,folder));
       result.houses.push(scaleOutlineHouse({w,h,ents,id:`barn-${w}x${h}`,label:`Nhà gỗ ${w} × ${h} ô`,source:pack.name},
-        result.scale.via==='manual'?result.scale.factor:1));
+        FARM_HOUSE_SCALE*(result.scale.via==='manual'?result.scale.factor:1)));
     }
   }
   result.wallMaterial=result.sheets[result.walls[0]?.sid]?.name;

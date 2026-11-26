@@ -1,7 +1,23 @@
 // Coordinates are authored on a 100 × 100 planning grid and scaled to the map.
 const oval=(kind,x,y,rx,ry)=>({kind,oval:[x,y,rx,ry]});
 const box=(kind,x,y,w,h)=>({kind,box:[x,y,w,h]});
-const path=(kind,width,...xy)=>({kind,width,xy});
+const naturalPaths=new Set(['river','stream','trail']);
+function path(kind,width,...points){
+ if(!naturalPaths.has(kind)||points.length<6)return {kind,width,xy:points};
+ const xy=points.slice(0,2);
+ for(let i=2;i<points.length-2;i+=2){
+  const x=points[i],y=points[i+1];
+  const [ax,ay,bx,by]=[points[i-2],points[i-1],points[i+2],points[i+3]];
+  const before=Math.min(.32,9/Math.hypot(x-ax,y-ay)),after=Math.min(.32,9/Math.hypot(x-bx,y-by));
+  const l=x+(ax-x)*before,m=y+(ay-y)*before,r=x+(bx-x)*after,n=y+(by-y)*after;
+  for(let step=0;step<=6;step++){
+   const t=step/6,u=1-t;
+   xy.push(u*u*l+2*u*t*x+t*t*r,u*u*m+2*u*t*y+t*t*n);
+  }
+ }
+ xy.push(...points.slice(-2));
+ return {kind,width,xy};
+}
 const main=(...xy)=>path('main',5,...xy);
 const branch=(...xy)=>path('branch',3,...xy);
 const forest=(...args)=>oval('forest',...args);
@@ -118,6 +134,7 @@ export function inSurfaceShape(shape,x,y){
   const ax=xy[i],ay=xy[i+1],bx=xy[i+2],by=xy[i+3];
   if(x<Math.min(ax,bx)-r||x>Math.max(ax,bx)+r||y<Math.min(ay,by)-r||y>Math.max(ay,by)+r)continue;
   const dx=bx-ax,dy=by-ay;
+  if(dx===0&&dy===0)continue;
   const along=Math.min(1,Math.max(0,((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy)));
   if((x-ax-along*dx)**2+(y-ay-along*dy)**2<=r*r)return true;
  }

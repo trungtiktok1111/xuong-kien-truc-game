@@ -1,3 +1,5 @@
+import {surfaceContours} from '../src/surfaceContours.js';
+import {mapCollision} from '../src/mapCollision.js';
 import {surfaceLevels,surfacePieces} from '../src/surfaceLibrary.js';
 import {placedPropFrame} from '../src/proj.js';
 import {decoZones,zonesHit} from '../src/zones.js';
@@ -80,4 +82,19 @@ test('saved surface tree art and its collision use the same projected ground con
  assert.ok(Math.abs(zone.w*150-frame.size*80/336)<1e-8);
  assert.ok(zonesHit([zone],e.x+1,e.y+1,0));
  assert.ok(!zonesHit([zone],e.x+1,e.y+1+.45,0));
+});
+
+test('surface sketch and textured terrain share the curved geometry and bridge collision',()=>{
+ const level=surfaceLevels.find(item=>item.id==='tran-hai-cau'),{w,h}=level;
+ const spec=surfaceFromLevel(level),raw=planSurface(w,h,{...spec,finish:false},{geometry:true});
+ const finished=planSurface(w,h,{...spec,finish:true},{geometry:true});
+ assert.deepEqual(raw.detail,finished.detail);
+ assert.ok(raw.detail.scale>1);
+ const loops=surfaceContours(raw.detail.tiles,raw.detail.w,raw.detail.h);
+ assert.ok(loops[K.river].some(loop=>loop.length>20));
+ const map={w,h,blk:raw.blocked,cfg:{outline:{surface:spec,loops:diamondOutline(w,h)}}};
+ const walk=mapCollision(map);
+ const bridge=raw.tiles.indexOf(K.bridge),water=raw.tiles.findIndex((kind,i)=>kind===K.river&&i>w&&i<w*(h-1));
+ assert.ok(walk.free(bridge%w+.5,Math.floor(bridge/w)+.5,.1));
+ assert.ok(!walk.free(water%w+.5,Math.floor(water/w)+.5,.1));
 });

@@ -1,3 +1,4 @@
+import {drawSurfaceTerrain} from './surfaceContours.js';
 import {surfaceLevels,surfaceLevelById,surfacePieces} from './surfaceLibrary.js';
 import {diamondOutline,newSurface,planSurface,surfaceFromLevel,surfaceTypes,surfaceWater} from './surfaceTerrain.js';
 import {drawOutlineDraft} from './outlineDraftView.js';
@@ -32,7 +33,6 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const original=copy(map.cfg.outline?.loops||[]);
  let surface=is3D?null:structuredClone(map.cfg.outline?.surface||null);
  let drawnSurface=null,armedSurfacePiece=null,surfaceTurn=0;
- const surfaceColors=surfaceTypes.map(t=>t[2]);
  let queueLivePreview=()=>{};
  let loops=copy(original),stamps=[],pending=[],mode='select',picked=-1,drag=null;
  const undo=[],redo=[];
@@ -146,15 +146,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   if(surface){
    if(!drawnSurface||drawnSurface.spec!==surface||drawnSurface.w!==W||drawnSurface.h!==H)
     drawnSurface={spec:surface,w:W,h:H,plan:planSurface(W,H,surface)};
-   const {tiles,start,goal}=drawnSurface.plan;
-   const x0=Math.max(0,Math.floor(-ox/s)),x1=Math.min(W,Math.ceil((760-ox)/s));
-   const y0=Math.max(0,Math.floor(-oy/s)),y1=Math.min(H,Math.ceil((465-oy)/s));
-   for(let y=y0;y<y1;y++)for(let x=x0;x<x1;){
-    const kind=tiles[y*W+x],from=x++;
-    while(x<x1&&tiles[y*W+x]===kind)x++;
-    c.fillStyle=surfaceColors[kind];
-    c.fillRect(xp(from),yp(y),(x-from)*s+.2,s+.2);
-   }
+   const {start,goal}=drawnSurface.plan;
+   drawSurfaceTerrain(c,W,H,surface,(x,y)=>[xp(x),yp(y)],{sketch:true});
    if(surface.layout){
     for(const [[x,y],label,color] of [[start,'A','#b0f2bc'],[goal,'B','#ffcc7b']]){
      const a=xp(x+.5),b=yp(y+.5);
@@ -248,7 +241,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    surfaceControls.hidden=!surface;
    toolbar.hidden=!!surface;editShape.hidden=!!surface;
    surfaceMode.textContent=surface?'Dùng đường bao hầm / tự vẽ':'Phủ kín hình thoi';
+   materialsPanel.hidden=false;
    if(surface){
+    surfaceSketch.setAttribute('aria-pressed',String(surface.finish===false));
+    surfaceFinish.setAttribute('aria-pressed',String(surface.finish!==false));
+    materialsPanel.hidden=surface.finish===false;
     for(const [key,check] of surfaceFlags)check.checked=!!surface[key];
     for(const [key,check] of surfaceWaters)check.checked=surface.water.includes(key);
     surfaceInfo.textContent=surface.patches.length+' vùng tự ráp · '+(armedSurfacePiece?armedSurfacePiece.name+' · '+surfaceTurn*90+'°':'Kéo trên lưới để đặt vùng.');
@@ -639,12 +636,12 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  }
  function loadOutdoorLevel(level){
   if(commitBusy)return;
-  record();surface=surfaceFromLevel(level);armedSurfacePiece=null;previewAt=null;
+  record();surface={...surfaceFromLevel(level),finish:false};armedSurfacePiece=null;previewAt=null;
   W=level.w;H=level.h;loops=diamondOutline(W,H);stamps=[];gates=[];origin=[0,0];levelDraft=null;
   front.value=0;rear.value=0;collision.checked=true;picked=-1;
   resetGridView();select('select');
  }
- function surfaceCatalog(items,onChoose,makePlan){
+ function surfaceCatalog(items,onChoose,makeSpec){
   const tiles=new Map(),cards=el('div',{class:'outline-levels'});
   const filter=el('select',{'aria-label':items===surfacePieces?'Nhóm mảnh mặt đất':'Nhóm màn mặt đất'},
    ...['Tất cả',...new Set(items.map(item=>item.group))].map(v=>el('option',{value:v},v)));
@@ -654,11 +651,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   };
   for(const item of items){
    const icon=el('canvas',{width:92,height:58,'aria-hidden':'true'}),ctx=icon.getContext('2d');
-   const plan=makePlan(item),w=46,h=29;
-   for(let i=0;i<plan.tiles.length;i++){
-    ctx.fillStyle=surfaceColors[plan.tiles[i]];
-    ctx.fillRect((i%w)*2,Math.floor(i/w)*2,2,2);
-   }
+   const spec=makeSpec(item),w=46,h=29,plan=planSurface(w,h,spec);
+   drawSurfaceTerrain(ctx,w,h,spec,(x,y)=>[x*2,y*2],{sketch:true});
    if(item.w)for(const [x,y] of [plan.start,plan.goal]){
     ctx.fillStyle='#fff0ae';ctx.fillRect(x*2,y*2,3,3);
    }
@@ -676,11 +670,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   }
   return {tiles,filter,cards};
  }
- const outdoor=surfaceCatalog(surfaceLevels,loadOutdoorLevel,item=>planSurface(46,29,surfaceFromLevel(item)));
+ const outdoor=surfaceCatalog(surfaceLevels,loadOutdoorLevel,surfaceFromLevel);
  const pieces=surfaceCatalog(surfacePieces,item=>{armedSurfacePiece=item;draw();},item=>{
   const bounds=[0,0,46,29];
   const underlay=item.id==='bridge'?[{kind:'river',bounds:[15,0,31,29]}]:[];
-  return planSurface(46,29,{...newSurface('blank'),patches:[...underlay,{piece:item.id,bounds}]});
+  return {...newSurface('blank'),patches:[...underlay,{piece:item.id,bounds}]};
  });
  const outdoorTiles=outdoor.tiles,pieceTiles=pieces.tiles;
  const piecePanel=el('div',{class:'outline-shape-panel'},el('div',{class:'row'},pieces.filter,
@@ -1096,7 +1090,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    front.value=map.cfg.outline?.surface?DEFAULT_OUTLINE_WALL_HEIGHT:map.cfg.outline?.front??DEFAULT_OUTLINE_WALL_HEIGHT;
    rear.value=map.cfg.outline?.surface?DEFAULT_OUTLINE_WALL_HEIGHT:map.cfg.outline?.rear??DEFAULT_OUTLINE_WALL_HEIGHT;
   }else{
-   surface=newSurface('blank');loops=diamondOutline(W,H);stamps=[];gates=[];levelDraft=null;
+   surface={...newSurface('blank'),finish:false};loops=diamondOutline(W,H);stamps=[];gates=[];levelDraft=null;
    setTab('levels');
    front.value=0;rear.value=0;collision.checked=true;
   }
@@ -1114,10 +1108,16 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   input.onchange=()=>changeSurface({water:surfaceWaters.filter(([,box])=>box.checked).map(([id])=>id)});
   return [key,input,label];
  });
+ const surfaceSketch=B('Bố cục thô',()=>changeSurface({finish:false}));
+ const surfaceFinish=B('Phối vật liệu',()=>{
+  if(surface.finish===false)changeSurface({finish:true});
+  materialsPanel.open=true;
+  materialsPanel.scrollIntoView({block:'nearest'});
+ });
  const surfaceInfo=el('span',{class:'hint',role:'status'});
  const surfaceControls=el('div',{class:'surface-controls'},
-  el('div',{class:'row'},B('Nền trống',()=>{
-   record();surface=newSurface('blank');armedSurfacePiece=null;draw();
+  el('div',{class:'row'},surfaceSketch,surfaceFinish,B('Nền trống',()=>{
+   record();surface={...newSurface('blank'),finish:false};armedSurfacePiece=null;draw();
   })),
   el('div',{class:'row'},...surfaceFlags.map(([,input,label])=>el('label',{},input,' '+label))),
   el('div',{class:'row'},...surfaceWaters.map(([,input,label])=>el('label',{},input,' '+label))),
@@ -1132,8 +1132,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   el('strong',{},'Xem trước cảnh ráp'),liveCanvas,liveStatus);
  let liveTimer,liveKey='',liveRevision=0;
  queueLivePreview=(force=false)=>{
-  if(is3D||!ov.isConnected||layerControls.some(row=>row.loading))return;
-  const opts=materials(true);
+  if(is3D||!ov.isConnected||surface?.finish!==false&&layerControls.some(row=>row.loading))return;
+  const opts=surface?.finish===false?null:materials(true);
   const key=JSON.stringify([W,H,loops,origin,stamps,levelDraft?.id,front.value,rear.value,thickness.value,collision.checked,surface,opts]);
   if(!force&&key===liveKey)return;
   liveKey=key;clearTimeout(liveTimer);clearTimeout(sequenceTimer);
@@ -1146,7 +1146,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
     if(revision!==liveRevision||!ov.isConnected)return;
     drawOutlineDraft(liveCanvas,view);
     liveCanvas.hidden=false;
-    liveStatus.textContent=[view.dressing?.summary,view.dressing?.warnings].filter(Boolean).join(' ');
+    liveStatus.textContent=[surface?.finish===false?'Bố cục thô · Bấm Phối vật liệu để chọn tài nguyên.':'',view.dressing?.summary,view.dressing?.warnings].filter(Boolean).join(' ');
     if(sequence){
      const {control}=sequence,i=control.items.findIndex(item=>item.id===control.trial);
      clearTimeout(sequenceTimer);

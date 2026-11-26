@@ -1,4 +1,4 @@
-import {spriteBottom} from './spriteFoot.js';
+import {spriteBottom,spriteVerticalBounds} from './spriteFoot.js';
 import {el,toast,packBytes,expandPacks} from './util.js';
 import {unzipSync} from 'fflate';
 /* Hoạt ảnh nhân vật 2D: bộ hoạt ảnh = các trạng thái (đứng/chạy/đánh/trúng đòn), mỗi trạng thái là 1 dải ảnh nhiều khung.
@@ -30,15 +30,17 @@ export function makeAnims(cfg,sheets){uniqNames(sheets);
     if(ok(want))return want;if(/^atk\d+$/.test(want)&&ok('atk'))return 'atk';if(want==='run'||/^atk/.test(want)||want==='hit')return ok('idle')?'idle':ok('run')?'run':null;return ok('run')?'run':null;}
   /* vẽ khung hình hiện tại. sx,sy = tâm ô trên màn hình, s = cỡ 1 ô. Trả về false nếu không có hoạt ảnh. */
   function clipSec(set,stn){const sp=strip(set,stn,0);if(!sp)return 0;return sp.dur?sp.dur.reduce((p,q)=>p+q,0)/1000:sp.n/sp.fps;}
-  function frame(cx,set,stn,d,tt,sx,sy,s,flipL,grounded=false){
+  function frame(cx,set,stn,d,tt,sx,sy,s,flipL,grounded=false,height=0){
     const sp=strip(set,stn,d);if(!sp)return false;
     const base=stn.replace(/\d+$/,'');let f;
     if(sp.dur){const tot=sp.dur.reduce((p,q)=>p+q,0)/1000;let T=LOOP[base]?tt%tot:Math.min(tt,tot-.001);let acc=0;f=sp.n-1;for(let i=0;i<sp.n;i++){acc+=sp.dur[i]/1000;if(T<acc){f=i;break;}}}
     else{f=Math.floor(tt*sp.fps);f=LOOP[base]?f%sp.n:Math.min(sp.n-1,f);}
-    const k=s/16*(set.sc||1),dw=sp.fw*k,dh=sp.fh*k;
+    const reference=grounded&&height?(strip(set,'idle',d)||strip(set,'run',d)||sp):null;
+    const bounds=reference?spriteVerticalBounds(reference.I,0,reference.sy,reference.fw,reference.fh):null;
+    const k=bounds?s*.75*height/Math.max(1,bounds[1]-bounds[0]):s/16*(set.sc||1),dw=sp.fw*k,dh=sp.fh*k;
     const dy=(set.oy||0)*s/16;
     const foot=grounded?spriteBottom(sp.I,f*sp.fw,sp.sy,sp.fw,sp.fh):sp.ay;
-    const y=grounded?sy-Math.max(foot*k,sp.ay*k-dy):sy+s*.32-sp.ay*k+dy;
+    const y=bounds?sy-foot*k:grounded?sy-Math.max(foot*k,sp.ay*k-dy):sy+s*.32-sp.ay*k+dy;
     const sm=cx.imageSmoothingEnabled;cx.imageSmoothingEnabled=sp.fh>=96;if(cx.imageSmoothingEnabled)cx.imageSmoothingQuality='high';
     if(flipL){cx.save();cx.translate(sx,0);cx.scale(-1,1);cx.drawImage(sp.I,f*sp.fw,sp.sy,sp.fw,sp.fh,-sp.ax*k,y,dw,dh);cx.restore();}
     else cx.drawImage(sp.I,f*sp.fw,sp.sy,sp.fw,sp.fh,sx-sp.ax*k,y,dw,dh);
@@ -52,7 +54,7 @@ export function makeAnims(cfg,sheets){uniqNames(sheets);
     const dirs=dirsOf(set.st[stn]);const d=dirIdx(set,dirs,q.afx||0,q.afy===undefined?1:q.afy,q.aface||1);
     const fl=dirs===1&&((q.aface||1)<0)!==!!set.fl;
     let tt=want==='idle'&&stn!=='idle'?0:t-q.ast0;const sk=set.st[stn];if(sk&&sk.skip1&&hint&&hint.chain){const sp0=strip(set,stn,d);if(sp0)tt+=sp0.dur?sp0.dur[0]/1000:1/sp0.fps;}
-    return frame(cx,set,stn,d,tt,sx,sy,s,fl,hint?.grounded);}
+    return frame(cx,set,stn,d,tt,sx,sy,s,fl,hint?.grounded,hint?.height);}
   return {get,strip,frame,drawChar,dirsOf,dirIdx,clipSec,pickState};
 }
 

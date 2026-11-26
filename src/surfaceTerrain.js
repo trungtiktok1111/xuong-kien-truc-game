@@ -37,25 +37,26 @@ const clamp=(n,a,b)=>Math.max(a,Math.min(n,b));
 const isWet=id=>id>=K.sea&&id<=K.pond;
 
 // Each cell retains the base ground, a water layer, and a circulation layer until assembly.
-export function planSurface(w,h,spec){
+export function planSurface(w,h,spec,style={}){
  const n=w*h,land=new Uint8Array(n),water=new Uint8Array(n).fill(255),road=new Uint8Array(n).fill(255);
  const {seed=1,profile='plain',patches=[]}=spec,layout=surfaceLevelById.get(spec.layout);
  const waters=new Set(spec.water||[]),city=profile==='city',temple=profile==='temple',village=profile==='village',coast=profile==='coast';
  const phase=surfaceHash(0,0,seed)*6.28;
- const junction=Math.round(h*.51);
+ const detail=style.detail||1,baseW=w/detail,baseH=h/detail;
+ const junction=Math.round(baseH*.51);
  const cell=([x,y])=>[clamp(Math.floor(x*w/100),0,w-1),clamp(Math.floor(y*h/100),0,h-1)];
  const start=layout?cell(layout.start):[Math.max(1,Math.floor(w*.12)),clamp(junction,1,h-2)];
  const goal=layout?cell(layout.goal):[clamp(Math.floor(w*(waters.has('sea')?.68:.87)),1,w-2),start[1]];
  const houseLots=[];
- const delta=Math.min(w,h);
+ const delta=Math.min(baseW,baseH);
  if(!layout)for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-  const i=y*w+x,u=(x+.5)/w,v=(y+.5)/h;
+  const i=y*w+x,u=(x+.5)/w,v=(y+.5)/h,gx=(x+.5)/detail-.5,gy=(y+.5)/detail-.5;
   const wave=Math.sin(v*9+phase)*.037;
   const shore=.81+wave*.58+Math.sin(v*5+phase)*.04;
   if(spec.land){
    const forest=(u-.21)**2/.079+(v-.22)**2/.08;
    const rock=(u-(temple?.30:.17))**2/(temple?.055:.026)+(v-.19)**2/.036;
-   const terrainNoise=.17*Math.sin(x*.47+y*.24)*Math.cos(y*.43-x*.19);
+   const terrainNoise=.17*Math.sin(gx*.47+gy*.24)*Math.cos(gy*.43-gx*.19);
    if(forest+terrainNoise<1)land[i]=K.forest;
    if(rock+terrainNoise<.78)land[i]=K.mountain;
    if(u<.34&&v>.58&&(village||profile==='plain'))land[i]=K.farm;
@@ -65,18 +66,18 @@ export function planSurface(w,h,spec){
   }
   if(waters.has('sea')&&u>shore)water[i]=K.sea;
   const trunk=(waters.has('sea')?.60:.61)+wave;
-  if(water[i]===255&&waters.has('river')&&Math.abs(u-trunk)*w<Math.max(1.35,delta*.042))water[i]=K.river;
-  if(water[i]===255&&waters.has('canal')&&u>.17&&u<trunk&&Math.abs(v-.71)*h<Math.max(.73,delta*.014))water[i]=K.canal;
-  if(water[i]===255&&waters.has('stream')&&v<.76&&Math.abs(u-(.49+Math.sin(v*8+phase)*.052))*w<Math.max(.65,delta*.015))water[i]=K.stream;
+  if(water[i]===255&&waters.has('river')&&Math.abs(u-trunk)*baseW<Math.max(1.35,delta*.042))water[i]=K.river;
+  if(water[i]===255&&waters.has('canal')&&u>.17&&u<trunk&&Math.abs(v-.71)*baseH<Math.max(.73,delta*.014))water[i]=K.canal;
+  if(water[i]===255&&waters.has('stream')&&v<.76&&Math.abs(u-(.49+Math.sin(v*8+phase)*.052))*baseW<Math.max(.65,delta*.015))water[i]=K.stream;
   if(water[i]===255&&waters.has('lake')&&((u-.72)/.113)**2+((v-.23)/.115)**2<1)water[i]=K.lake;
   if(water[i]===255&&waters.has('pond')&&((u-.24)/.075)**2+((v-.76)/.085)**2<1)water[i]=K.pond;
   if(spec.roads){
-   if(Math.abs(y-junction)<=Math.floor(delta*.023)&&(!waters.has('sea')||u<shore-.02))road[i]=K.main;
-   else if(((x===Math.floor(w*.31)||x===Math.floor(w*.72))&&v>.29&&v<.87)||
-     (city&&Math.abs(y-Math.floor(h*.34))<=Math.floor(delta*.012)&&u>.12&&u<.77))road[i]=K.branch;
-   else if((Math.abs(y-Math.floor(h*.65))<=Math.floor(delta*.009)&&u>.12&&u<.44)||
-     (x===Math.floor(w*.40)&&v>.44&&v<.69))road[i]=K.lane;
-   else if(x===Math.floor(w*(.135+.035*Math.sin(y*.20)))&&v>.12&&v<.54)road[i]=K.trail;
+   if(Math.abs(gy-junction)<Math.floor(delta*.023)+.5&&(!waters.has('sea')||u<shore-.02))road[i]=K.main;
+   else if(((Math.abs(gx-Math.floor(baseW*.31))<.5||Math.abs(gx-Math.floor(baseW*.72))<.5)&&v>.29&&v<.87)||
+     (city&&Math.abs(gy-Math.floor(baseH*.34))<Math.floor(delta*.012)+.5&&u>.12&&u<.77))road[i]=K.branch;
+   else if((Math.abs(gy-Math.floor(baseH*.65))<Math.floor(delta*.009)+.5&&u>.12&&u<.44)||
+     (Math.abs(gx-Math.floor(baseW*.40))<.5&&v>.44&&v<.69))road[i]=K.lane;
+   else if(Math.abs(gx-Math.floor(baseW*(.135+.035*Math.sin(gy*.20))))<.5&&v>.12&&v<.54)road[i]=K.trail;
   }
  }
  function paint(kind,i,overwrite){
@@ -124,13 +125,43 @@ export function planSurface(w,h,spec){
   else tiles[i]=route!==255?route:base;
   blocked[i]=Number(isWet(tiles[i])||tiles[i]===K.mountain);
   if(route!==255||wet!==255)continue;
+  if(style.detail)continue;
   const shade=surfaceHash(x,y,seed);
   if(base===K.forest&&x%3===0&&y%3===0&&(layout||shade>.23))trees.push({x,y,kind:'tree',shade});
   else if(base===K.mountain&&x%4===0&&y%4===0&&(layout||shade>.32))trees.push({x,y,kind:'rock',shade});
   else if(base===K.farm&&x%5===0&&y%4===0&&(layout||shade>.4))trees.push({x,y,kind:'crop',shade});
  }
  // Mark the start and goal on actual available land. Validate connectivity again after scenery is installed.
- return {tiles,blocked,trees,houseLots,start,goal};
+ const plan={tiles,blocked,trees,houseLots,start,goal};
+ if(style.geometry){
+  const scale=Math.max(1,Math.min(6,Math.floor(Math.sqrt(350000/(w*h)))));
+  const finePatches=patches.map(p=>({...p,bounds:p.bounds.map(n=>n*scale)}));
+  const fine=scale>1?
+   planSurface(w*scale,h*scale,{...spec,patches:finePatches,buildings:false},{detail:scale}):null;
+  if(fine){
+   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const kind=tiles[y*w+x];
+    // The visual deck uses the full walkable bridge cells. Lots remain aligned with structures.
+    if(kind!==K.bridge&&kind!==K.lot)continue;
+    for(let row=0;row<scale;row++){
+     const i=(y*scale+row)*w*scale+x*scale;
+     fine.tiles.fill(kind,i,i+scale);
+     fine.blocked.fill(0,i,i+scale);
+    }
+   }
+  }
+  plan.detail=fine?{w:w*scale,h:h*scale,scale,tiles:fine.tiles,blocked:fine.blocked}:{w,h,scale:1,tiles,blocked};
+ }
+ return plan;
+}
+
+const detailedPlans=new WeakMap();
+export function detailedSurface(w,h,spec){
+ const old=detailedPlans.get(spec);
+ if(old?.w===w&&old?.h===h)return old.plan;
+ const plan=planSurface(w,h,spec,{geometry:true});
+ detailedPlans.set(spec,{w,h,plan});
+ return plan;
 }
 
 export function surfaceReachable(w,h,blocked,start){

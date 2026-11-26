@@ -67,7 +67,8 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
     const tile=mixSelected?floors[Math.min(floors.length-1,Math.floor(floorCell*floors.length/Math.max(1,floorCells)))]:
       stages?choose(floors,'floor'):zone<0?core:floors[(zone+1)%floors.length];
     floorCell+=mask[i];
-    map.layers[0][i]=value(tile.sid);coverage.add(tile.source);
+    if(!surface)map.layers[0][i]=value(tile.sid);
+    coverage.add(tile.source);
   }
   const addedZones=[];
   let walk=linkWalkability(map,placementZones);

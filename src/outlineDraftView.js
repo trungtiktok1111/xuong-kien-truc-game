@@ -1,3 +1,4 @@
+import {drawSurfaceTerrain,surfaceTerrainTile} from './surfaceContours.js';
 import {clipOutline,outline2D,outlineWallImage,stoneBackdrop,stoneWall} from './outline2d.js';
 import {slab,tile192,mirF} from './isoslab.js';
 import {drawPlacedProp,placedPropFrame} from './proj.js';
@@ -22,11 +23,14 @@ export function drawOutlineDraft(canvas,{M:map,sheets}){
  const project=(x,y)=>[width/2+(x-y-(x0+x1)/2)*s,height/2+((x+y)/2-(y0+y1)/2+1.2)*s];
  stoneBackdrop(cx,width,height);
  cx.save();clipOutline(cx,geo,project);
+ const {surface,surfaceMaterials}=map.cfg.outline;
+ if(surface)drawSurfaceTerrain(cx,w,h,surface,project,{sheets,materials:surfaceMaterials});
+ if(surface?.finish===false){cx.restore();return;}
  for(const layer of [0,1])for(let i=0;i<w*h;i++){
   const value=map.layers[layer][i];
   if(!value)continue;
   const frame=tileFrame(value,sheets);
-  if(!frame)continue;
+  if(!frame||layer===0&&surfaceTerrainTile(map,frame.sheet))continue;
   const {sheet,index,x,y,flags}=frame,tw=sheet.tw,gx=i%w,gy=Math.floor(i/w),[px,py]=project(gx,gy);
   if(sheet.iso===2)tile192(cx,sheet.img,x,y,tw,sheet.cy||0,px,py,s,sheet.wat?.includes(index)?mirF(gx,gy):0);
   else if(sheet.iso)slab(cx,sheet.img,x,y,tw,px,py,s,flags);
