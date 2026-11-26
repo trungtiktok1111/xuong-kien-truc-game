@@ -4,7 +4,7 @@ import {portalAnchor,isMapLink} from './wall2d.js';
 import {linkWalkability} from './mapLinks2d.js';
 
 export const kenneyOutlinePacks=[
-  ['dungeon','stone',['barrel','stoneColumn','woodenCrate']],
+  ['dungeon','stone',['tableRoundItemsChairs','barrel','stoneColumn','woodenCrate','chestClosed','tableShortChairs','barrelsStacked']],
   ['farm','planks',['hayBales','sacksCrate']],
   ['library','floorCarpet',['bookStand','candleStand','libraryChair']],
   ['bases','square_stone_flat',['base_stone_high','base_wood_flat']]
@@ -13,7 +13,7 @@ export const kenneyOutlinePacks=[
 const steps=[[1,0],[-1,0],[0,1],[0,-1]];
 const isMarker=e=>['start','goal','chest','npc','enemy','door'].includes(e.t)||isMapLink(e);
 
-export function dressOutline(map,materials,value,placementZones=[]){
+export function dressOutline(map,materials,value,placementZones=[],arrivals=[]){
   map.ents=map.ents.filter(e=>!e.outlineAutoProp);
   const {w,h,ents,blk}=map,mask=rasterOutline(map.cfg.outline.loops,w,h),n=w*h;
   if(!materials.some(m=>m.floors.length))throw Error('Các gói đã chọn thiếu mảnh sàn phù hợp với Đường Bao.');
@@ -60,7 +60,7 @@ export function dressOutline(map,materials,value,placementZones=[]){
   }
   const addedZones=[];
   const walk=linkWalkability(map,placementZones);
-  const markers=ents.filter(isMarker).map(e=>isMapLink(e)?portalAnchor(e,walk.free):[e.x+.5,e.y+.5]).filter(Boolean);
+  const markers=ents.filter(isMarker).map(e=>isMapLink(e)?portalAnchor(e,walk.free):[e.x+.5,e.y+.5]).filter(Boolean).concat(arrivals);
   const protectedCells=new Uint8Array(n);
   const starts=markers.map(([x,y])=>Math.floor(y)*w+Math.floor(x)).filter(i=>i>=0&&i<n&&mask[i]);
   // Reserve the complete routes found before placing any furniture.
@@ -86,6 +86,10 @@ export function dressOutline(map,materials,value,placementZones=[]){
     let inRoom=false;
     around(i,j=>{if(distance[j]>=3)around(j,k=>{if(owners[k]>=0)inRoom=true;});});
     if(inRoom)candidates.push(i);
+    else if(room<0){
+      around(i,j=>{if(distance[j]>=3)inRoom=true;});
+      if(inRoom)candidates.push(i);
+    }
   }
   const budget=Math.min(52,Math.floor(mask.reduce((count,v)=>count+v,0)/42));
   for(const i of candidates){

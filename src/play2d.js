@@ -8,7 +8,7 @@ import {gateWalls} from './gate2d.js';
 import {paintedPieces,sceneEntityLayer} from './placement2d.js';
 import {tileFoot} from './spriteFoot.js';
 import {mapCollision} from './mapCollision.js';
-import {outline2D,clipOutline,stoneBackdrop,stoneWall,drawFloorCollision} from './outline2d.js';
+import {outline2D,clipOutline,stoneBackdrop,stoneWall,outlineWallImage,drawFloorCollision} from './outline2d.js';
 import {createLogic} from './logic.js';
 import {el} from './util.js';
 import {zonesHit,zRaster,zPath,decoZones} from './zones.js';
@@ -313,6 +313,7 @@ export function play2D(o){
     if(W*s<=w)ox=(w-W*s)/2;else ox=Math.min(0,Math.max(w-W*s,ox));if(H*s<=h)oy=(h-H*s)/2;else oy=Math.min(0,Math.max(h-H*s,oy));
     let pX=()=>0,pY=()=>0;
     const geo=ISO&&outline2D(CF.outline,ANG,EN);
+    const wallImage=outlineWallImage(CF.outline,sheets);
     if(ANG){const cw=s*1.5,ch=cw*ANG_R,ox0=w/2-CEN.x*cw,oy0=h/2-CEN.y*ch,hw=cw/2;pX=(x,y)=>ox0+x*cw;pY=(x,y)=>oy0+y*ch;VIEW={iso:1,ang:1,ox0,oy0,cw,ch};if(geo){stoneBackdrop(cx,w,h);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
       cx.save();cx.transform(cw/CQ,0,0,ch/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();
       for(const q of SL){const X=pX(q.x,q.y),Y=pY(q.x,q.y);if(X>w||X<-cw||Y>h||Y<-2*cw)continue;const sh=sheets[q.sid];if(sh&&sh.A)tileAng(cx,sh.A,q.idx,X,Y,cw);}
@@ -345,7 +346,7 @@ export function play2D(o){
       cx.fill();cx.restore();
     }
     const actorTop=(q,sid,idx)=>oy+(q.y-(grounded?tileFoot(sheets[sid],idx):.7))*s;
-    for(const n of ents){if(n.wall){stoneWall(cx,n.wall,ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s],ISO?s*.75:s,w,h,geo);continue;}if(n.dc){const d=n.dc,sh=d.tile&&sheets[d.tile.sid];
+    for(const n of ents){if(n.wall){stoneWall(cx,n.wall,ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s],ISO?s*.75:s,w,h,geo,wallImage);continue;}if(n.dc){const d=n.dc,sh=d.tile&&sheets[d.tile.sid];
       if(d.placedProp){
         const project=ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s];
         drawPlacedProp(cx,d,sh,placedPropFrame(d,project,s,ANG?'angle':ISO?'iso':'top'));

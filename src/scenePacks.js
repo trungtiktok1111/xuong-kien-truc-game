@@ -309,6 +309,19 @@ async function groundTile(result,a){
   result.sheets.push({name:a.pack.name+' · '+a.label,tw:128,margin:0,iso:1,url:sh.toDataURL()});
   return result.sheets.length-1;
 }
+// Rectify the long sandstone face so it can follow curved outlines and gates.
+async function dungeonWallMaterial(result,pack){
+  const source=await loadImage({pack,path:'isometric/stonewall_e.png'});
+  const tile=canvas(128,128),g=tile.getContext('2d');
+  const left=35,top=306,width=120,height=144;
+  const scaleX=tile.width/width,scaleY=tile.height/height;
+  g.setTransform(scaleX,scaleY/2,0,scaleY,-left*scaleX,-(top+left/2)*scaleY);
+  g.drawImage(source,0,0);
+  const name='Kenney Dungeon 2.3 · Mặt tường đá';
+  result.sheets.push({name,tw:128,margin:0,url:tile.toDataURL('image/png')});
+  result.wallMaterial=name;
+}
+
 // Profiles may supply exact roles for any ZIP. Otherwise use recognized floor
 // tiles and small props from the existing archive catalogue.
 export async function outlinePackMaterials(pack,profile){
@@ -341,6 +354,7 @@ export async function outlinePackMaterials(pack,profile){
     if(floor==='floorCarpet')tile.underlay='#5a473d';
     floors=[tile];
     props=extras.map(id=>named({path:path(id),anchor:[128,437],tileWidth:256},2));
+    if(profile[0]==='dungeon')await dungeonWallMaterial(result,pack);
   }else{
     const assets=catalog(pack);
     floors=assets.filter(a=>a.layer===0&&!/high|float|stairs|water|river|sea|lake|corner|cliff|transition/i.test(a.label))
@@ -355,8 +369,9 @@ export async function outlinePackMaterials(pack,profile){
   for(const a of props){
     const art=await sprite(a);
     const tileWidth=Math.max(a.tileWidth||1,art.w/.95,art.h/1.65);
-    const piece=addSprite(result,{...a,tileWidth,collision:null,block:true},art);
-    result.props.push({source:pack.name,radius:.27,create:(x,y,id)=>({...entity(piece,x,y,0,id),outlineAutoProp:true})});
+    const radius=Math.max(.22,Math.min(.46,art.w/tileWidth*.55));
+    const piece=addSprite(result,{...a,tileWidth,collision:{shape:'circle',radius}},art);
+    result.props.push({source:pack.name,radius,create:(x,y,id)=>({...entity(piece,x,y,0,id),outlineAutoProp:true})});
   }
   return result;
 }

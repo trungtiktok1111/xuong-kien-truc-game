@@ -1,6 +1,9 @@
 import {WALL_THICKNESS,outlineSupports,wallRuns,wallSpan} from './wall2d.js';
 import {DEFAULT_OUTLINE_WALL_HEIGHT} from './outlineGrid.js';
 const cached=new WeakMap();
+export function outlineWallImage(outline,sheets){
+ return outline?.wallMaterial?sheets.find(sheet=>sheet?.name===outline.wallMaterial)?.img:null;
+}
 export function outline2D(data,angle=false,ents=[]){
  if(!data?.loops?.length)return null;
  const variants=cached.get(data)||[];const index=Number(angle);
@@ -13,15 +16,18 @@ export function outline2D(data,angle=false,ents=[]){
   return yes;
  }
  const thickness=data.thickness??WALL_THICKNESS;
+ let perimeter=0;
  const walls=edges.flatMap(([a,b],i)=>{
   const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,near=inside(angle?mx:mx-.24,my-.24);
   /* cắt cạnh dài thành đoạn ngắn: khóa sắp xếp độ sâu theo từng đoạn, không theo điểm giữa cả cạnh (cạnh dài làm tường đè lên người đứng ở đầu cạnh) */
-  const n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/.5)),out=[];
+  const len=Math.hypot(b[0]-a[0],b[1]-a[1]);
+  const n=Math.max(1,Math.ceil(len/.5)),out=[];
   for(let j=0;j<n;j++){
    const p=[a[0]+(b[0]-a[0])*j/n,a[1]+(b[1]-a[1])*j/n],q=[a[0]+(b[0]-a[0])*(j+1)/n,a[1]+(b[1]-a[1])*(j+1)/n];
    const x=(p[0]+q[0])/2,y=(p[1]+q[1])/2;
-   out.push({a:p,b:q,k:angle?y:x+y,near,i,thickness});
+   out.push({a:p,b:q,k:angle?y:x+y,near,i,thickness,phase:perimeter+j*len/n});
   }
+  perimeter+=len;
   return out;
  });
  const points=loops.flat(),u=points.map(p=>angle?p[0]:p[0]-p[1]),v=points.map(p=>angle?p[1]:(p[0]+p[1])/2);
@@ -43,7 +49,7 @@ function cutGateOpenings(geo,ents,angle){
     const left=Math.max(l,coords(c)[0]),right=Math.min(r,coords(d)[0]);
     if(right-left<1e-5)return [];
     const point=t=>[a[0]+u[0]*t,a[1]+u[1]*t],m=point((left+right)/2);
-    return [{...face,a:point(left),b:point(right),k:angle?m[1]:m[0]+m[1]}];
+    return [{...face,a:point(left),b:point(right),phase:face.phase+left-l,k:angle?m[1]:m[0]+m[1]}];
    });
   }
   return [face];
@@ -93,17 +99,28 @@ export function wallSurface(wall,project,unit,geometry){
  return {front:near?first:second,back:near?second:first,high};
 }
 
-export function stoneWall(cx,wall,project,unit,w,h,geometry){
+export function stoneWall(cx,wall,project,unit,w,h,geometry,texture=null){
  const shape=wallSurface(wall,project,unit,geometry);
  if(!shape||shape.high<=0)return;
  const {front,back,high}=shape,[[x,y],[a,b]]=front;
  if(Math.max(x,a,back[0][0],back[1][0])<0||Math.min(x,a,back[0][0],back[1][0])>w||
     Math.max(y,b)<0||Math.min(y,b,back[0][1],back[1][1])-high>h)return;
  cx.lineWidth=.55;
- const palette=colors[Number(wall.near)];
- for(let i=0;i<3;i++){
+ const textured=texture&&wall.phase!==undefined;
+ if(textured){
+  const span=Math.hypot(wall.a[0]-wall.b[0],wall.a[1]-wall.b[1]);
+  const phase=wall.phase%1;
+  cx.save();
+  cx.transform((a-x)/span,(b-y)/span,0,high,x,y-high);
+  cx.beginPath();cx.rect(0,0,span,1);cx.clip();
+  cx.imageSmoothingEnabled=true;
+  for(let u=-phase;u<span;u++)cx.drawImage(texture,u,0,1,1);
+  if(wall.near){cx.fillStyle='rgba(37,25,12,.19)';cx.fillRect(0,0,span,1);}
+  cx.restore();
+ }else for(let i=0;i<3;i++){
+  const palette=colors[Number(wall.near)];
   const n=high*i/3,m=high*(i+1)/3;
   face(cx,[[x,y-n],[a,b-n],[a,b-m],[x,y-m]],palette[(i+(wall.i%17===0?1:0))%3],i?'#424d49':'#2e3b3a');
  }
- face(cx,[...front,...back.slice().reverse()].map(([px,py])=>[px,py-high]),wall.near?'#8d8d76':'#818679');
+ face(cx,[...front,...back.slice().reverse()].map(([px,py])=>[px,py-high]),textured?'#c8af88':wall.near?'#8d8d76':'#818679');
 }

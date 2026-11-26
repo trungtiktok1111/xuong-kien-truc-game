@@ -4,7 +4,7 @@
 
 ## Tự phối vật liệu Đường Bao 2D
 
-Mở **2D → Đường Bao → Tự phối vật liệu Đường Bao**, bật phối vật liệu rồi bấm **Chơi thử bản nháp** hoặc **Tạo màn mới từ hình này**. Dungeon, Farm, Library và Bases cung cấp sàn và đạo cụ. Xưởng lát sàn theo phòng, chừa hành lang và kiểm tra va chạm khi đặt đạo cụ. Bố cục tường, lỗ khoét và cổng lấy từ Đường Bao.
+Mở **2D → Đường Bao → Tự phối vật liệu Đường Bao**, bật phối vật liệu và chọn **Chỉ Kenney Dungeon 2.3** để dùng sàn, mặt tường đá và đạo cụ Dungeon, hoặc chọn phối cả bốn gói. Dùng **Áp dụng vào bản đồ**, **Chơi thử bản nháp** hoặc **Tạo màn mới từ hình này**. Xưởng chừa hành lang và kiểm tra va chạm khi đặt đạo cụ. Bố cục, chiều cao tường, lỗ khoét và cổng lấy từ Đường Bao.
 
 **Thêm gói ZIP** nhận nhiều gói cùng lúc. Xưởng nhận diện một số tên mảnh thông dụng. Với gói có tên riêng, thêm tệp `outline-materials.json` và khai báo đường dẫn ảnh tính từ thư mục chứa tệp. Ví dụ:
 

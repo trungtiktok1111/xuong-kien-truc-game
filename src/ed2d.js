@@ -1,5 +1,5 @@
 import {dressOutline,kenneyOutlinePacks} from './outlineDressing.js';
-import {campaignStart,planMapPair} from './mapLinks2d.js';
+import {campaignStart,linkWalkability,planMapPair} from './mapLinks2d.js';
 import {stockScenes,packPurpose} from './stockScenes.js';
 import {drawSettlementBridge} from './settlementBridge.js';
 import {settlementIssues} from './settlementChecks.js';
@@ -17,7 +17,7 @@ import {buildReferenceScene,generateScene,openScenePack,outlinePackMaterials,rec
 import {settlementProfiles} from './settlementLayout.js';
 import {DA_XOAY_LEVEL} from './outlineLevels.js';
 import {mapCollision,rasterOutline} from './mapCollision.js';
-import {outline2D,clipOutline,stoneBackdrop,stoneWall,wallSurface,drawFloorCollision} from './outline2d.js';
+import {outline2D,clipOutline,stoneBackdrop,stoneWall,outlineWallImage,wallSurface,drawFloorCollision} from './outline2d.js';
 import {validOutline,OUTLINE_STONE,MAX_MAP_SIDE} from './outlineEditor.js';
 import {newMeta,openProjectFile,saveProjectFile} from './studio.js';
 const LEGACY_STONE_ATLAS="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAAQCAYAAAD506FJAAACwklEQVR4nO2aXWrcMBDH/xpJ9+oN+tRL9BA9Qe+1sIQQNiRpSrv9ThtSSumrvvpQRshae7H9UBk0A2at8fhv/TRrI42tXr96mdDY3h4fEEKA1jr/xhhHfWV7jv9c7M3dES+eP2uNjy/ffzXhv7i83QT/h89PTfivru83wf/j6U8T/t3+AAMAb959BQCklJBSyvvW2kG73rfWTh6bo8E3IPu89zDGIMaIGGM+l4gQQoAxJscqpUBEOZaIFmuwffr2swk/34Ct+d9/fGzCzzdga/6Hx99N+Hf7Q3N+Uw4Ei9Y+Fi7bSimEEE7ilmiwpZROYspOEhGUUogxZp9zLieAiFZp1Cb8wt8bvyk7QERwzuVgFlNKQWsNpRSUUtnHcSXYEo3aWidA+IW/N34qB8A5B601tNYnUw2ebpR+7/1gWrFUo0wA8O8p5b3PMSklOOfgvYfWGsYYGGMGmnydNRr1H0D4hb83/sGjouxkOVXg9UM9ANyBOnauxlYSIPzC3yt/ngFwYAgBIYRcPOAL8dNjqgixRmNLCRB+4e+R3wDIxYQajNsA8nqDT/be5/3y/CUaUwng6mWMMQ+eMeZE81wC5miwCb/w98o/KAJysYKFeL8saDjn8jHe6mnJXI0tJUD4hb9H/tHXgFxI4I577zOAtTZDMjCfs1RjKwkQfuHvlT/XAPjVBa8V6mrjWBGi/LpojcZUAnidVA5MOa0pY9m/RqNMgPALf4/8o0XAupPsnyqC1P65GltJgPALf6/8+TUgTxeIaFS09AEY+MtOLdHYSgKEX/h75TdlB6a+TlriXxJbxzCUUmoweNbagQ/AwD+WgDkabMIv/L3yD94C1FtZ7OBtrAhxzn9OYysJEH7h75U/fwcQQhhUK4loMDB8vKyClvFrNNhu7o6Tyfkf1pr/4vK2IX17/qvr+4b07fl3+0Mz9r+/DsK8K29SBgAAAABJRU5ErkJggg==";
@@ -174,6 +174,7 @@ export function init2D(root,A){
   function drawIso(){const AG=ANGQ();if(AG&&angN!==sheets.length){angN=sheets.length;ensureAngle(sheets).then(m=>{isoK='';dirty=true;if(m&&m.length)toast('Chưa có bộ Angle cho: '+m.join(', ')+' — phần đó sẽ không hiện ở chiếu Angle');});}
     const B=isoBuild(),S=CELL*view.z,w=cv.clientWidth,h=cv.clientHeight,O=g2s(0,0),sc=S/.75;
     const geo=outline2D(M.cfg.outline,AG,renderWallEnts());
+    const wallImage=outlineWallImage(M.cfg.outline,sheets);
     if(geo)stoneBackdrop(cx,w,h);
     if(geo){cx.save();clipOutline(cx,geo,g2s);}
     cx.save();cx.imageSmoothingEnabled=true;if(AG)cx.transform(2*S/B.CQ,0,0,2*S*ANG_R/B.CQ,O[0],O[1]);else cx.transform(S/B.CQ,S/(2*B.CQ),-S/B.CQ,S/(2*B.CQ),O[0],O[1]);cx.drawImage(B.gnd,0,0);cx.restore();cx.imageSmoothingEnabled=false;
@@ -188,7 +189,7 @@ export function init2D(root,A){
     for(const e of M.ents){if(e.wallLine||(e.t==='deco'&&!vis[sceneEntityLayer(e)]))continue;for(const wall of gateWalls(e,AG))items.push({k:wall.k,wall});items.push({k:e.tiledLayer===undefined?(e.placedProp?(AG?e.y+1:e.x+e.y+2):AG?(e.t==='deco'?(e.flat?-1e4+e.y:depthAng(e)):e.y+.5):(e.t==='deco'?(e.flat?-1e4+e.x+e.y:e.x+e.y+1):e.x+e.y+1)):tiledDepth(e,M.w,M.h,AG),e});}
     items.sort((a,b)=>a.k-b.k);isoHB=[];const COV=[],roofs=[];const cur=tool==='obj'||tool==='zone';
     for(const it of items){
-      if(it.wall){stoneWall(cx,it.wall,g2s,S,w,h,geo);continue;}
+      if(it.wall){stoneWall(cx,it.wall,g2s,S,w,h,geo,wallImage);continue;}
       if(it.g){const g=it.g,k2=sc*.95/B.CQ,wp=AG?g.c.width*2*S/B.CQ:g.c.width*k2,hp=AG?g.c.height*2*S*ANG_R/B.CQ:g.c.height*k2,p=g2s(g.xc,g.yb);cx.imageSmoothingEnabled=true;cx.drawImage(g.c,p[0]-wp/2,p[1]-hp,wp,hp);cx.imageSmoothingEnabled=false;continue;}
       const e=it.e,sel=e.id===selId;
       if(e.placedProp){if(isRoof(e)||e.tiledLayer!==undefined&&e.sceneLayer===3)roofs.push(e);else drawIndependentProp(e);continue;}
@@ -3229,7 +3230,7 @@ export function init2D(root,A){
       }
     }
   }
-  async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[],origin=[0,0]){
+  async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[],origin=[0,0],materials=null){
     validateDimensions(w,h);validateMapOutline(outline,w,h);
     const [ox,oy]=origin;
     if(origin.some(Boolean)){
@@ -3237,7 +3238,8 @@ export function init2D(root,A){
       if(keepOrigin||bounds&&(bounds[0]<ox-1e-8||bounds[1]<oy-1e-8||bounds[2]>ox+w+1e-8||bounds[3]>oy+h+1e-8))
         throw Error('Lưới mới cắt qua nội dung đã đặt. Hãy bấm Vừa lưới lại.');
     }else validateResize(w,h);
-    const current=M,m=origin.some(Boolean)?rebaseOutlineSource(M,w,h,origin,curMap):
+    const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
+    const m=origin.some(Boolean)?rebaseOutlineSource(M,w,h,origin,curMap):
       w===M.w&&h===M.h?clone(M):resizedMap(M,w,h);
     const edgeGates=m.ents.filter(e=>e.wallId?.startsWith('outline:'));
     if(edgeGates.length&&edgeGates.some(e=>!mountGate(e,outlineSupports(outline),{distance:.015})))
@@ -3249,12 +3251,15 @@ export function init2D(root,A){
       const invalid=m.ents.find(e=>['start','goal','door'].includes(e.t)&&!mask[Math.floor(e.y)*w+Math.floor(e.x)]);
       if(invalid)throw Error('Đường bao làm mất lối tới '+invalid.name+'. Hãy đặt đối tượng vào trong sàn.');
     }
-    const fill=outlineFill(m,stamps)||await stoneTile(sheets);
-    if(M!==current)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
-    paintOutline(m,outline,mask,fill,updateCollision,oldMask,stamps);
+    const fill=outlineFill(m,stamps)||await stoneTile(prepared);
+    paintOutline(m,outline,mask,fill,updateCollision,oldMask,stamps,null,prepared);
+    const arrivals=fixedIncomingOutlineCells().map(([x,y])=>[x+.5-ox,y+.5-oy]);
+    const dressing=await prepareOutlineDressing(m,prepared,materials,arrivals);
+    if(M!==current||curMap!==index||revision!==buildRevision)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
     const error=structureError(current,m);if(error)throw Error(error);
+    sheets.push(...prepared.slice(sheets.length));
     pushUndo();M=m;sel=null;hov=null;
-    after();fit();draw();toast('Đã áp dụng đường bao');
+    after();fit();draw();toast('Đã áp dụng đường bao.'+(dressing?' '+dressing:''));
   }
   function outlineFill(source,stamps){
     return source?.layers[0].find(Boolean)||stamps.flatMap(stamp=>stamp).find(cell=>cell.tiles[0])?.tiles[0];
@@ -3319,9 +3324,10 @@ export function init2D(root,A){
     return fresh;
   }
   const outlinePackCache=new Map();
-  async function prepareOutlineDressing(map,target,options){
+  async function prepareOutlineDressing(map,target,options,arrivals=[]){
     if(!options)return null;
-    const tasks=(options.kenney?kenneyOutlinePacks:[]).map(profile=>{
+    const profiles=options.preset==='mix'?kenneyOutlinePacks:options.preset==='dungeon'?kenneyOutlinePacks.slice(0,1):[];
+    const tasks=profiles.map(profile=>{
       const [id]=profile,file='kenney-isometric-miniature-'+id+'.zip';
       if(!outlinePackCache.has(id)){
         const job=stockPackList().then(()=>readStockScenePack(stockByFile(file)))
@@ -3345,8 +3351,9 @@ export function init2D(root,A){
       materials.push({...pack,floors:pack.floors.map(f=>({...f,sid:ids[f.sid]})),props});
     }
     map.cfg.proj='iso';map.cfg.smooth=false;
-    const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)));
-    map.cfg.outlineMaterials=info;
+    const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)),arrivals);
+    map.cfg.outline.wallMaterial=materials.find(pack=>pack.wallMaterial)?.wallMaterial;
+    map.cfg.outlineMaterials={...info,preset:options.preset};
     return 'Đã phối '+info.sources.length+' gói và đặt '+info.props+' vật thể.'+
       (skipped.length?' Chưa nhận diện được vai trò trong '+skipped.join(', ')+'.':'');
   }
@@ -3357,18 +3364,20 @@ export function init2D(root,A){
     if(draft.cfg.proj==='angle')await ensureAngle(previewSheets);
     return {M:draft,sheets:previewSheets};
   }
-  async function replaceWithOutlineMap(outline,w,h,level,stamps=[],origin=[0,0]){
-    const before=M,index=curMap;
+  async function replaceWithOutlineMap(outline,w,h,level,stamps=[],origin=[0,0],materials=null){
+    const before=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
     const incoming=MAPS.flatMap((map,i)=>i===index?[]:map.ents.filter(e=>isMapLink(e)&&e.to===index&&e.tx!=null&&e.ty!=null));
-    const replacement=await buildOutlineMap(outline,w,h,level,sheets,stamps,true,null,origin);
-    if(M!==before||curMap!==index)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Màn mẫu.');
-    const collision=mapCollision(replacement);
+    const replacement=await buildOutlineMap(outline,w,h,level,prepared,stamps,true,null,origin);
+    const dressing=await prepareOutlineDressing(replacement,prepared,materials,incoming.map(e=>[e.tx+.5,e.ty+.5]));
+    if(M!==before||curMap!==index||revision!==buildRevision)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Màn mẫu.');
+    const collision=linkWalkability(replacement,automaticPaintZones(replacement,makePaintLookup(prepared)));
     if(incoming.some(e=>!collision.free(e.tx+.5,e.ty+.5,.28)))
       throw Error('Có cửa từ màn khác dẫn vào ô bị chặn trong mẫu. Hãy đưa đích cửa về chế độ tự động hoặc tạo bản sao.');
     replacement.name=before.name;
+    sheets.push(...prepared.slice(sheets.length));
     pushUndo();M=replacement;selId=null;sel=null;hov=null;
     syncCur();after();fit();draw();cv.focus({preventScroll:true});
-    toast('Đã áp dụng '+level.name+'. Có thể hoàn tác trong trình sửa.');
+    toast('Đã áp dụng '+level.name+'. Có thể hoàn tác trong trình sửa.'+(dressing?' '+dressing:''));
   }
   async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true,connect=false,materials=null){
     const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();

@@ -571,6 +571,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const outlineData=()=>({loops:copy(loops),front:+front.value,rear:+rear.value,thickness:+thickness.value,
   areas:((levelDraft?levelDraft.areas:map.cfg.outline?.areas)||[]).map(([n,x,y])=>[n,x-origin[0],y-origin[1]]),
   color:levelDraft?.color||map.cfg.outline?.color,
+  wallMaterial:!levelDraft?map.cfg.outline?.wallMaterial:undefined,
   ...(is3D?{gates:copy(gates),floorCollision:collision.checked}:{})});
  async function runAction(action,close){
   if(commitBusy||!readGrid())return;
@@ -584,12 +585,12 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   if(levelDraft){
    const name=map.name||'màn hiện tại';
    if(!await yes('Dùng mẫu “'+levelDraft.name+'” cho “'+name+'”?\nBố cục, ô hình, vật thể và luật của màn này sẽ được thay bằng mẫu. Bạn có thể hoàn tác sau khi áp dụng.'))return false;
-   await editor.replaceWithOutlineMap(outlineData(),W,H,levelDraft,stamps,origin);
+   await editor.replaceWithOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,materials());
    return;
   }
   if(!loops.length&&original.length)throw Error('Hãy tạo đường bao hoặc dùng Bỏ lớp đường bao.');
   if(!loops.length&&W===map.w&&H===map.h)throw Error('Hãy tạo đường bao hoặc đổi số ô.');
-  if(loops.length)await editor.applyOutline(outlineData(),collision.checked,W,H,stamps,origin);
+  if(loops.length)await editor.applyOutline(outlineData(),collision.checked,W,H,stamps,origin,materials());
   else editor.resizeOutlineGrid(W,H);
  },true));
  function createScannedMap(){
@@ -604,15 +605,20 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   return runAction(()=>editor.newOutlineMap({...outlineData(),gates:[],loops:placed},w,h,null,[stamp],[0,0],false),true);
  }
  const dressing=el('input',{type:'checkbox','aria-label':'Tự phối vật liệu'});
- const kenney=el('input',{type:'checkbox',checked:'','aria-label':'Dùng bốn gói Kenney'});
+ const kenney=el('select',{'aria-label':'Bộ vật liệu'},
+  el('option',{value:'dungeon'},'Chỉ Kenney Dungeon 2.3'),
+  el('option',{value:'mix'},'Phối Dungeon, Farm, Library và Bases'),
+  el('option',{value:'none'},'Chỉ dùng các gói ZIP đã chọn'));
+ kenney.value=map.cfg.outlineMaterials?.preset||'dungeon';
+ kenney.addEventListener('change',()=>{dressing.checked=true;});
  const zipFiles=el('input',{type:'file',multiple:'',accept:'.zip','aria-label':'Gói vật liệu ZIP'});
  zipFiles.addEventListener('change',()=>{if(zipFiles.files.length)dressing.checked=true;});
- const materials=()=>!is3D&&dressing.checked?{kenney:kenney.checked,files:[...zipFiles.files]}:null;
+ const materials=()=>!is3D&&dressing.checked?{preset:kenney.value,files:[...zipFiles.files]}:null;
  const materialsPanel=is3D?null:el('details',{},el('summary',{},'Tự phối vật liệu Đường Bao'),
-  el('div',{class:'row'},el('label',{},dressing,' Tự phối vật liệu khi tạo màn'),
-   el('label',{},kenney,' Dungeon, Farm, Library và Bases')),
+  el('div',{class:'row'},el('label',{},dressing,' Tự phối vật liệu'),
+   el('label',{},'Bộ vật liệu ',kenney)),
   el('label',{},'Thêm gói ZIP ',zipFiles),
-  el('p',{class:'hint'},'Tự lát sàn theo phòng và đặt đạo cụ tránh lối đi. Dùng Chơi thử bản nháp hoặc Tạo màn mới để xem kết quả.'));
+  el('p',{class:'hint'},'Dungeon dùng sàn, mặt tường đá và đạo cụ từ gói 2.3. Có thể áp dụng ngay, chơi thử hoặc tạo màn mới.'));
  function createDraft(connect=false){
   return runAction(async()=>{
    if(!loops.length)throw Error('Hãy tạo đường bao hoặc chọn một màn mẫu.');
