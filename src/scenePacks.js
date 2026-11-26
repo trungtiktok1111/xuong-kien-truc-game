@@ -1,5 +1,5 @@
 import {referencePlan,farmBarn,cityBuilding,cityBuildings} from './stockScenes.js';
-import {REFERENCE_HEIGHT} from './outlineAnchors.js';
+import {REFERENCE_HEIGHT, packScale} from './outlineAnchors.js';
 import {mapCollision} from './mapCollision.js';
 import {decoZones,zonesHit} from './zones.js';
 import {unzipSync} from 'fflate';
@@ -263,6 +263,10 @@ export const characterName=/(?:^|\/)characters?\/|(?:^|[\/_-])(?:hero|npc|person
 export function catalogCharacters(pack){
  return pack.paths.filter(p=>isImage(p)&&characterName.test(p)).map(path=>({pack,path,label:stem(path),layer:2}));
 }
+export function pickAnchorArt(paths,kind){
+ const re=kind==='door'?/cua|door|gate|cong|doorway/i:/tuong|wall|vach/i;
+ return paths.find(p=>!ignored.test(p)&&re.test(p))||null;
+}
 const groundName=/^(?:base|square)[_-](?:grass|dirt|stone|wood|snow)|(?:^|\/)(?:nen[_-]|ground|floor|grass|path|road|dirt|terrain|landscape|beach|snow|water|river|duong|boong)/i;
 const structure=/roof|mai[_-]|wall|doorway|tuong|vach|fence|lan-can|chimney|buom/;
 function catalog(pack,{outline=false}={}){
@@ -475,6 +479,16 @@ export async function outlinePackMaterials(pack,profile,style){
   }
   const characters=settings?(settings.characters||[]).map(row=>named(row,2)):catalogCharacters(pack);
   const doors=settings?(settings.doors||[]).map(row=>named(row,2)):[];
+  async function measure(path){
+    try{const image=await loadImage({pack,path});const art=crop(image,[0,0,image.width,image.height]);return art&&{w:art.w,h:art.h};}
+    catch{return null;}
+  }
+  const declaredDoorPath=doors[0]?.path;
+  const doorPath=declaredDoorPath||pickAnchorArt(pack.paths,'door');
+  const wallPath=!doorPath&&pickAnchorArt(pack.paths,'wall');
+  const charPath=characters[0]?.path;
+  const anchors={door:doorPath&&await measure(doorPath),wall:wallPath&&await measure(wallPath),character:charPath&&await measure(charPath)};
+  result.scale=packScale(anchors,style?.manualScale);
   for(const a of floors)await attempt(a,async()=>{
     const sid=await groundTile(result,a,style);
     result.floors.push({sid,id:a.path,label:a.label,source:pack.name});
@@ -488,7 +502,8 @@ export async function outlinePackMaterials(pack,profile,style){
     const tileWidth=Math.max(a.tileWidth||1,art.w/.95,art.h/1.65);
     const radius=Math.max(.22,Math.min(.46,art.w/tileWidth*.55));
     const piece=addSprite(result,{...a,tileWidth,collision:{shape:'circle',radius}},art);
-    result.props.push({sid:piece.sid,id:a.path,label:a.label,source:pack.name,radius,create:(x,y,id)=>({...entity(piece,x,y,0,id),outlineAutoProp:true})});
+    result.props.push({sid:piece.sid,id:a.path,label:a.label,source:pack.name,radius,
+      create:(x,y,id)=>{const e=entity(piece,x,y,0,id);return {...e,sc:e.sc*result.scale.factor,outlineAutoProp:true};}});
   });
   for(const a of characters)await attempt(a,async()=>{
     const art=await sprite(a);
@@ -507,7 +522,8 @@ export async function outlinePackMaterials(pack,profile,style){
       if(!parts.every(p=>pack.files[folder+miniatureAsset(pack,p.asset,p.dir).path]))continue;
       const ents=[],assembly={sheets:result.sheets,ents};
       for(const part of parts)ents.push(await miniaturePiece(assembly,[pack],part,cache,folder));
-      result.houses.push({w,h,ents,id:`barn-${w}x${h}`,label:`Nhà gỗ ${w} × ${h} ô`,source:pack.name});
+      const scaled=ents.map(e=>({...e,sc:e.sc*result.scale.factor}));
+      result.houses.push({w,h,ents:scaled,id:`barn-${w}x${h}`,label:`Nhà gỗ ${w} × ${h} ô`,source:pack.name});
     }
   }
   result.wallMaterial=result.sheets[result.walls[0]?.sid]?.name;
