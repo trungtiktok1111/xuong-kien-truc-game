@@ -46,3 +46,16 @@ test('a painted obstruction can prevent a safe arrival in another map',()=>{
   assert.equal(mapLinkLanding([m],{to:0,tx:4,ty:4}),null);
   assert.deepEqual(mapLinkLanding([m],{to:0}),{x:3.5,y:3.5});
 });
+
+
+test('recover a spawn inside the raster mask but too close to the outline edge',()=>{
+  const source=grid('Màn cũ',()=>true,[3,3],[7,7]);
+  const loops=[[[2,2.35],[10,2.35],[10,8],[2,8]]];
+  const target=grid('Đường bao mới',(x,y)=>x>=2&&x<10&&y>=2&&y<8,[3,2],[7,6],{outline:{loops,floorCollision:true}});
+  const [out,back,entries]=planMapPair(source,target,0,1,'edge');
+  assert.deepEqual([entries.targetEntry.x,entries.targetEntry.y],[3,3]);
+  assert.deepEqual([entries.sourceEntry.x,entries.sourceEntry.y],[3,3]);
+  Object.assign(target.ents[0],entries.targetEntry);
+  source.ents.push(out);target.ents.push(back);
+  assert.deepEqual(mapLinkReports([source,target]),[]);
+});

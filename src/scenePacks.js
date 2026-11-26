@@ -133,12 +133,13 @@ function wallSegments(dir,open){
   }));
 }
 
-async function miniaturePiece(result,packs,p,cache){
+async function miniaturePiece(result,packs,p,cache,folder=''){
   const key=p.source+'|'+p.asset+'|'+p.dir;
   if(!cache.has(key)){
     const classic=p.asset.includes('/');
     const asset=classic?{pack:packs[p.source],path:norm(p.asset),label:stem(p.asset),layer:2,
       tileWidth:132,native:true,direction:p.dir}:miniatureAsset(packs[p.source],p.asset,p.dir);
+    asset.path=folder+asset.path;
     if(!asset.pack.files[asset.path])throw Error('Thiếu mảnh '+p.asset+' · '+p.dir+'.');
     if(classic){
       const image=await loadImage(asset),width=image.width,height=image.height;
@@ -252,18 +253,19 @@ export async function reconstructPack(packs,{sample=false}={}){
 const ignored=/preview|sample|spritesheet|tilesheet|kenneynl|(?:^|\/)(?:angle|characters?|masks?|examples?)\/|bang-mau|canh-rap|changelog|logo|isoguide|(?:^|\/)textures\/(?:tree|bush)/i;
 const groundName=/^(?:base|square)[_-](?:grass|dirt|stone|wood|snow)|(?:^|\/)(?:nen[_-]|ground|floor|grass|path|road|dirt|terrain|landscape|beach|snow|water|river|duong|boong)/i;
 const structure=/roof|mai[_-]|wall|doorway|tuong|vach|fence|lan-can|chimney|buom/;
-function catalog(pack){
+function catalog(pack,{outline=false}={}){
   const flatImage=/isometric-(?:city|landscape)/i.test(pack.name)&&Object.keys(pack.files).find(p=>
     /(^|\/)(?:citytiles_066|landscapetiles_010)\.png$/i.test(p));
   if(flatImage)return [{pack,path:flatImage,label:stem(flatImage),layer:0,flatTop:true}];
 
   if(pack.metadata?.assets&&pack.metadata.projection)return Object.keys(pack.metadata.assets).flatMap(id=>{
     const a=nativeAsset(pack,id);
-    if(!a||/(?:[_-])[nsw]$/i.test(id)||a.layer===1||a.layer===3||structure.test(slug(id)))return [];
+    if(!a||/(?:[_-])[nsw]$/i.test(id)||(!outline&&a.layer===1)||a.layer===3||structure.test(slug(id)))return [];
     return [a];
   });
-  const hasIso=pack.paths.some(p=>p.startsWith('isometric/'));
-  return pack.paths.filter(path=>isImage(path)&&!ignored.test(path)&&(!hasIso||path.startsWith('isometric/'))).flatMap(path=>{
+  const isoPath=path=>outline?/(^|\/)isometric\//.test(path):path.startsWith('isometric/');
+  const hasIso=pack.paths.some(isoPath);
+  return pack.paths.filter(path=>isImage(path)&&!ignored.test(path)&&(!hasIso||isoPath(path))).flatMap(path=>{
     const name=stem(path);
     if(hasIso&&/[_-][nsw]$/i.test(name))return [];
     const info=classifyArchiveImage(pack.name,path,pack.tsx,[]);
@@ -271,7 +273,7 @@ function catalog(pack){
     if(/tile toolkit/i.test(pack.name)&&!/^bricks/.test(name.toLowerCase()))return [];
     if(info.kind==='layer'||/roof|mai[_-]/.test(slug(name)))return [];
     const grid=info.recipes[0];
-    const material=info.kind==='material'||/tile toolkit/i.test(pack.name);
+    const material=info.kind==='material'||/tile toolkit/i.test(pack.name)||(outline&&grid?.groundTexture);
     if(/textures - wall|crate textures/i.test(pack.name))return [];
     const ground=/^(?:dirt|dirtfarmland|stone|stoneuneven|floor)_e$/i.test(name)||material||info.kind==='terrain'||(groundName.test(path)||groundName.test(name))&&!structure.test(slug(name));
     if(ground&&/water|river|thac|overworld - forest/i.test(name))return [];
@@ -297,12 +299,43 @@ function random(seed){
   for(const c of seed)state=Math.imul(state^c.charCodeAt(0),16777619);
   return ()=>((state=Math.imul(1664525,state)+1013904223|0)>>>0)/4294967296;
 }
-async function groundTile(result,a){
+// Undo the 2:1 projection before resizing the surface in map coordinates.
+function outlineFloorTexture(diamond,scale,matchJoints,brickGrid){
+  const sourceSize=diamond.width,surface=canvas(sourceSize,sourceSize),g=surface.getContext('2d');
+  g.setTransform(1,-1,2,2,-sourceSize/2,sourceSize/2);
+  g.drawImage(diamond,0,0);
+  const size=128,tile=canvas(size,size),ctx=tile.getContext('2d');
+  const width=sourceSize/scale,inset=scale===1?5:0,center=(sourceSize-width)/2;
+  const brick=sourceSize/brickGrid;
+  const start=brickGrid?Math.round(center/brick)*brick:center;
+  ctx.drawImage(surface,start+inset,start+inset,width-2*inset,width-2*inset,0,0,size,size);
+  if(matchJoints){
+    const texture=ctx.getImageData(0,0,size,size),pixels=texture.data,blend=4;
+    const join=(a,b,offset)=>{
+      for(let channel=0;channel<4;channel++){
+        const i=a*4+channel,j=b*4+channel;
+        const correction=(pixels[j]-pixels[i])*(1-offset/blend)/2;
+        pixels[i]+=correction;pixels[j]-=correction;
+      }
+    };
+    for(let depth=0;depth<blend;depth++)for(let n=0;n<size;n++)
+      join(n*size+depth,n*size+size-1-depth,depth);
+    for(let depth=0;depth<blend;depth++)for(let n=0;n<size;n++)
+      join(depth*size+n,(size-1-depth)*size+n,depth);
+    ctx.putImageData(texture,0,0);
+  }
+  return tile;
+}
+
+async function groundTile(result,a,style){
   const art=await sprite(a);
-  const sh=canvas(128,128),g=sh.getContext('2d');
+  const scale=style?.floorScale||1,matchJoints=!!style?.matchJoints;
+  const flat=scale!==1||matchJoints;
+  const size=flat?256:128,sh=canvas(size,size),g=sh.getContext('2d');
+  if(flat)g.scale(2,2);
   if(a.material){
     g.save();g.transform(64,32,-64,32,64,0);
-    g.drawImage(art.out,0,art.side-art.h,art.w,art.h,0,0,1,1);g.restore();
+    g.drawImage(art.out,art.bounds[0]*art.side,art.side-art.h,art.w,art.h,0,0,1,1);g.restore();
   }else{
     if(a.flatTop){
       g.beginPath();g.moveTo(64,0);g.lineTo(128,32);g.lineTo(64,64);g.lineTo(0,32);g.closePath();g.clip();
@@ -311,7 +344,9 @@ async function groundTile(result,a){
     const [l,t,r,b]=art.bounds;
     g.drawImage(art.out,l*art.side,t*art.side,(r-l)*art.side,(b-t)*art.side,0,0,128,Math.min(128,128*art.h/art.w));
   }
-  result.sheets.push({name:a.pack.name+' · '+a.label,tw:128,margin:0,iso:1,url:sh.toDataURL()});
+  const texture=flat?outlineFloorTexture(sh,scale,matchJoints,a.brickGrid):sh;
+  const label=a.label+(scale!==1?' · '+scale+'×':'')+(matchJoints?' · Tự khớp mạch':'');
+  result.sheets.push({name:a.pack.name+' · '+label,tw:128,margin:0,iso:flat?0:1,url:texture.toDataURL()});
   return result.sheets.length-1;
 }
 export function outlineMiniatureFolder(pack,profile){
@@ -327,22 +362,23 @@ export function outlineMiniatureFolder(pack,profile){
 }
 
 // Rectify the long sandstone face so it can follow curved outlines and gates.
-async function dungeonWallMaterial(result,pack,path){
+async function outlineWallMaterial(result,pack,path,wood=false){
   const source=await loadImage({pack,path});
   const tile=canvas(128,128),g=tile.getContext('2d');
-  const left=35,top=306,width=120,height=144;
+  const [left,top,width,height]=wood?[25,302,98,130]:[35,306,120,144];
   const scaleX=tile.width/width,scaleY=tile.height/height;
   g.setTransform(scaleX,scaleY/2,0,scaleY,-left*scaleX,-(top+left/2)*scaleY);
   g.drawImage(source,0,0);
-  const name='Kenney Dungeon 2.3 · Mặt tường đá';
+  const label=stem(path);
+  const name=pack.name+' · Mặt tường '+label;
   result.sheets.push({name,tw:128,margin:0,url:tile.toDataURL('image/png')});
-  result.wallMaterial=name;
+  result.walls.push({sid:result.sheets.length-1,id:path,label,source:pack.name});
 }
 
 // Profiles may supply exact roles for any ZIP. Otherwise use recognized floor
 // tiles and small props from the existing archive catalogue.
-export async function outlinePackMaterials(pack,profile){
-  const result={sheets:[],floors:[],props:[],source:pack.name};
+export async function outlinePackMaterials(pack,profile,style){
+  const result={sheets:[],floors:[],overlays:[],props:[],houses:[],walls:[],source:pack.name};
   const file=pack.paths.find(path=>/(^|\/)outline-materials\.json$/.test(path));
   const settings=file?readJSON(pack.files,file):null;
   const folder=file?file.slice(0,file.lastIndexOf('/')+1):'';
@@ -359,43 +395,103 @@ export async function outlinePackMaterials(pack,profile){
       material:row.shape==='square',flatTop:true};
   };
   if(file&&(!settings||settings.version!==1||
-    ![settings.floors??[],settings.props??[]].every(Array.isArray)))
-    throw Error('outline-materials.json trong '+pack.name+' cần version 1 và danh sách floors, props.');
-  let floors,props;
+    ![settings.floors??[],settings.props??[],settings.overlays??[],settings.walls??[]].every(Array.isArray)))
+    throw Error('outline-materials.json trong '+pack.name+' cần version 1 và các danh sách mảnh.');
+  const ignoredAssets=[];
+  const attempt=async(a,read)=>{
+    try{await read(a);}catch{ignoredAssets.push(a.path);}
+  };
+  async function squareWall(a){
+    const image=await loadImage(a);
+    if(image.width!==image.height)throw Error('Mặt tường cần ảnh vuông.');
+    const surface=canvas(128,128);
+    surface.getContext('2d').drawImage(image,0,0,128,128);
+    result.sheets.push({name:pack.name+' · Mặt tường '+a.path,tw:128,margin:0,url:surface.toDataURL('image/png')});
+    result.walls.push({sid:result.sheets.length-1,id:a.path,label:a.label,source:pack.name});
+  }
+  let floors,props,overlays=[];
   if(settings){
-    floors=(settings.floors||[]).slice(0,4).map(row=>named(row,0));
-    props=(settings.props||[]).slice(0,6).map(row=>named(row,2));
+    floors=(settings.floors||[]).map(row=>named(row,0));
+    props=(settings.props||[]).map(row=>named(row,2));
+    overlays=(settings.overlays||[]).map(row=>named(row,1));
+    for(const row of settings.walls||[])await attempt(named(row,2),squareWall);
   }else if(profile){
     const [,floor,extras]=profile,root=outlineMiniatureFolder(pack,profile);
     if(root===null)throw Error('Thiếu mảnh isometric của '+pack.name+'.');
     const path=id=>root+'isometric/'+id.toLowerCase()+'_e.png';
     const tile=named(path(floor),0);
+    if(profile[0]==='dungeon')tile.brickGrid=4;
     if(floor==='floorCarpet')tile.underlay='#5a473d';
     floors=[tile];
     props=extras.map(id=>named({path:path(id),anchor:[128,437],tileWidth:256},2));
-    if(profile[0]==='dungeon')await dungeonWallMaterial(result,pack,path('stoneWall'));
+    if(profile[0]==='dungeon'){
+      for(const id of ['stoneTile','stoneUneven','dirt','dirtTiles','planks'])
+        if(pack.files[path(id)])floors.push(named(path(id),0));
+      for(const id of ['stoneWall','stoneWallAged'])if(pack.files[path(id)])
+        await attempt({path:path(id)},a=>outlineWallMaterial(result,pack,a.path));
+    }
+    if(profile[0]==='farm'){
+      if(pack.files[path('planksOld')])floors.push(named(path('planksOld'),0));
+      if(pack.files[path('dirt')])floors.push(named(path('dirt'),0));
+      if(pack.files[path('dirtFarmland')])overlays.push(named(path('dirtFarmland'),1));
+      if(pack.files[path('woodWall')])await attempt({path:path('woodWall')},a=>outlineWallMaterial(result,pack,a.path,true));
+    }
+    if(profile[0]==='library')for(const id of [floor,'floorCarpetEnd','floorCarpetSmall']){
+      if(pack.files[path(id)])overlays.push(named(path(id),1));
+    }
+    const objects=/^(?:barrel|woodencrate|woodenpile|chest|chair|table|stonecolumn|corn|hay|sack|bookcase|bookstand|candlestand|displaycase|librarychair|longtable)/i;
+    for(const a of catalog(pack,{outline:true})){
+      if(a.path.startsWith(root+'isometric/')&&/^(?:base|square)_(?:grass|dirt|stone|wood|snow)_(?:flat|detail)_e$/i.test(a.label)&&!floors.some(f=>f.path===a.path))floors.push(named(a.path,0));
+      if(a.path.startsWith(root+'isometric/')&&objects.test(a.label)&&!props.some(p=>p.path===a.path))
+        props.push(named({path:a.path,anchor:[128,437],tileWidth:256},2));
+    }
   }else{
-    const assets=catalog(pack).filter(a=>!pack.hasModels||a.native||/(^|\/)(isometric|sprites)\//i.test(a.path));
+    const assets=catalog(pack,{outline:true}).filter(a=>!pack.hasModels||a.native||/(^|\/)(isometric|sprites)\//i.test(a.path));
+    const sbsWall=/sbs.*textures[- ]+wall/i.test(pack.name);
+    const wallPaths=pack.hasModels?[]:pack.paths.filter(path=>isImage(path)&&!ignored.test(path)&&
+      (sbsWall&&/^wall[-_]/i.test(stem(path))||/^(?:wall[-_ ]?texture|texture[-_ ]?wall|tuong[-_ ]?vat[-_ ]?lieu)/i.test(slug(stem(path)))));
+    for(const path of wallPaths)await attempt({pack,path,label:stem(path)},squareWall);
     if(pack.hasModels&&!assets.length){
       result.skipReason='gói mô hình 3D, chưa có mảnh phù hợp cho Đường Bao 2D';
       return result;
     }
-    floors=assets.filter(a=>a.layer===0&&!/high|float|stairs|water|river|sea|lake|corner|cliff|transition/i.test(a.label))
-      .slice(0,3).map(a=>({...a,flatTop:true}));
-    props=assets.filter(a=>a.layer===2&&/^(?:barrel|crate|chest|chair|bookstand|lamp|statue|ruong|thung|chum|den)/i.test(stem(a.path)))
-      .slice(0,4);
+    overlays=assets.filter(a=>a.layer===1||/^(?:overlay|rug|carpet|floorcarpet|mat)[a-z0-9 _-]*$/i.test(a.label));
+    floors=assets.filter(a=>!overlays.includes(a)&&a.layer===0&&!/high|float|stairs|water|river|sea|lake|corner|cliff|transition/i.test(a.label))
+      .map(a=>({...a,flatTop:true}));
+    props=assets.filter(a=>a.layer===2&&!overlays.includes(a)&&(a.native||
+      /^(?:barrel|crate|chest|chair|bookstand|lamp|statue|ruong|thung|chum|den|table|bench|hay|sack|plant|tree|bush)/i.test(stem(a.path))));
   }
-  for(const a of floors){
-    const sid=await groundTile(result,a);
-    result.floors.push({sid,source:pack.name});
-  }
-  for(const a of props){
+  for(const a of floors)await attempt(a,async()=>{
+    const sid=await groundTile(result,a,style);
+    result.floors.push({sid,id:a.path,label:a.label,source:pack.name});
+  });
+  for(const a of overlays)await attempt(a,async()=>{
+    const sid=await groundTile(result,{...a,layer:0,flatTop:true});
+    result.overlays.push({sid,id:a.path,label:a.label,source:pack.name});
+  });
+  for(const a of props)await attempt(a,async()=>{
     const art=await sprite(a);
     const tileWidth=Math.max(a.tileWidth||1,art.w/.95,art.h/1.65);
     const radius=Math.max(.22,Math.min(.46,art.w/tileWidth*.55));
     const piece=addSprite(result,{...a,tileWidth,collision:{shape:'circle',radius}},art);
-    result.props.push({source:pack.name,radius,create:(x,y,id)=>({...entity(piece,x,y,0,id),outlineAutoProp:true})});
+    result.props.push({sid:piece.sid,id:a.path,label:a.label,source:pack.name,radius,create:(x,y,id)=>({...entity(piece,x,y,0,id),outlineAutoProp:true})});
+  });
+  // Only assemble structural parts when a complete calibrated kit is present.
+  const farmFloor=pack.paths.find(path=>/(^|\/)isometric\/planks_e\.png$/.test(path));
+  if(farmFloor){
+    const folder=farmFloor.slice(0,-'isometric/planks_e.png'.length);
+    const cache=new Map();
+    for(const [w,h] of [[2,3],[1,3],[2,4]]){
+      const parts=farmBarn(0,0,w,h).map(p=>p.asset==='woodWallDoorClosed'?
+        {...p,asset:'woodWallDoorway',open:true}:p);
+      if(!parts.every(p=>pack.files[folder+miniatureAsset(pack,p.asset,p.dir).path]))continue;
+      const ents=[],assembly={sheets:result.sheets,ents};
+      for(const part of parts)ents.push(await miniaturePiece(assembly,[pack],part,cache,folder));
+      result.houses.push({w,h,ents,id:`barn-${w}x${h}`,label:`Nhà gỗ ${w} × ${h} ô`,source:pack.name});
+    }
   }
+  result.wallMaterial=result.sheets[result.walls[0]?.sid]?.name;
+  if(ignoredAssets.length)result.assetWarning=`${ignoredAssets.length} ảnh không đọc được hoặc sai dạng`;
   return result;
 }
 

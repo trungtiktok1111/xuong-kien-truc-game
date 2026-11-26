@@ -41,12 +41,28 @@ export function linkWalkability(map,placementZones=map.placementZones||[]){
 }
 
 export const mapEntry=map=>map.ents.find(e=>e.t==='start')||{x:Math.floor(map.w/2),y:Math.floor(map.h/2)};
+// A raster cell can be inside the outline even when it is too close to its edge.
+export function safeMapEntry(map,walk=linkWalkability(map),preferred=mapEntry(map)){
+  const canStep=({x,y})=>walk.free(x+.5,y+.5)&&steps.some(([dx,dy])=>
+    walk.traverse(x+.5,y+.5,x+dx+.5,y+dy+.5));
+  if(Number.isInteger(preferred.x)&&Number.isInteger(preferred.y)&&canStep(preferred))return preferred;
+  const x0=Number.isFinite(preferred.x)?preferred.x:Math.floor(map.w/2);
+  const y0=Number.isFinite(preferred.y)?preferred.y:Math.floor(map.h/2);
+  let nearest=null,distance=Infinity;
+  for(let y=0;y<map.h;y++)for(let x=0;x<map.w;x++){
+    const d=(x-x0)**2+(y-y0)**2;
+    if(d>=distance||!canStep({x,y}))continue;
+    nearest={x,y};distance=d;
+  }
+  return nearest;
+}
+
 const label=(m,fallback)=>m.name||fallback;
 
 export function planMapPair(source,target,from,to,id){
   if(from===to)throw Error('Hãy chọn hai màn khác nhau.');
   const src=linkWalkability(source),dst=linkWalkability(target);
-  const entry=mapEntry(source),arrival=mapEntry(target),goal=source.ents.find(e=>e.t==='goal');
+  const entry=safeMapEntry(source,src),arrival=safeMapEntry(target,dst),goal=source.ents.find(e=>e.t==='goal');
   const reserved=(map,p,except)=>map.ents.some(e=>e!==except&&
     (isMapLink(e)?dist(p,e)<1.5:['start','goal','npc','chest','enemy'].includes(e.t)&&dist(p,e)<.9));
   function find(map,walk,origin,preferred,which,except){
@@ -66,7 +82,8 @@ export function planMapPair(source,target,from,to,id){
     id:id+'-'+suffix,t:'door',name,x:point.x,y:point.y,to:index,tx:dest.x,ty:dest.y,tile:null,pairId:id
   });
   return [{...make('Sang '+label(target,'màn đích'),a.point,b.landing,to,'a'),advanceGoal:goal?.id},
-    make('Về '+label(source,'màn trước'),b.point,a.landing,from,'b')];
+    make('Về '+label(source,'màn trước'),b.point,a.landing,from,'b'),
+    {sourceEntry:entry,targetEntry:arrival}];
 }
 
 export function mapLinkLanding(maps,door){

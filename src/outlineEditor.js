@@ -1,3 +1,4 @@
+import {drawOutlineDraft} from './outlineDraftView.js';
 import {WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS} from './wall2d.js';
 import {DEFAULT_OUTLINE_WALL_HEIGHT,fitDraftGrid} from './outlineGrid.js';
 import {captureOutlineTiles,placeOutlineTiles} from './outlineMaterials.js';
@@ -18,6 +19,7 @@ export function validOutline(loops,w,h){
   Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)&&p[0]>=0&&p[0]<=w&&p[1]>=0&&p[1]<=h));
 }
 let outlineClipboard=null;
+const outlineZipFiles=new Map();
 export function openOutlineEditor(editor,initialTab='shapes'){
  const is3D=editor.kind==='3d';
  const map=editor.map(),minSide=is3D?16:4,maxSide=is3D?320:MAX_MAP_SIDE;
@@ -25,6 +27,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  let W=map.w,H=map.h,origin=[0,0];
  const copy=loops=>JSON.parse(JSON.stringify(loops));
  const original=copy(map.cfg.outline?.loops||[]);
+ let queueLivePreview=()=>{};
  let loops=copy(original),stamps=[],pending=[],mode='select',picked=-1,drag=null;
  const undo=[],redo=[];
  let placement=null,previewAt=null,selection=null,levelDraft=null,activeTab=initialTab;
@@ -208,6 +211,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   for(const [name,button] of modeButtons)button.setAttribute('aria-pressed',String(name===mode));
   if(undoButton)undoButton.disabled=!undo.length;
   if(redoButton)redoButton.disabled=!redo.length;
+  queueLivePreview();
  }
  function dragLoop(a,b){
   if(mode==='corridor')return corridorLoop(a,b,Math.max(1,Math.min(32,Number(width.value)||3))/2);
@@ -556,8 +560,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  }
  restoreLevelButton=B('Nạp lại mẫu gốc',()=>loadLevel(levelDraft||originLevel));
  const levelActions=el('div',{class:'row outline-level-actions'},
-  B('Chơi thử mẫu',playDraft),B('Tạo bản sao',()=>createDraft()),
-  is3D?null:B('Tạo và nối với màn hiện tại',()=>createDraft(true)));
+  B('Chơi thử mẫu',playDraft),B('Tạo bản sao',()=>createDraft()));
  const levelPanel=el('div',{class:'outline-level-panel'},el('div',{class:'row'},levelGroup,restoreLevelButton),levelHint,levelActions,levelCards);
  const shapesTab=B('Mảnh ghép',()=>{setTab('shapes');draw();}),levelsTab=B('Màn mẫu · '+outlineLevels.length,()=>{setTab('levels');draw();});
  function setTab(tab){
@@ -568,6 +571,23 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  setTab(initialTab);
  footer.append(el('label',{},'Tường trước ',front),el('label',{},'Tường sau ',rear),el('label',{},'Độ dày tường bao ',thickness,' ô'),el('label',{},collision,' Cập nhật vùng chặn'));
  const buttons=el('div',{class:'row outline-actions'});
+ const linkTargets=is3D?[]:editor.outlineConnectionTargets();
+ const linkTarget=el('select',{'aria-label':'Màn để nối'},
+  ...linkTargets.map(m=>el('option',{value:m.id},(m.id+1)+'. '+m.name+(m.current?' (đang mở)':''))));
+ const connectExisting=B('Nối hai màn đã có',()=>runAction(()=>({message:editor.connectMap(+linkTarget.value)}),false));
+ const createLinked=B('Tạo màn mới và nối',()=>createDraft(true));
+ const updateLinkActions=()=>{
+  const target=linkTargets.find(m=>m.id===+linkTarget.value);
+  connectExisting.disabled=commitBusy||!target||target.current;
+ };
+ linkTarget.addEventListener('change',updateLinkActions);
+ linkTarget.value=linkTargets.find(m=>m.current)?.id??'';
+ updateLinkActions();
+ const linkPanel=is3D?null:el('section',{class:'outline-link-panel','aria-label':'Tạo và liên kết màn'},
+  el('strong',{},'Tạo và liên kết màn'),
+  el('div',{class:'row'},el('label',{},'Màn để nối ',linkTarget),createLinked,
+   linkTargets.length>1?connectExisting:null),
+  el('p',{class:'hint'},'Tạo màn từ hình đang vẽ và đặt lối đi hai chiều với màn đã chọn. Để nối hai màn đã có, chọn một màn khác với màn đang mở.'));
  const actionStatus=el('p',{class:'outline-action-status',role:'status','aria-live':'polite'});
  function showActionStatus(message,isError=false){
   actionStatus.textContent=message;
@@ -580,15 +600,19 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   ...(is3D?{gates:copy(gates),floorCollision:collision.checked}:{})});
  async function runAction(action,close){
   if(commitBusy||!readGrid())return;
+  if(!is3D&&dressing.checked&&layerControls.some(row=>row.loading)){
+   showActionStatus('Đợi Xưởng đọc xong gói ZIP trước khi mở hoặc lưu bản đồ.');return;
+  }
+  stopSequence();
   commitBusy=true;
   showActionStatus('Đang chuẩn bị bản đồ…');
-  const actions=[...buttons.children,...levelActions.children,scanMapButton];actions.forEach(b=>{b.disabled=true;});
+  const actions=[...buttons.children,...levelActions.children,scanMapButton,connectExisting,createLinked,linkTarget];actions.forEach(b=>{b.disabled=true;});
   try{
    const result=await action();
-   showActionStatus(result?.warning||'');
+   showActionStatus(result?.message||result?.warning||'');
    if(close&&result!==false)ov.remove();
   }catch(e){showActionStatus(e.message||'Không mở được bản đồ. Hãy thử lại.',true);}
-  finally{commitBusy=false;actions.forEach(b=>{b.disabled=false;});draw();}
+  finally{commitBusy=false;actions.forEach(b=>{b.disabled=false;});updateLinkActions();draw();}
  }
  applyButton=B('Áp dụng vào bản đồ',()=>runAction(async()=>{
   if(levelDraft){
@@ -614,24 +638,183 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   return runAction(()=>editor.newOutlineMap({...outlineData(),gates:[],loops:placed},w,h,null,[stamp],[0,0],false),true);
  }
  const dressing=el('input',{type:'checkbox','aria-label':'Tự phối vật liệu'});
- const kenney=el('select',{'aria-label':'Bộ vật liệu'},
-  el('option',{value:'dungeon'},'Chỉ Kenney Dungeon 2.3'),
-  el('option',{value:'mix'},'Phối Dungeon, Farm, Library và Bases'),
-  el('option',{value:'none'},'Chỉ dùng các gói ZIP đã chọn'));
- kenney.value=map.cfg.outlineMaterials?.preset||'dungeon';
- kenney.addEventListener('change',()=>{dressing.checked=true;});
- const zipFiles=el('input',{type:'file',multiple:'',accept:'.zip','aria-label':'Gói vật liệu ZIP'});
- zipFiles.addEventListener('change',()=>{if(zipFiles.files.length)dressing.checked=true;});
- const materials=()=>!is3D&&dressing.checked?{preset:kenney.value,files:[...zipFiles.files]}:null;
- const materialsPanel=is3D?null:el('details',{},el('summary',{},'Tự phối vật liệu Đường Bao'),
-  el('div',{class:'row'},el('label',{},dressing,' Tự phối vật liệu'),
-   el('label',{},'Bộ vật liệu ',kenney)),
-  el('label',{},'Thêm gói ZIP ',zipFiles),
-  el('p',{class:'hint'},'Dungeon dùng sàn, mặt tường đá và đạo cụ từ gói 2.3. Có thể áp dụng ngay, chơi thử hoặc tạo màn mới.'));
+ const saved=map.cfg.outlineMaterials||{};
+ dressing.checked=!!saved.layers;
+ const builtins=[['dungeon','Kenney Dungeon'],['farm','Kenney Farm'],['library','Kenney Library'],['bases','Kenney Bases']];
+ const defaultSource=saved.preset==='farm'?'builtin:farm':'builtin:dungeon';
+ const zipFiles=el('input',{type:'file',multiple:'',accept:'.zip','aria-label':'Thêm ZIP cho các lớp'});
+ const floorScale=el('select',{'aria-label':'Cỡ viên gạch nền'},
+  el('option',{value:'1'},'Gốc'),el('option',{value:'2'},'2×'),el('option',{value:'4'},'4× · 1 viên Dungeon / ô'));
+ floorScale.value=String(saved.floorScale||1);
+ const matchJoints=el('input',{type:'checkbox','aria-label':'Tự khớp mạch',...(saved.matchJoints?{checked:''}:{})});
+ const surfaceStyle=()=>({floorScale:+floorScale.value,matchJoints:matchJoints.checked});
+ const catalogNote=el('p',{class:'hint',role:'status'});
+ let stockSources=[],sequence=null,sequenceTimer;
+ function stopSequence(){
+  clearTimeout(sequenceTimer);
+  if(sequence)sequence.control.run.textContent='Thử lần lượt';
+  sequence=null;
+ }
+ const rows=[['floor','Nền',true],['overlay','Phủ nền',false],['wall','Tường bao',true],['props','Vật dụng',true],['house','Nhà',false]];
+ const layerControls=rows.map(([key,label,active])=>{
+  const source=el('select',{'aria-label':'Gói cho '+label.toLowerCase()});
+  const asset=el('select',{'aria-label':'Mảnh '+label.toLowerCase()});
+  const note=el('span',{class:'hint'});
+  const control={key,source,asset,note,items:[],revision:0,loading:false};
+  const prev=B('Trước',()=>step(-1)),next=B('Sau',()=>step(1));
+  const run=B('Thử lần lượt',()=>{
+   if(sequence?.control===control){stopSequence();return;}
+   stopSequence();
+   sequence={control};run.textContent='Dừng thử';
+   choose(control,control.items[0].id,true);
+  });
+  prev.setAttribute('aria-label','Mảnh trước cho '+label.toLowerCase());
+  next.setAttribute('aria-label','Mảnh sau cho '+label.toLowerCase());
+  run.setAttribute('aria-label','Thử lần lượt '+label.toLowerCase());
+  Object.assign(control,{prev,next,run});
+  function step(delta){
+   const i=asset.selectedIndex-1;
+   const j=i<0?(delta<0?control.items.length-1:0):(i+delta+control.items.length)%control.items.length;
+   choose(control,control.items[j].id);
+  }
+  source.onchange=()=>{
+   stopSequence();dressing.checked=true;
+   void refreshLayer(control,true);
+  };
+  asset.onchange=()=>choose(control,asset.value);
+  control.element=el('div',{class:'outline-stage'},
+   el('strong',{},label),el('label',{},'Gói ZIP',source),el('label',{},'Mảnh ráp',asset),
+   el('div',{class:'row'},prev,next,run),note);
+  control.initialSource=saved.layers?.[key]?.source||defaultSource;
+  control.initialAsset=saved.layers?.[key]?saved.layers[key].asset:(saved.stages?.[key]??active)?true:'';
+  return control;
+ });
+ function initialAsset(control){return control.asset.value||true;}
+ function refreshSources(control,wanted){
+  const groups=[
+   ['Bộ tích hợp',builtins.map(([id,label])=>['builtin:'+id,label])],
+   ['Kho gói của Xưởng',stockSources.map(pack=>['stock:'+pack.file,pack.name])],
+   ['ZIP đã thêm',[...outlineZipFiles].map(([id,file])=>[id,file.name])]
+  ];
+  control.source.replaceChildren(...groups.filter(([,options])=>options.length).map(([label,options])=>
+   el('optgroup',{label},...options.map(([value,title])=>el('option',{value},title)))));
+  if(!Array.from(control.source.options).some(o=>o.value===wanted)){
+   const name=wanted.startsWith('zip:')?wanted.slice(4).split('|')[0]:wanted.slice(6);
+   control.source.append(el('option',{value:wanted},name+' · cần nạp lại'));
+  }
+  control.source.value=wanted;
+ }
+ function updateLayerButtons(control){
+  const {asset,items,loading}=control;
+  control.prev.disabled=control.next.disabled=control.run.disabled=loading||!items.length;
+  if(loading)return;
+  const index=items.findIndex(item=>item.id===asset.value);
+  control.note.textContent=(index<0?items.length+' mảnh tương thích':(index+1)+' / '+items.length)+
+   (control.message?' · '+control.message:'');
+ }
+ async function refreshLayer(control,wanted){
+  const revision=++control.revision;
+  control.loading=true;control.asset.disabled=true;
+  control.note.textContent='Đang đọc gói…';updateLayerButtons(control);
+  try{
+   const result=await editor.outlineLayerChoices(control.key,control.source.value,outlineZipFiles,surfaceStyle());
+   if(revision!==control.revision||!ov.isConnected)return;
+   control.items=result.items;control.message=result.message;
+  }catch(error){
+   if(revision!==control.revision||!ov.isConnected)return;
+   control.items=[];control.message=error.message;
+  }
+  const unavailable=control.message&&!control.items.length&&typeof wanted==='string'&&wanted;
+  control.asset.replaceChildren(el('option',{value:''},'Bỏ qua'),
+   ...(unavailable?[el('option',{value:wanted},'Mảnh đã chọn · cần nạp lại gói')]:[]),
+   ...control.items.map(({id,label})=>el('option',{value:id},label)));
+  control.asset.value=unavailable||control.items.some(a=>a.id===wanted)?wanted:wanted?control.items[0]?.id||'':'';
+  control.loading=false;control.asset.disabled=false;
+  updateLayerButtons(control);queueLivePreview(true);
+ }
+ function choose(control,id,automatic=false){
+  if(!automatic)stopSequence();
+  dressing.checked=true;control.asset.value=id;
+  updateLayerButtons(control);queueLivePreview(true);
+ }
+ zipFiles.onchange=()=>{
+  for(const file of zipFiles.files){
+   const id='zip:'+file.name+'|'+file.size+'|'+file.lastModified;
+   outlineZipFiles.set(id,file);
+  }
+  zipFiles.value='';
+  catalogNote.textContent=outlineZipFiles.size+' ZIP đã thêm. Chọn gói trong lớp cần ráp.';
+  for(const control of layerControls){
+   const source=control.source.value;
+   refreshSources(control,source);
+   if(control.message&&outlineZipFiles.has(source))
+    void refreshLayer(control,saved.layers?.[control.key]?.asset||initialAsset(control));
+  }
+ };
+ for(const control of [floorScale,matchJoints])control.onchange=()=>{
+  stopSequence();dressing.checked=true;
+  for(const row of layerControls)void refreshLayer(row,row.asset.value);
+ };
+ for(const control of [dressing,front,rear,thickness,collision])control.addEventListener('change',()=>{
+  stopSequence();queueLivePreview();
+ });
+ const materials=()=>{
+  if(is3D||!dressing.checked)return null;
+  const layers=Object.fromEntries(layerControls.map(({key,source,asset})=>[key,{source:source.value,asset:asset.value}]));
+  return {layers,files:new Map(outlineZipFiles),...surfaceStyle()};
+ };
+ const assembly=B('Ráp toàn bộ',()=>{
+  stopSequence();dressing.checked=true;
+  for(const row of layerControls)if(!row.asset.value&&row.items.length&&!row.loading){
+   row.asset.value=row.items[0].id;updateLayerButtons(row);
+  }
+  queueLivePreview(true);
+ });
+ const materialsPanel=is3D?null:el('details',{open:''},el('summary',{},'Tự phối vật liệu Đường Bao'),
+  el('div',{class:'row'},el('label',{},dressing,' Tự phối vật liệu'),assembly,
+   el('label',{},'Thêm ZIP ',zipFiles)),
+  catalogNote,
+  el('div',{class:'row'},el('label',{},'Cỡ viên gạch nền ',floorScale),el('label',{},matchJoints,' Tự khớp mạch')),
+  el('div',{class:'outline-stage-controls'},...layerControls.map(row=>row.element)));
+ const liveCanvas=el('canvas',{width:900,height:410,role:'img','aria-label':'Cảnh ráp isometric trong Đường Bao'});
+ const liveStatus=el('p',{class:'hint',role:'status'});
+ const livePanel=is3D?null:el('section',{class:'outline-live-view','aria-label':'Xem trước cảnh ráp'},
+  el('strong',{},'Xem trước cảnh ráp'),liveCanvas,liveStatus);
+ let liveTimer,liveKey='',liveRevision=0;
+ queueLivePreview=(force=false)=>{
+  if(is3D||!ov.isConnected||layerControls.some(row=>row.loading))return;
+  const opts=materials();
+  const key=JSON.stringify([W,H,loops,origin,stamps,levelDraft?.id,front.value,rear.value,thickness.value,collision.checked,opts]);
+  if(!force&&key===liveKey)return;
+  liveKey=key;clearTimeout(liveTimer);clearTimeout(sequenceTimer);
+  const revision=++liveRevision;
+  if(!loops.length){liveCanvas.hidden=true;liveStatus.textContent='Vẽ mặt bằng hoặc chọn một màn mẫu.';return;}
+  liveStatus.textContent='Đang ráp bản xem trước…';
+  liveTimer=setTimeout(async()=>{
+   try{
+    const view=await editor.liveOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,opts,collision.checked);
+    if(revision!==liveRevision||!ov.isConnected)return;
+    drawOutlineDraft(liveCanvas,view);
+    liveCanvas.hidden=false;
+    liveStatus.textContent=[view.dressing?.summary,view.dressing?.warnings].filter(Boolean).join(' ');
+    if(sequence){
+     const {control}=sequence,i=control.items.findIndex(item=>item.id===control.asset.value);
+     clearTimeout(sequenceTimer);
+     if(i+1>=control.items.length)stopSequence();
+     else sequenceTimer=setTimeout(()=>{
+      if(ov.isConnected&&sequence?.control===control)choose(control,control.items[i+1].id,true);
+     },1200);
+    }
+   }catch(error){
+    if(revision!==liveRevision||!ov.isConnected)return;
+    stopSequence();liveCanvas.hidden=true;liveStatus.textContent=error.message;
+   }
+  },160);
+ };
  function createDraft(connect=false){
   return runAction(async()=>{
    if(!loops.length)throw Error('Hãy tạo đường bao hoặc chọn một màn mẫu.');
-   await editor.newOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,true,connect,materials());
+   await editor.newOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,true,connect,materials(),+linkTarget.value);
   },true);
  }
  function playDraft(){
@@ -650,9 +833,19 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  tryLabel=B('Chơi thử bản nháp',playDraft);
  clearButton=B('Bỏ lớp đường bao',async()=>{if(!map.cfg.outline||!await yes('Bỏ tường bao, mép cong và những cổng gắn vào tường bao của màn hiện tại?'))return;if(editor.clearOutline()!==false)ov.remove();});
  buttons.append(applyButton,createLabel,tryLabel,clearButton,B('Đóng',()=>ov.remove()));
- if(!is3D)buttons.insertBefore(B('Tạo và nối hai chiều',()=>createDraft(true)),tryLabel);
- box.append(el('h2',{},(is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ')),guideBox('outline',appGuides.outline),setup,toolbar,
+ box.append(el('h2',{},(is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ')),linkPanel,guideBox('outline',appGuides.outline),setup,toolbar,
   el('div',{class:'outline-layout'},el('div',{},gridSetup,gridNote,viewTools,el('div',{class:'outline-canvas-wrap',style:'position:relative'},canvas,aim),status),library),
-  editShape,materialsPanel,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons,actionStatus);
- ov.append(box);document.body.append(ov);draw();
+  livePanel,materialsPanel,editShape,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons,actionStatus);
+ ov.append(box);document.body.append(ov);
+ if(!is3D){
+  for(const row of layerControls){
+   refreshSources(row,row.initialSource);
+   void refreshLayer(row,row.initialAsset);
+  }
+  void editor.outlinePackSources().then(packs=>{
+   if(!ov.isConnected)return;
+   stockSources=packs;
+   for(const row of layerControls)refreshSources(row,row.source.value);
+  }).catch(error=>{catalogNote.textContent=error.message;});
+ }draw();
 }

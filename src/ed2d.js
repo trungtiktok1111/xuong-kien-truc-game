@@ -1,6 +1,6 @@
 import builtinOutlineArchive from '../assets/kenney-outline.zip';
 import {dressOutline,kenneyOutlinePacks} from './outlineDressing.js';
-import {campaignStart,linkWalkability,planMapPair} from './mapLinks2d.js';
+import {campaignStart,linkWalkability,planMapPair,safeMapEntry} from './mapLinks2d.js';
 import {stockScenes,packPurpose} from './stockScenes.js';
 import {drawSettlementBridge} from './settlementBridge.js';
 import {settlementIssues} from './settlementChecks.js';
@@ -2970,10 +2970,16 @@ export function init2D(root,A){
   function switchMap(i){if(i===curMap||!MAPS[i])return;syncCur();curMap=i;M=clone(MAPS[i]);undo=[];redo=[];selId=null;inventoryGroup='';inventoryId='';inventoryMoving=false;after();fit();draw();}
   function mkMap(w,h,name,cfg){const m=newMap(w,h);m.name=name;m.cfg=cfg;const sx=Math.floor(w/2),sy=Math.floor(h/2);m.ents.push({id:'s'+Date.now().toString(36),t:'start',x:sx,y:sy,name:'Xuất phát',tile:null});return m;}
   const mapName=i=>(i===curMap?M.name:(MAPS[i]&&MAPS[i].name))||('Màn '+(i+1));
+  function placeMapEntry(map,point){
+    const entry=map.ents.find(e=>e.t==='start');
+    if(entry)Object.assign(entry,{x:point.x,y:point.y});
+    else map.ents.push({id:crypto.randomUUID(),t:'start',name:'Xuất phát',tile:null,x:point.x,y:point.y});
+  }
   function addPair(source,target,from,to,prepared=sheets){
     const lookup=makePaintLookup();
-    const [out,back]=planMapPair(sceneForPlay(source,source.cfg,lookup),
+    const [out,back,{sourceEntry,targetEntry}]=planMapPair(sceneForPlay(source,source.cfg,lookup),
       sceneForPlay(target,target.cfg,prepared===sheets?lookup:makePaintLookup(prepared)),from,to,crypto.randomUUID());
+    placeMapEntry(source,sourceEntry);placeMapEntry(target,targetEntry);
     source.ents.push(out);target.ents.push(back);
     return out;
   }
@@ -2985,7 +2991,11 @@ export function init2D(root,A){
     const target=clone(MAPS[to]);
     const out=addPair(M,target,curMap,to);
     MAPS[to]=target;syncCur();after();draw();
-    toast('Đã nối hai chiều · '+out.name+' · ô '+out.x+', '+out.y+'.');
+    const message='Đã nối hai chiều · '+out.name+' · ô '+out.x+', '+out.y+'.';
+    toast(message);return message;
+  }
+  function outlineConnectionTargets(){
+    return MAPS.map((_,i)=>({id:i,name:mapName(i),current:i===curMap}));
   }
   function mapConnectionBox(){
     const options=MAPS.map((m,i)=>[i,m]).filter(([i])=>i!==curMap);
@@ -3231,7 +3241,7 @@ export function init2D(root,A){
       }
     }
   }
-  async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[],origin=[0,0],materials=null){
+  async function buildOutlineEdit(outline,updateCollision,w,h,stamps,origin,materials,prepared){
     validateDimensions(w,h);validateMapOutline(outline,w,h);
     const [ox,oy]=origin;
     if(origin.some(Boolean)){
@@ -3239,7 +3249,6 @@ export function init2D(root,A){
       if(keepOrigin||bounds&&(bounds[0]<ox-1e-8||bounds[1]<oy-1e-8||bounds[2]>ox+w+1e-8||bounds[3]>oy+h+1e-8))
         throw Error('Lưới mới cắt qua nội dung đã đặt. Hãy bấm Vừa lưới lại.');
     }else validateResize(w,h);
-    const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
     const m=origin.some(Boolean)?rebaseOutlineSource(M,w,h,origin,curMap):
       w===M.w&&h===M.h?clone(M):resizedMap(M,w,h);
     const edgeGates=m.ents.filter(e=>e.wallId?.startsWith('outline:'));
@@ -3256,6 +3265,11 @@ export function init2D(root,A){
     paintOutline(m,outline,mask,fill,updateCollision,oldMask,stamps,null,prepared);
     const arrivals=fixedIncomingOutlineCells().map(([x,y])=>[x+.5-ox,y+.5-oy]);
     const dressing=await prepareOutlineDressing(m,prepared,materials,arrivals);
+    return {M:m,sheets:prepared,dressing};
+  }
+  async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[],origin=[0,0],materials=null){
+    const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
+    const {M:m,dressing}=await buildOutlineEdit(outline,updateCollision,w,h,stamps,origin,materials,prepared);
     if(M!==current||curMap!==index||revision!==buildRevision)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
     const error=structureError(current,m);if(error)throw Error(error);
     sheets.push(...prepared.slice(sheets.length));
@@ -3272,31 +3286,14 @@ export function init2D(root,A){
     const index=p=>p&&p[0]>=0&&p[0]<w&&p[1]>=0&&p[1]<h?p[1]*w+p[0]:-1;
     const shift=p=>p&&[p[0]-origin[0],p[1]-origin[1]];
     const proposed=index(shift(level?.start)),goal=index(shift(level?.goal));
-    const start=mask[proposed]?proposed:mask.indexOf(1);
-    if(start<0)throw Error('Hình chưa có ô nào đi được.');
-    const queue=[start],visited=new Uint8Array(mask.length);visited[start]=1;
-    for(let i=0;i<queue.length;i++){
-      const n=queue[i],x=n%w,y=Math.floor(n/w);
-      for(const [a,b] of [[x+1,y],[x-1,y],[x,y+1],[x,y-1]]){
-        if(a<0||b<0||a>=w||b>=h)continue;
-        const next=b*w+a;
-        if(mask[next]&&!visited[next]){visited[next]=1;queue.push(next);}
-      }
-    }
-    if(queue.length<2)throw Error('Mẫu cần ít nhất hai ô sàn nối nhau để tạo màn.');
-    const end=goal!==start&&visited[goal]?goal:queue.at(-1);
+    const requestedStart=mask[proposed]?proposed:mask.indexOf(1);
+    if(requestedStart<0)throw Error('Hình chưa có ô nào đi được.');
     const c=defCfg();c.view='iso';c.proj=level?'iso':M.cfg.proj||'iso';c.win='goal';
     if(level)c.outlineTemplate=level.id;
     else if(M.layers[0].some(Boolean)){c.smooth=M.cfg.smooth;c.hero={...M.cfg.hero};c.anims=M.cfg.anims;c.heroAnim=M.cfg.heroAnim;}
     const name=level?.name||'Màn '+(MAPS.length+1)+' · Đường bao';
     const fresh=mkMap(w,h,name,c);
     const place=i=>({x:i%w,y:Math.floor(i/w)});
-    Object.assign(fresh.ents[0],place(start));
-    fresh.ents.push({id:'goal-'+Date.now().toString(36),t:'goal',...place(end),name:'Đích',tile:null});
-    for(const p of level?.chests||[]){
-      const i=index(shift(p));
-      if(visited[i]&&i!==start&&i!==end)fresh.ents.push({id:'chest-'+i,t:'chest',...place(i),name:'Rương',tile:null});
-    }
     if(sourcePreset&&origin.some(Boolean))sourcePreset=rebaseOutlineSource(sourcePreset,w,h,origin);
     if(sourcePreset){
       c.hero=sourcePreset.cfg.hero;c.smooth=sourcePreset.cfg.smooth;
@@ -3322,6 +3319,18 @@ export function init2D(root,A){
       fill=enc(await loadBuiltinSheet({name:'Đường bao · '+level.name,tw:16,margin:0,url:tile.toDataURL()},target),0);
     }
     paintOutline(fresh,outline,mask,fill||await stoneTile(target),true,null,stamps,source,target);
+    const walk=linkWalkability(sceneForPlay(fresh,c,makePaintLookup(target)));
+    const start=safeMapEntry(fresh,walk,place(requestedStart));
+    if(!start)throw Error('Cần ít nhất hai ô sàn liền nhau, đủ rộng để nhân vật đi qua. Hãy mở rộng sàn hoặc hành lang.');
+    placeMapEntry(fresh,start);
+    const route=walk.component(start),reachable=new Set(route.map(({x,y})=>y*w+x));
+    const first=start.y*w+start.x;
+    const end=goal!==first&&reachable.has(goal)?goal:route.at(-1).y*w+route.at(-1).x;
+    fresh.ents.push({id:'goal-'+Date.now().toString(36),t:'goal',...place(end),name:'Đích',tile:null});
+    for(const p of level?.chests||[]){
+      const i=index(shift(p));
+      if(reachable.has(i)&&i!==first&&i!==end)fresh.ents.push({id:'chest-'+i,t:'chest',...place(i),name:'Rương',tile:null});
+    }
     return fresh;
   }
   const outlinePackCache=new Map();
@@ -3329,63 +3338,157 @@ export function init2D(root,A){
   const outlineSourceError=(source,error)=>({
     source,floors:[],props:[],skipReason:error.message==='invalid zip data'?'không đọc được tệp ZIP':error.message||'không đọc được gói'
   });
-  function loadBuiltinOutlinePack(profile){
-    const [id]=profile;
-    if(!outlinePackCache.has(id)){
+  function loadBuiltinOutlinePack(profile,style){
+    const [id]=profile,key=id+'|'+style.floorScale+'|'+style.matchJoints;
+    if(!outlinePackCache.has(key)){
       const source='Kenney Miniature '+id[0].toUpperCase()+id.slice(1);
       const job=Promise.resolve().then(()=>{
         builtinOutlinePacks??=unzipSync(builtinOutlineArchive);
-        return outlinePackMaterials(openScenePack(source,builtinOutlinePacks[id+'.zip']),profile);
+        return outlinePackMaterials(openScenePack(source,builtinOutlinePacks[id+'.zip']),profile,style);
       }).catch(error=>{
-        outlinePackCache.delete(id);
+        outlinePackCache.delete(key);
         return outlineSourceError(source,error);
       });
-      outlinePackCache.set(id,job);
+      outlinePackCache.set(key,job);
     }
-    return outlinePackCache.get(id);
+    return outlinePackCache.get(key);
   }
-  async function readOutlineFile(file){
+  const outlineUploads=new WeakMap();
+  async function parseOutlineFile(file,style){
     try{
       const pack=openScenePack(file.name,new Uint8Array(await file.arrayBuffer()));
       const profile=kenneyOutlinePacks.find(item=>outlineMiniatureFolder(pack,item)!==null);
-      const materials=await outlinePackMaterials(pack,profile);
+      const materials=await outlinePackMaterials(pack,profile,style);
       return {id:profile?.[0],materials};
     }catch(error){return {materials:outlineSourceError(file.name,error)};}
   }
+  function readOutlineFile(file,style){
+    let variants=outlineUploads.get(file);
+    if(!variants){variants=new Map();outlineUploads.set(file,variants);}
+    const key=style.floorScale+'|'+style.matchJoints;
+    if(!variants.has(key))variants.set(key,parseOutlineFile(file,style));
+    return variants.get(key);
+  }
+  const outlineStockFiles=new Map();
+  const outlineRoles={floor:'floors',overlay:'overlays',wall:'walls',props:'props',house:'houses'};
+  async function outlineLayerPack(source,files,style){
+    if(source.startsWith('builtin:')){
+      const profile=kenneyOutlinePacks.find(p=>p[0]===source.slice(8));
+      if(profile)return loadBuiltinOutlinePack(profile,style);
+    }
+    if(source.startsWith('stock:')){
+      const archive=(await stockPackList()).find(pack=>pack.file===source.slice(6));
+      if(archive){
+        if(!outlineStockFiles.has(source))outlineStockFiles.set(source,fetchStockArchive(archive).catch(error=>{
+          outlineStockFiles.delete(source);
+          throw error;
+        }));
+        return (await readOutlineFile(await outlineStockFiles.get(source),style)).materials;
+      }
+    }
+    const file=files.get(source);
+    if(file)return (await readOutlineFile(file,style)).materials;
+    throw Error('Hãy chọn lại hoặc thêm lại tệp ZIP của lớp này.');
+  }
+  async function outlineLayerChoices(role,source,files,style){
+    const pack=await outlineLayerPack(source,files,style);
+    const choices=pack[outlineRoles[role]]||[],names=new Map();
+    for(const {label} of choices)names.set(label,(names.get(label)||0)+1);
+    return {items:choices.map(({id,label})=>({id,label:names.get(label)>1?`${label} · ${id.split('/').slice(0,-1).join('/')}`:label})),
+      message:pack.skipReason||pack.assetWarning||''};
+  }
+  async function prepareOutlineLayerDressing(map,target,options,arrivals){
+    const requested=Object.entries(options.layers).filter(([,layer])=>layer.asset);
+    const stages={},materials=[],warnings=[],preserve=new Set();
+    const picks=await Promise.all(requested.map(async ([role,choice])=>{
+      try{
+        const pack=await outlineLayerPack(choice.source,options.files,options);
+        const key=outlineRoles[role],item=pack[key]?.find(a=>a.id===choice.asset);
+        if(item)return {role,pack,key,item};
+        return {role,message:pack.skipReason||'Mảnh đã chọn không còn trong '+pack.source+'.'};
+      }catch(error){return {role,message:error.message};}
+    }));
+    for(const {role,key,item,pack,message} of picks){
+      if(!item){preserve.add(role);warnings.push(message);continue;}
+      stages[role]=1;
+      const ids=new Map();
+      const needed=role==='house'?item.ents.map(e=>e.tile.sid):[item.sid];
+      for(const sid of new Set(needed))ids.set(sid,await loadBuiltinSheet(pack.sheets[sid],target));
+      const remap=tile=>({...tile,sid:ids.get(tile.sid)});
+      const material={floors:[],overlays:[],props:[],houses:[],walls:[]};
+      if(role==='house')material.houses=[{...item,ents:item.ents.map(e=>({...e,tile:remap(e.tile)}))}];
+      else if(role==='props')material.props=[{...item,create:(...args)=>{
+        const e=item.create(...args);e.tile=remap(e.tile);return e;
+      }}];
+      else material[key]=[remap(item)];
+      if(role==='wall')map.cfg.outline.wallMaterial=target[ids.get(item.sid)].name;
+      materials.push(material);
+    }
+    map.cfg.proj='iso';map.cfg.smooth=false;
+    const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)),arrivals,stages,preserve);
+    if(stages.overlay&&!info.overlays)warnings.push('Phủ nền chưa có chỗ phù hợp.');
+    if(stages.props&&!info.props)warnings.push('Vật dụng chưa có vị trí an toàn.');
+    if(stages.house&&!info.houses)warnings.push('Nhà chưa có chỗ đặt và lối vào an toàn.');
+    map.cfg.outlineMaterials={...info,layers:options.layers,floorScale:options.floorScale,matchJoints:options.matchJoints};
+    return {summary:`${info.props} vật dụng · ${info.overlays} ô phủ · ${info.houses} nhà.`,warnings:warnings.join(' ')};
+  }
   async function prepareOutlineDressing(map,target,options,arrivals=[]){
     if(!options)return null;
-    const profiles=options.preset==='mix'?kenneyOutlinePacks:options.preset==='dungeon'?kenneyOutlinePacks.slice(0,1):[];
-    const uploads=await Promise.all(options.files.map(readOutlineFile));
+    if(options.layers)return prepareOutlineLayerDressing(map,target,options,arrivals);
+    const stages=options.stages||null;
+    const profiles=options.preset==='mix'?kenneyOutlinePacks:kenneyOutlinePacks.filter(profile=>profile[0]===options.preset);
+    const style={floorScale:[2,4].includes(options.floorScale)?options.floorScale:1,matchJoints:!!options.matchJoints};
+    const uploads=await Promise.all(options.files.map(file=>readOutlineFile(file,style)));
     const used=new Set();
     const tasks=profiles.map(profile=>{
       const local=uploads.find(item=>item.id===profile[0]&&item.materials.floors.length);
-      if(!local)return loadBuiltinOutlinePack(profile);
+      if(!local)return loadBuiltinOutlinePack(profile,style);
       used.add(local);
       return local.materials;
     });
     for(const local of uploads)if(!used.has(local))tasks.push(local.materials);
     const materials=[],skipped=[];
     for(const pack of await Promise.all(tasks)){
-      if(!pack.floors.length&&!pack.props.length){skipped.push(pack.source+' — '+(pack.skipReason||'chưa nhận diện được sàn hoặc đạo cụ 2D'));continue;}
+      if(!pack.floors.length&&!pack.props.length&&!pack.overlays?.length&&!pack.houses?.length&&!pack.wallMaterial){skipped.push(pack.source+' — '+(pack.skipReason||'chưa nhận diện được sàn hoặc đạo cụ 2D'));continue;}
       const ids=[];
       for(const sheet of pack.sheets)ids.push(await loadBuiltinSheet(sheet,target));
       const props=pack.props.map(art=>({...art,create:(...args)=>{
         const e=art.create(...args);e.tile.sid=ids[e.tile.sid];return e;
       }}));
-      materials.push({...pack,floors:pack.floors.map(f=>({...f,sid:ids[f.sid]})),props});
+      const remap=f=>({...f,sid:ids[f.sid]});
+      const houses=(pack.houses||[]).map(h=>({...h,ents:h.ents.map(e=>({...e,tile:remap(e.tile)}))}));
+      const wallIndex=pack.sheets.findIndex(sheet=>sheet.name===pack.wallMaterial);
+      const wallMaterial=target[ids[wallIndex]]?.name;
+      materials.push({...pack,floors:pack.floors.map(remap),overlays:(pack.overlays||[]).map(remap),houses,props,wallMaterial});
     }
-    if(!materials.some(pack=>pack.floors.length)){
+    if(!stages&&!materials.some(pack=>pack.floors.length)){
       throw Error('Chưa có sàn phù hợp. Hãy chọn Kenney Dungeon 2.3 hoặc dùng ZIP có sàn 2D.'+
         (skipped.length?' '+skipped.join('. ')+'.':''));
     }
     map.cfg.proj='iso';map.cfg.smooth=false;
-    const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)),arrivals);
-    map.cfg.outline.wallMaterial=materials.find(pack=>pack.wallMaterial)?.wallMaterial;
-    map.cfg.outlineMaterials={...info,preset:options.preset};
+    const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)),arrivals,stages);
+    const walls=materials.filter(pack=>pack.wallMaterial);
+    if(!stages||stages.wall){
+      const wall=walls.length?walls[((stages?.wall||1)-1)%walls.length]:null;
+      if(wall)map.cfg.outline.wallMaterial=wall.wallMaterial;
+      else if(!stages)delete map.cfg.outline.wallMaterial;
+    }
+    if(stages){
+      if(stages.floor&&!materials.some(p=>p.floors.length))skipped.push('nền · chưa nhận diện được ảnh sàn');
+      if(stages.overlay&&!info.overlays)skipped.push('phủ nền · thiếu mảnh hoặc không có vùng phù hợp');
+      if(stages.wall&&!walls.length)skipped.push('tường bao · giữ mặt tường hiện có');
+      if(stages.props&&!info.props)skipped.push('vật dụng · thiếu mảnh hoặc không có vị trí an toàn');
+      if(stages.house&&!info.houses)skipped.push('nhà · thiếu bộ tường, cửa, mái tương thích hoặc không đủ chỗ an toàn');
+    }
+    map.cfg.outlineMaterials={...info,preset:options.preset,...style,...(stages?{stages}:{})};
     return {
-      summary:'Đã phối '+info.sources.length+' gói và đặt '+info.props+' vật thể.',
+      summary:'Đã phối '+info.sources.length+' gói · '+info.props+' vật dụng'+(stages?' · '+info.overlays+' ô phủ · '+info.houses+' nhà':'')+'.',
       warnings:skipped.length?'Đã bỏ qua '+skipped.join('. ')+'.':''
     };
+  }
+  async function liveOutlineMap(outline,w,h,level,stamps,origin,materials,updateCollision){
+    if(level||!M.cfg.outline?.loops?.length)return previewOutlineMap(outline,w,h,level,stamps,origin,materials);
+    return buildOutlineEdit(outline,updateCollision,w,h,stamps,origin,materials,sheets.slice());
   }
   async function previewOutlineMap(outline,w,h,level,stamps=[],origin=[0,0],materials=null){
     const previewSheets=sheets.slice();
@@ -3409,7 +3512,7 @@ export function init2D(root,A){
     syncCur();after();fit();draw();cv.focus({preventScroll:true});
     toast('Đã áp dụng '+level.name+'. Có thể hoàn tác trong trình sửa.'+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
   }
-  async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true,connect=false,materials=null){
+  async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true,connect=false,materials=null,linkFrom=curMap){
     const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
     const fresh=await buildOutlineMap(outline,w,h,level,prepared,stamps,useSource,null,origin);
     const dressing=await prepareOutlineDressing(fresh,prepared,materials);
@@ -3419,13 +3522,17 @@ export function init2D(root,A){
       let i=2;while(MAPS.some(m=>m.name===name+' · '+i)||M.name===name+' · '+i)i++;
       fresh.name=name+' · '+i;
     }
-    syncCur();
     const next=MAPS.length;
-    if(connect)addPair(current,fresh,index,next,prepared);
-    sheets.push(...prepared.slice(sheets.length));syncCur();curMap=MAPS.push(clone(fresh))-1;M=fresh;undo=[];redo=[];selId=null;sel=null;
+    const other=connect?(linkFrom===index?current:MAPS[linkFrom]):null;
+    if(connect&&!other)throw Error('Màn đã chọn để nối không còn trong dự án.');
+    const source=other?clone(other):null;
+    if(source)addPair(source,fresh,linkFrom,next,prepared);
+    syncCur();
+    if(source)MAPS[linkFrom]=source;
+    sheets.push(...prepared.slice(sheets.length));curMap=MAPS.push(clone(fresh))-1;M=fresh;undo=[];redo=[];selId=null;sel=null;
     after();fit();draw();await save();
-    toast('Đã tạo '+fresh.name+(connect?' và nối hai chiều với '+current.name:'.')+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
+    toast('Đã tạo '+fresh.name+(source?' và nối hai chiều với '+source.name:'.')+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
   }
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
-  return {ready,connectMap,mapConnectionBox,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  return {ready,connectMap,mapConnectionBox,outlineConnectionTargets,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
 }

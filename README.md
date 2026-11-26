@@ -1,12 +1,12 @@
 # Xưởng Kiến Trúc Game
 
-Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này **không chứa** tài nguyên của bên thứ ba.
+Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này có kèm bộ mảnh Kenney chọn lọc theo giấy phép CC0.
 
 ## Tự phối vật liệu Đường Bao 2D
 
-Mở **2D → Đường Bao → Tự phối vật liệu Đường Bao**, bật phối vật liệu và chọn **Chỉ Kenney Dungeon 2.3** để dùng sàn, mặt tường đá và đạo cụ Dungeon, hoặc chọn phối cả bốn gói. Dùng **Áp dụng vào bản đồ**, **Chơi thử bản nháp** hoặc **Tạo màn mới từ hình này**. Xưởng chừa hành lang và kiểm tra va chạm khi đặt đạo cụ. Bố cục, chiều cao tường, lỗ khoét và cổng lấy từ Đường Bao.
+Mở **2D → Đường Bao → Tự phối vật liệu Đường Bao**. Chọn gói ZIP và mảnh ráp riêng cho từng lớp **Nền**, **Phủ nền**, **Tường bao**, **Vật dụng** và **Nhà**. Dùng **Thử lần lượt** để xem từng mảnh tương thích ngay trong bản xem trước, hoặc dùng **Trước**, **Sau** và **Bỏ qua**. Dùng **Áp dụng vào bản đồ**, **Chơi thử bản nháp** hoặc **Tạo màn mới từ hình này**. Xưởng chừa hành lang và kiểm tra va chạm khi đặt đạo cụ.
 
-**Thêm gói ZIP** nhận nhiều gói cùng lúc. Xưởng nhận diện một số tên mảnh thông dụng. Với gói có tên riêng, thêm tệp `outline-materials.json` và khai báo đường dẫn ảnh tính từ thư mục chứa tệp. Ví dụ:
+**Thêm ZIP** nhận nhiều gói cùng lúc. Bản chạy từ mã nguồn GitHub dùng các bộ tích hợp và ZIP chọn từ máy. Danh mục kho gói của bản triển khai cần các tệp `dist/packs/`. Xưởng nhận diện một số tên mảnh thông dụng. Với gói có tên riêng, thêm tệp `outline-materials.json` và khai báo đường dẫn ảnh tính từ thư mục chứa tệp. Ví dụ:
 
 ```json
 {
