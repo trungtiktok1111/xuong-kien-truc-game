@@ -13,7 +13,7 @@ export const kenneyOutlinePacks=[
 const steps=[[1,0],[-1,0],[0,1],[0,-1]];
 const isMarker=e=>['start','goal','chest','npc','enemy','door'].includes(e.t)||isMapLink(e);
 
-export function dressOutline(map,materials,value,placementZones=[],arrivals=[],stages=null,preserve=new Set()){
+export function dressOutline(map,materials,value,placementZones=[],arrivals=[],stages=null,preserve=new Set(),mixSelected=false){
   const stage=name=>stages?stages[name]||0:1;
   const choose=(items,name)=>items.length?items[(stage(name)-1)%items.length]:null;
   if(stage('props'))map.ents=map.ents.filter(e=>!e.outlineAutoProp);
@@ -51,6 +51,8 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
     if(pockets.length<8)for(const j of pockets)owners[j]=-2;
     else room++;
   }
+  let floorCell=0;
+  const floorCells=mask.reduce((sum,cell)=>sum+cell,0);
   if(core&&stage('floor'))for(let i=0;i<n;i++){
     let zone=owners[i];
     if(zone===-1&&distance[i]===3)around(i,j=>{if(owners[j]>=0)zone=owners[j];});
@@ -58,7 +60,9 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
       let fringe=false;around(i,j=>{if(mask[j])fringe=true;});
       if(!fringe)continue;
     }
-    const tile=stages?choose(floors,'floor'):zone<0?core:floors[(zone+1)%floors.length];
+    const tile=mixSelected?floors[Math.min(floors.length-1,Math.floor(floorCell*floors.length/Math.max(1,floorCells)))]:
+      stages?choose(floors,'floor'):zone<0?core:floors[(zone+1)%floors.length];
+    floorCell+=mask[i];
     map.layers[0][i]=value(tile.sid);coverage.add(tile.source);
   }
   const addedZones=[];
@@ -74,25 +78,28 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
     }
     const appliedOverlays=preserve.has('overlay')?previousOverlays:[];
     if(preserve.has('overlay'))overlayCount=appliedOverlays.filter(([i,tile])=>map.layers[1][i]===tile).length;
-    const overlay=choose(materials.flatMap(m=>m.overlays||[]),'overlay');
-    if(stage('overlay')&&overlay){
-      const used=new Set();
+    const overlays=materials.flatMap(m=>m.overlays||[]);
+    if(stage('overlay')&&overlays.length){
+      const used=new Map(),perRoom=mixSelected?Math.max(1,Math.ceil(overlays.length/Math.max(1,room+1))):1;
+      let placed=0;
       for(let i=0;i<n;i++){
         const x=i%w,y=Math.floor(i/w),roomId=owners[i];
-        if(x>=w-1||y>=h-1||roomId<0||used.has(roomId)||(x+y+stage('overlay'))%3)continue;
+        if(x>=w-1||y>=h-1||roomId<0||(used.get(roomId)||0)>=perRoom||(x+y+stage('overlay'))%3)continue;
         const cells=[i,i+1,i+w,i+w+1];
         if(cells.some(j=>owners[j]!==roomId||map.layers[1][j]))continue;
+        const overlay=mixSelected?overlays[placed%overlays.length]:choose(overlays,'overlay');
         for(const j of cells){
           const tile=value(overlay.sid);
           map.layers[1][j]=tile;appliedOverlays.push([j,tile]);overlayCount++;
         }
-        used.add(roomId);coverage.add(overlay.source);
+        used.set(roomId,(used.get(roomId)||0)+1);coverage.add(overlay.source);placed++;
       }
     }
     map.cfg.outlineAutoOverlays=appliedOverlays;
-    const house=choose(materials.flatMap(m=>m.houses||[]),'house');
+    const houseOptions=materials.flatMap(m=>m.houses||[]);
+    const houses=mixSelected?houseOptions:houseOptions.length?[choose(houseOptions,'house')]:[];
     const spawn=ents.find(e=>e.t==='start');
-    if(stage('house')&&house&&spawn){
+    if(stage('house')&&spawn)for(const house of houses){
       const indices=walk.component(spawn).map(({x,y})=>y*w+x),reachable=new Set(indices);
       const required=starts.filter(i=>reachable.has(i));
       // Try rectangular lots with an apron that fits inside the floor.
@@ -105,12 +112,12 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
           if(!walk.free(px,py,.42)||markers.some(([mx,my])=>Math.hypot(px-mx,py-my)<1.5)){fits=false;break;}
         }
         if(!fits)continue;
-        const parts=house.ents.map((e,j)=>({...e,id:'outline-house-'+j,x:e.x+x,y:e.y+y,outlineAutoHouse:true}));
+        const parts=house.ents.map((e,j)=>({...e,id:'outline-house-'+houseCount+'-'+j,x:e.x+x,y:e.y+y,outlineAutoHouse:true}));
         ents.push(...parts);
         const candidate=linkWalkability(map,placementZones);
         const available=new Set(candidate.component(spawn).map(({x,y})=>y*w+x));
         if(required.every(j=>available.has(j))&&available.has((y+Math.floor(house.h/2))*w+x+house.w)){
-          houseCount=1;coverage.add(house.source);walk=candidate;break;
+          houseCount++;coverage.add(house.source);walk=candidate;break;
         }
         ents.splice(-parts.length);
       }
@@ -132,6 +139,7 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
   }
   for(const i of starts)for(let j=i;j>=0&&!protectedCells[j];j=parent[j])protectedCells[j]=1;
   const reservations=[];
+  const placedProps=new Set();
   const props=stage('props')?materials.flatMap(m=>m.props):[];
   const offset=(stage('props')-1+props.length)%Math.max(1,props.length);
   const variants=props.slice(offset).concat(props.slice(0,offset));
@@ -160,7 +168,8 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
     if(inRoute)continue;
     const entity=art.create(x,y,'outline-prop-'+i);
     ents.push(entity);addedZones.push(...decoZones([entity]));coverage.add(art.source);
+    placedProps.add(art);
     reservations.push([x,y]);
   }
-  return {sources:[...coverage],rooms:room+1,props:reservations.length,overlays:overlayCount,houses:houseCount};
+  return {sources:[...coverage],rooms:room+1,props:reservations.length,propKinds:placedProps.size,overlays:overlayCount,houses:houseCount};
 }

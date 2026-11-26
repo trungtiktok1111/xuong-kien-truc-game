@@ -16,7 +16,7 @@ const isImage=path=>/\.(png|jpe?g|webp)$/i.test(path);
 const family=path=>slug(path).replace(/[_ -]\d+(?=[_. -]|$)/g,'').replace(/[_-][ensw]$/i,'');
 const readJSON=(files,path)=>path?JSON.parse(decoder.decode(files[path])):null;
 
-export function openScenePack(name,bytes){
+export function openScenePack(name,bytes,{allowBadMetadata=false}={}){
   let hasModels=false;
   const raw=unzipSync(bytes,{filter:e=>{
     if(/(^|\/)(__MACOSX|\._)/.test(e.name))return false;
@@ -25,8 +25,12 @@ export function openScenePack(name,bytes){
   }});
   const files=Object.fromEntries(Object.entries(raw).map(([path,data])=>[norm(path),data]));
   const paths=Object.keys(files);
-  const metadata=readJSON(files,paths.find(p=>/(^|\/)manifest\.json$/.test(p)));
-  const scene=readJSON(files,paths.find(p=>/(^|\/)(canh-mau|ban-do)\.json$/.test(p)));
+  const metadataFor=pattern=>{
+    try{return readJSON(files,paths.find(p=>pattern.test(p)));}
+    catch(error){if(!allowBadMetadata)throw error;return null;}
+  };
+  const metadata=metadataFor(/(^|\/)manifest\.json$/);
+  const scene=metadataFor(/(^|\/)(canh-mau|ban-do)\.json$/);
   return {name,bytes,files,paths,metadata,scene,hasModels,
     tsx:paths.filter(p=>p.endsWith('.tsx')).map(p=>readTileset(p,decoder.decode(files[p]))).filter(Boolean)};
 }
@@ -493,6 +497,38 @@ export async function outlinePackMaterials(pack,profile,style){
   result.wallMaterial=result.sheets[result.walls[0]?.sid]?.name;
   if(ignoredAssets.length)result.assetWarning=`${ignoredAssets.length} ảnh không đọc được hoặc sai dạng`;
   return result;
+}
+
+export function outlineImageChoices(pack){
+  return pack.paths.filter(isImage).map(path=>({id:path,label:stem(path)}));
+}
+
+export async function outlineManualImage(pack,path,role,style){
+  if(!isImage(path)||!pack.files[path])throw Error('Không tìm thấy ảnh '+path+'.');
+  const label=stem(path),result={sheets:[]};
+  const a={pack,path,label,layer:role==='floor'||role==='overlay'?0:2,flatTop:true};
+  const item={id:path,label,source:pack.name};
+  if(a.layer===0){
+    const bitmap=await loadImage(a);
+    a.material=bitmap.width===bitmap.height&&bitmap.getContext('2d').getImageData(0,0,1,1).data[3]===255;
+    item.sid=await groundTile(result,a,role==='floor'?style:null);
+  }else if(role==='wall'){
+    const image=await loadImage(a),art=crop(image,[0,0,image.width,image.height]);
+    if(!art)throw Error('Ảnh trống: '+label+'.');
+    const tile=canvas(128,128);
+    tile.getContext('2d').drawImage(art.out,art.bounds[0]*art.side,art.bounds[1]*art.side,art.w,art.h,0,0,128,128);
+    result.sheets.push({name:pack.name+' · Tường chọn tay '+path,tw:128,margin:0,url:tile.toDataURL()});
+    item.sid=0;
+  }else{
+    const art=await sprite(a),house=role==='house';
+    const tileWidth=Math.max(art.w/(house?1.6:.95),art.h/(house?2.1:1.65));
+    item.radius=house?.44:Math.max(.22,Math.min(.46,art.w/tileWidth*.55));
+    const piece=addSprite(result,{...a,tileWidth,collision:{shape:'circle',radius:item.radius}},art);
+    item.sid=piece.sid;
+    if(house)Object.assign(item,{w:1,h:1,ents:[entity(piece,.5,.5,0,'house') ]});
+    else item.create=(x,y,id)=>({...entity(piece,x,y,0,id),outlineAutoProp:true});
+  }
+  return {item,sheets:result.sheets};
 }
 
 // Read one tile for each compatible facade or roof role. Atlas offsets are retained.

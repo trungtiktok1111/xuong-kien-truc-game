@@ -52,3 +52,16 @@ test('automatic dressing on a dungeon layout keeps its geometry, markers and pla
  assert.equal(dressOutline(map,materials,v=>v).props,result.props);
  assert.equal(map.ents.length,markers.length+result.props);
 });
+
+test('selected floor and prop palettes use multiple materials in the same outline',()=>{
+ const loops=[[[1,1],[19,1],[19,19],[1,19]]],mask=rasterOutline(loops,w,h);
+ const map={w,h,blk:Array.from(mask,v=>1-v),layers:Array.from({length:4},()=>Array(w*h).fill(0)),
+  cfg:{outline:{loops,floorCollision:true}},ents:[{x:9,y:9,t:'start'},{x:10,y:10,t:'goal'}]};
+ const floors=[1,2,3].map(sid=>({sid,source:'test'}));
+ const props=['chair','table'].map(name=>({radius:.22,source:'test',
+  create:(x,y,id)=>({x:x-1,y:y-1,id,name,t:'deco',outlineAutoProp:true})}));
+ const result=dressOutline(map,[{floors,props}],v=>v,[],[],{floor:1,props:1},new Set(),true);
+ assert.deepEqual([...new Set(map.layers[0].filter(Boolean))].sort(),[1,2,3]);
+ assert.equal(result.propKinds,2);
+ assert.deepEqual([...new Set(map.ents.filter(e=>e.outlineAutoProp).map(e=>e.name))].sort(),['chair','table']);
+});

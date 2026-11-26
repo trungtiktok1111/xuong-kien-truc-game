@@ -139,6 +139,20 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
 .outline-stage select{width:100%;min-width:0}
 .outline-stage .row{gap:4px}
 .outline-stage .b{padding:4px 6px;font-size:.86em}
+.outline-stage details{min-width:0}
+.outline-stage details summary{cursor:pointer;color:#f5d99e}
+.outline-stage input[type=search]{width:100%;min-width:0;margin-top:6px}
+.outline-selected{display:flex;gap:4px;flex-wrap:wrap}
+.outline-selected .outline-thumb{width:38px;height:34px}
+.outline-gallery{max-height:300px;overflow:auto;overscroll-behavior:contain;padding:2px}
+.outline-gallery-label{font-size:.83rem;font-weight:600;margin:9px 0 4px}
+.outline-gallery-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:5px}
+.outline-stage .outline-material-card{min-width:0;display:grid;gap:4px;grid-template-rows:46px auto;border:1px solid #526776;text-align:center;overflow-wrap:anywhere;padding:4px}
+.outline-material-card[aria-pressed=true]{border-color:#ffce7c;background:#504335;box-shadow:inset 0 0 0 1px #ffce7c}
+.outline-thumb{display:grid;place-items:center;overflow:hidden;background:#14212a;border-radius:4px;color:#ccd7df;font-size:.7rem}
+.outline-thumb img{display:block;width:100%;height:100%;object-fit:contain;max-height:46px}
+.outline-selected .outline-thumb img{max-height:34px}
+
 .outline-link-panel{margin-bottom:8px;padding:8px 10px;border:1px solid #4b7668;border-radius:8px}
 .outline-link-panel .row{margin:5px 0}.outline-link-panel .hint{margin:0}.outline-link-panel select{max-width:100%}
 .outline-action-status{position:sticky;bottom:0;z-index:5;margin:6px 0 0;padding:8px 10px;border-radius:7px;background:#243747;color:#fff;overflow-wrap:anywhere}

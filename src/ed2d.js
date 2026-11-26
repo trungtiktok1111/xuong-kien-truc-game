@@ -14,11 +14,12 @@ import {constructionContext,gateIssue,propIssue,wallIssue,isRoof,isBearingColumn
 import {automaticPaintZones, daXoayArchProfiles, estimateContact, makePaintProfile, paintedPieces, paintFamily, roofTextureDirection, sceneEntityLayer, propContact, resizeProp, turnProp} from './placement2d.js';
 import {openArchivePicker} from './archivePicker.js';
 import {tiledDepth} from './tiledScene.js';
-import {buildReferenceScene,generateScene,openScenePack,outlineMiniatureFolder,outlinePackMaterials,reconstructPack} from './scenePacks.js';
+import {buildReferenceScene,generateScene,openScenePack,outlineMiniatureFolder,outlinePackMaterials,outlineImageChoices,outlineManualImage,reconstructPack} from './scenePacks.js';
 import {settlementProfiles} from './settlementLayout.js';
 import {DA_XOAY_LEVEL} from './outlineLevels.js';
 import {mapCollision,rasterOutline} from './mapCollision.js';
 import {outline2D,clipOutline,stoneBackdrop,stoneWall,outlineWallImage,wallSurface,drawFloorCollision} from './outline2d.js';
+import {drawOutlineDraft} from './outlineDraftView.js';
 import {validOutline,OUTLINE_STONE,MAX_MAP_SIDE} from './outlineEditor.js';
 import {newMeta,openProjectFile,saveProjectFile} from './studio.js';
 const LEGACY_STONE_ATLAS="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAAQCAYAAAD506FJAAACwklEQVR4nO2aXWrcMBDH/xpJ9+oN+tRL9BA9Qe+1sIQQNiRpSrv9ThtSSumrvvpQRshae7H9UBk0A2at8fhv/TRrI42tXr96mdDY3h4fEEKA1jr/xhhHfWV7jv9c7M3dES+eP2uNjy/ffzXhv7i83QT/h89PTfivru83wf/j6U8T/t3+AAMAb959BQCklJBSyvvW2kG73rfWTh6bo8E3IPu89zDGIMaIGGM+l4gQQoAxJscqpUBEOZaIFmuwffr2swk/34Ct+d9/fGzCzzdga/6Hx99N+Hf7Q3N+Uw4Ei9Y+Fi7bSimEEE7ilmiwpZROYspOEhGUUogxZp9zLieAiFZp1Cb8wt8bvyk7QERwzuVgFlNKQWsNpRSUUtnHcSXYEo3aWidA+IW/N34qB8A5B601tNYnUw2ebpR+7/1gWrFUo0wA8O8p5b3PMSklOOfgvYfWGsYYGGMGmnydNRr1H0D4hb83/sGjouxkOVXg9UM9ANyBOnauxlYSIPzC3yt/ngFwYAgBIYRcPOAL8dNjqgixRmNLCRB+4e+R3wDIxYQajNsA8nqDT/be5/3y/CUaUwng6mWMMQ+eMeZE81wC5miwCb/w98o/KAJysYKFeL8saDjn8jHe6mnJXI0tJUD4hb9H/tHXgFxI4I577zOAtTZDMjCfs1RjKwkQfuHvlT/XAPjVBa8V6mrjWBGi/LpojcZUAnidVA5MOa0pY9m/RqNMgPALf4/8o0XAupPsnyqC1P65GltJgPALf6/8+TUgTxeIaFS09AEY+MtOLdHYSgKEX/h75TdlB6a+TlriXxJbxzCUUmoweNbagQ/AwD+WgDkabMIv/L3yD94C1FtZ7OBtrAhxzn9OYysJEH7h75U/fwcQQhhUK4loMDB8vKyClvFrNNhu7o6Tyfkf1pr/4vK2IX17/qvr+4b07fl3+0Mz9r+/DsK8K29SBgAAAABJRU5ErkJggg==";
@@ -3344,7 +3345,7 @@ export function init2D(root,A){
       const source='Kenney Miniature '+id[0].toUpperCase()+id.slice(1);
       const job=Promise.resolve().then(()=>{
         builtinOutlinePacks??=unzipSync(builtinOutlineArchive);
-        return outlinePackMaterials(openScenePack(source,builtinOutlinePacks[id+'.zip']),profile,style);
+        return readOutlineCatalog(openScenePack(source,builtinOutlinePacks[id+'.zip']),profile,style);
       }).catch(error=>{
         outlinePackCache.delete(key);
         return outlineSourceError(source,error);
@@ -3354,11 +3355,15 @@ export function init2D(root,A){
     return outlinePackCache.get(key);
   }
   const outlineUploads=new WeakMap();
+  async function readOutlineCatalog(raw,profile,style){
+    const result=await outlinePackMaterials(raw,profile,style).catch(error=>outlineSourceError(raw.name,error));
+    return {...result,raw,manual:new Map()};
+  }
   async function parseOutlineFile(file,style){
     try{
-      const pack=openScenePack(file.name,new Uint8Array(await file.arrayBuffer()));
+      const pack=openScenePack(file.name,new Uint8Array(await file.arrayBuffer()),{allowBadMetadata:true});
       const profile=kenneyOutlinePacks.find(item=>outlineMiniatureFolder(pack,item)!==null);
-      const materials=await outlinePackMaterials(pack,profile,style);
+      const materials=await readOutlineCatalog(pack,profile,style);
       return {id:profile?.[0],materials};
     }catch(error){return {materials:outlineSourceError(file.name,error)};}
   }
@@ -3392,43 +3397,76 @@ export function init2D(root,A){
   }
   async function outlineLayerChoices(role,source,files,style){
     const pack=await outlineLayerPack(source,files,style);
-    const choices=pack[outlineRoles[role]]||[],names=new Map();
-    for(const {label} of choices)names.set(label,(names.get(label)||0)+1);
-    return {items:choices.map(({id,label})=>({id,label:names.get(label)>1?`${label} · ${id.split('/').slice(0,-1).join('/')}`:label})),
-      message:pack.skipReason||pack.assetWarning||''};
+    const choices=pack[outlineRoles[role]]||[],suggested=new Set(choices.map(a=>a.id));
+    const primary=await Promise.all(choices.map(async item=>({id:item.id,label:item.label,recommended:true,
+      thumb:role==='house'?await outlineHouseThumb(pack,item):pack.sheets[item.sid]?.url})));
+    const others=pack.raw?outlineImageChoices(pack.raw).filter(a=>!suggested.has(a.id)).map(a=>({...a,
+      image:()=>new Blob([pack.raw.files[a.id]],{type:a.id.endsWith('.png')?'image/png':a.id.endsWith('.webp')?'image/webp':'image/jpeg'})})): [];
+    return {items:[...primary,...others],message:pack.skipReason||pack.assetWarning||''};
+  }
+  const outlineHouseThumbs=new WeakMap();
+  function outlineHouseThumb(pack,house){
+    if(!outlineHouseThumbs.has(house))outlineHouseThumbs.set(house,(async()=>{
+      const {w,h,ents}=house,sheets=[];
+      for(const sid of new Set(ents.map(e=>e.tile.sid))){
+        sheets[sid]={...pack.sheets[sid]};
+        await loadSheet(sheets[sid]);
+      }
+      const canvas=Object.assign(document.createElement('canvas'),{width:160,height:112});
+      const outline={loops:[[[0,0],[w,0],[w,h],[0,h]]],front:0,rear:0};
+      drawOutlineDraft(canvas,{M:{w,h,ents,cfg:{outline},layers:Array.from({length:4},()=>new Uint8Array(w*h))},sheets});
+      return canvas.toDataURL();
+    })());
+    return outlineHouseThumbs.get(house);
   }
   async function prepareOutlineLayerDressing(map,target,options,arrivals){
-    const requested=Object.entries(options.layers).filter(([,layer])=>layer.asset);
-    const stages={},materials=[],warnings=[],preserve=new Set();
-    const picks=await Promise.all(requested.map(async ([role,choice])=>{
+    const requested=Object.entries(options.layers).map(([role,choice])=>
+      [role,choice.source,choice.assets??(choice.asset?[choice.asset]:[])]).filter(([, ,ids])=>ids.length);
+    const stages={},materials=[],warnings=[],preserve=new Set(),wallNames=[];
+    const picks=await Promise.all(requested.map(async ([role,source,ids])=>{
+      const items=[],errors=[];
       try{
-        const pack=await outlineLayerPack(choice.source,options.files,options);
-        const key=outlineRoles[role],item=pack[key]?.find(a=>a.id===choice.asset);
-        if(item)return {role,pack,key,item};
-        return {role,message:pack.skipReason||'Mảnh đã chọn không còn trong '+pack.source+'.'};
-      }catch(error){return {role,message:error.message};}
+        const pack=await outlineLayerPack(source,options.files,options),key=outlineRoles[role];
+        for(const id of new Set(ids)){
+          try{
+            const item=pack[key]?.find(a=>a.id===id);
+            if(item){items.push({item,sheets:pack.sheets});continue;}
+            if(!pack.raw)throw Error(pack.skipReason||'Thiếu ảnh trong '+source+'.');
+            const cacheKey=role+'|'+id;
+            if(!pack.manual.has(cacheKey))pack.manual.set(cacheKey,outlineManualImage(pack.raw,id,role,options));
+            items.push(await pack.manual.get(cacheKey));
+          }catch(error){errors.push(error.message);}
+        }
+      }catch(error){errors.push(error.message);}
+      return {role,items,errors};
     }));
-    for(const {role,key,item,pack,message} of picks){
-      if(!item){preserve.add(role);warnings.push(message);continue;}
+    for(const {role,items,errors} of picks){
+      warnings.push(...new Set(errors));
+      if(!items.length){preserve.add(role);continue;}
       stages[role]=1;
-      const ids=new Map();
-      const needed=role==='house'?item.ents.map(e=>e.tile.sid):[item.sid];
-      for(const sid of new Set(needed))ids.set(sid,await loadBuiltinSheet(pack.sheets[sid],target));
-      const remap=tile=>({...tile,sid:ids.get(tile.sid)});
       const material={floors:[],overlays:[],props:[],houses:[],walls:[]};
-      if(role==='house')material.houses=[{...item,ents:item.ents.map(e=>({...e,tile:remap(e.tile)}))}];
-      else if(role==='props')material.props=[{...item,create:(...args)=>{
-        const e=item.create(...args);e.tile=remap(e.tile);return e;
-      }}];
-      else material[key]=[remap(item)];
-      if(role==='wall')map.cfg.outline.wallMaterial=target[ids.get(item.sid)].name;
+      for(const {item,sheets:sourceSheets} of items){
+        const ids=new Map(),needed=role==='house'?item.ents.map(e=>e.tile.sid):[item.sid];
+        for(const sid of new Set(needed))ids.set(sid,await loadBuiltinSheet(sourceSheets[sid],target));
+        const remap=tile=>({...tile,sid:ids.get(tile.sid)});
+        if(role==='house')material.houses.push({...item,ents:item.ents.map(e=>({...e,tile:remap(e.tile)}))});
+        else if(role==='props')material.props.push({...item,create:(...args)=>{
+          const e=item.create(...args);e.tile=remap(e.tile);return e;
+        }});
+        else material[outlineRoles[role]].push(remap(item));
+        if(role==='wall')wallNames.push(target[ids.get(item.sid)].name);
+      }
       materials.push(material);
     }
+    if(wallNames.length){
+      map.cfg.outline.wallMaterial=wallNames[0];
+      map.cfg.outline.wallMaterials=wallNames;
+    }
     map.cfg.proj='iso';map.cfg.smooth=false;
-    const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)),arrivals,stages,preserve);
+    const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)),arrivals,stages,preserve,true);
     if(stages.overlay&&!info.overlays)warnings.push('Phủ nền chưa có chỗ phù hợp.');
-    if(stages.props&&!info.props)warnings.push('Vật dụng chưa có vị trí an toàn.');
-    if(stages.house&&!info.houses)warnings.push('Nhà chưa có chỗ đặt và lối vào an toàn.');
+    if(stages.props&&info.propKinds<materials.reduce((count,part)=>count+part.props.length,0))warnings.push('Một số mẫu vật dụng chưa có vị trí an toàn.');
+    if(stages.house&&info.houses<materials.reduce((count,part)=>count+part.houses.length,0))warnings.push('Một số mẫu nhà chưa có chỗ đặt và lối vào an toàn.');
     map.cfg.outlineMaterials={...info,layers:options.layers,floorScale:options.floorScale,matchJoints:options.matchJoints};
     return {summary:`${info.props} vật dụng · ${info.overlays} ô phủ · ${info.houses} nhà.`,warnings:warnings.join(' ')};
   }

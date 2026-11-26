@@ -2,7 +2,8 @@ import {WALL_THICKNESS,outlineSupports,wallRuns,wallSpan} from './wall2d.js';
 import {DEFAULT_OUTLINE_WALL_HEIGHT} from './outlineGrid.js';
 const cached=new WeakMap();
 export function outlineWallImage(outline,sheets){
- return outline?.wallMaterial?sheets.find(sheet=>sheet?.name===outline.wallMaterial)?.img:null;
+ const names=outline?.wallMaterials||(outline?.wallMaterial?[outline.wallMaterial]:[]);
+ return names.map(name=>sheets.find(sheet=>sheet?.name===name)?.img).filter(Boolean);
 }
 export function outline2D(data,angle=false,ents=[]){
  if(!data?.loops?.length)return null;
@@ -32,7 +33,7 @@ export function outline2D(data,angle=false,ents=[]){
  });
  const points=loops.flat(),u=points.map(p=>angle?p[0]:p[0]-p[1]),v=points.map(p=>angle?p[1]:(p[0]+p[1])/2);
  const bounds=[Math.min(...u),Math.min(...v),Math.max(...u),Math.max(...v)];
- const result={loops,walls,supports:outlineSupports(data),bounds,front:data.front??DEFAULT_OUTLINE_WALL_HEIGHT,rear:data.rear??DEFAULT_OUTLINE_WALL_HEIGHT};
+ const result={loops,walls,perimeter,supports:outlineSupports(data),bounds,front:data.front??DEFAULT_OUTLINE_WALL_HEIGHT,rear:data.rear??DEFAULT_OUTLINE_WALL_HEIGHT};
  variants[index]=result;cached.set(data,variants);return cutGateOpenings(result,ents,angle);
 }
 function cutGateOpenings(geo,ents,angle){
@@ -100,6 +101,7 @@ export function wallSurface(wall,project,unit,geometry){
 }
 
 export function stoneWall(cx,wall,project,unit,w,h,geometry,texture=null){
+ if(Array.isArray(texture))texture=texture[Math.min(texture.length-1,Math.floor((wall.phase||0)*texture.length/(geometry?.perimeter||1)))];
  const shape=wallSurface(wall,project,unit,geometry);
  if(!shape||shape.high<=0)return;
  const {front,back,high}=shape,[[x,y],[a,b]]=front;
