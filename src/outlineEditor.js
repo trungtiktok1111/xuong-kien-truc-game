@@ -641,6 +641,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const dressing=el('input',{type:'checkbox','aria-label':'Tự phối vật liệu'});
  const saved=map.cfg.outlineMaterials||{};
  dressing.checked=!!saved.layers;
+ const scaleOverrides=new Map(Object.entries(saved.scaleOverrides||{}));
+ const scaleViaLabel={door:'cửa',wall:'tường',character:'nhân vật trong gói',manual:'tay',none:'chưa nhận ra'};
  const builtins=[['dungeon','Kenney Dungeon'],['farm','Kenney Farm'],['library','Kenney Library'],['bases','Kenney Bases']];
  const defaultSource=saved.preset==='farm'?'builtin:farm':'builtin:dungeon';
  const zipFiles=el('input',{type:'file',multiple:'',accept:'.zip','aria-label':'Thêm ZIP cho các lớp'});
@@ -656,7 +658,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   if(sequence)sequence.control.run.textContent='Thử lần lượt';
   sequence=null;
  }
- const rows=[['floor','Nền',true],['overlay','Phủ nền',false],['wall','Tường bao',true],['props','Vật dụng',true],['house','Nhà',false]];
+ const rows=[['floor','Nền',true],['overlay','Phủ nền',false],['wall','Tường bao',true],['props','Vật dụng',true],['house','Nhà',false],['character','Nhân vật',true]];
  const layerControls=rows.map(([key,label,active])=>{
   const source=el('select',{'aria-label':'Gói cho '+label.toLowerCase()});
   const note=el('span',{class:'hint',role:'status'});
@@ -665,7 +667,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const summary=el('summary',{},'Chọn mảnh bằng hình');
   const picker=el('details',{},summary,search,gallery);
   const selected=el('div',{class:'outline-selected'});
-  const control={key,source,note,picker,search,gallery,summary,selected,items:[],ids:[],trial:null,revision:0,loading:false,urls:new Map(),limits:[24,24]};
+  const scaleLabel=el('label',{},'Chỉnh tay tỉ lệ ');
+  const scaleInput=el('input',{type:'number',min:'.2',max:'5',step:'.05',placeholder:'tự động',
+   'aria-label':'Chỉnh tay tỉ lệ gói cho '+label.toLowerCase()});
+  scaleLabel.append(scaleInput);
+  const control={key,source,note,picker,search,gallery,summary,selected,scaleInput,scaleLabel,items:[],ids:[],trial:null,revision:0,loading:false,urls:new Map(),limits:[24,24]};
   const prev=B('Trước',()=>step(-1)),next=B('Sau',()=>step(1));
   const run=B('Thử lần lượt',()=>{
    if(sequence?.control===control){stopSequence();return;}
@@ -693,12 +699,20 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   }
   source.onchange=()=>{
    clearTrials();dressing.checked=true;
+   syncScaleInputs();
    void refreshLayer(control,true);
+  };
+  scaleInput.onchange=()=>{
+   const v=Number(scaleInput.value);
+   if(Number.isFinite(v)&&v>0)scaleOverrides.set(control.source.value,v);
+   else scaleOverrides.delete(control.source.value);
+   clearTrials();
+   for(const other of layerControls)if(other.source.value===control.source.value)void refreshLayer(other,other.ids);
   };
   search.oninput=()=>{control.limits=[24,24];renderGallery(control);};
   picker.ontoggle=()=>{if(picker.open)renderGallery(control);else gallery.replaceChildren();};
   control.element=el('div',{class:'outline-stage'},
-   el('strong',{},label),el('label',{},'Gói ZIP',source),selected,picker,
+   el('strong',{},label),el('label',{},'Gói ZIP',source),scaleLabel,selected,picker,
    el('div',{class:'row'},prev,next,run),el('div',{class:'row'},clear,keep,restore),note);
   control.initialSource=saved.layers?.[key]?.source||defaultSource;
   control.initialAsset=saved.layers?.[key]?(saved.layers[key].assets??[saved.layers[key].asset].filter(Boolean)):(saved.stages?.[key]??active)?true:[];
@@ -766,6 +780,16 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const ids=new Set(control.ids);
   for(const card of control.gallery.querySelectorAll('[data-item]'))card.setAttribute('aria-pressed',ids.has(card.dataset.item));
  }
+ function syncScaleInputs(){
+  const seen=new Set();
+  for(const control of layerControls){
+   const source=control.source.value,first=!seen.has(source);
+   seen.add(source);
+   control.scaleInput.hidden=control.scaleLabel.hidden=!first;
+   if(document.activeElement!==control.scaleInput)
+    control.scaleInput.value=scaleOverrides.has(source)?scaleOverrides.get(source):'';
+  }
+ }
  function syncLayer(control){
   const {items,loading,ids,trial}=control;
   control.prev.disabled=control.next.disabled=control.run.disabled=loading||!items.length;
@@ -779,10 +803,13 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    return item?el('span',{title:item.label},thumbFor(control,item)):el('span',{class:'hint'},'Cần nạp lại ZIP');
   }));
   const item=items.find(a=>a.id===trial);
+  const first=layerControls.findIndex(c=>c.source.value===control.source.value)===layerControls.indexOf(control);
+  const scaleNote=first&&control.scale?'Tỉ lệ theo '+scaleViaLabel[control.scale.via]:'';
   control.note.textContent=loading?'Đang đọc gói…':[
    item?'Đang thử '+(items.indexOf(item)+1)+'/'+items.length+' · '+item.label:items.length+' ảnh',
-   control.message].filter(Boolean).join(' · ');
+   control.message,scaleNote].filter(Boolean).join(' · ');
   markGallery(control);
+  syncScaleInputs();
  }
  function testImage(control,index){
   dressing.checked=true;control.trial=control.items[index]?.id||null;
@@ -805,13 +832,14 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  async function refreshLayer(control,wanted){
   const revision=++control.revision;
   control.loading=true;control.gallery.replaceChildren();syncLayer(control);
+  const style={...surfaceStyle(),manualScale:scaleOverrides.get(control.source.value)};
   try{
-   const result=await editor.outlineLayerChoices(control.key,control.source.value,outlineZipFiles,surfaceStyle());
+   const result=await editor.outlineLayerChoices(control.key,control.source.value,outlineZipFiles,style);
    if(revision!==control.revision||!ov.isConnected)return;
-   control.items=result.items;control.message=result.message;
+   control.items=result.items;control.message=result.message;control.scale=result.scale;
   }catch(error){
    if(revision!==control.revision||!ov.isConnected)return;
-   control.items=[];control.message=error.message;
+   control.items=[];control.message=error.message;control.scale=null;
   }
   releaseGallery(control);
   const suggested=control.items.find(item=>item.recommended);
@@ -843,7 +871,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  });
  const materials=(preview=false)=>{
   if(is3D||!dressing.checked)return null;
-  const layers=Object.fromEntries(layerControls.map(({key,source,ids,trial})=>[key,{source:source.value,assets:preview&&trial?[trial]:[...ids]}]));
+  const layers=Object.fromEntries(layerControls.filter(({key})=>key!=='character').map(({key,source,ids,trial})=>[key,{source:source.value,assets:preview&&trial?[trial]:[...ids]}]));
   return {layers,files:new Map(outlineZipFiles),...surfaceStyle()};
  };
  const assembly=B('Ráp toàn bộ',()=>{
@@ -878,7 +906,19 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    try{
     const view=await editor.liveOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,opts,collision.checked);
     if(revision!==liveRevision||!ov.isConnected)return;
-    drawOutlineDraft(liveCanvas,view);
+    let drawn=view;
+    const characterRow=layerControls.find(row=>row.key==='character');
+    const characterId=characterRow?.trial||characterRow?.ids[0];
+    if(characterId){
+     try{
+      const preview=await editor.outlineCharacterPreview(characterRow.source.value,characterId,outlineZipFiles,surfaceStyle());
+      if(preview)drawn={...view,M:{...view.M,ents:[...view.M.ents,
+        {...preview.ent,tile:{...preview.ent.tile,sid:preview.ent.tile.sid+view.sheets.length}}]},
+       sheets:[...view.sheets,...preview.sheets]};
+     }catch{/* reference silhouette is optional; never block the rest of the live preview */}
+    }
+    if(revision!==liveRevision||!ov.isConnected)return;
+    drawOutlineDraft(liveCanvas,drawn);
     liveCanvas.hidden=false;
     liveStatus.textContent=[view.dressing?.summary,view.dressing?.warnings].filter(Boolean).join(' ');
     if(sequence){

@@ -3402,7 +3402,7 @@ export function init2D(root,A){
       thumb:role==='house'?await outlineHouseThumb(pack,item):pack.sheets[item.sid]?.url})));
     const others=pack.raw?outlineImageChoices(pack.raw).filter(a=>!suggested.has(a.id)).map(a=>({...a,
       image:()=>new Blob([pack.raw.files[a.id]],{type:a.id.endsWith('.png')?'image/png':a.id.endsWith('.webp')?'image/webp':'image/jpeg'})})): [];
-    return {items:[...primary,...others],message:pack.skipReason||pack.assetWarning||''};
+    return {items:[...primary,...others],message:pack.skipReason||pack.assetWarning||'',scale:pack.scale};
   }
   async function outlineCharacterPreview(source,id,files,style){
     const pack=await outlineLayerPack(source,files,style);
