@@ -314,9 +314,21 @@ async function groundTile(result,a){
   result.sheets.push({name:a.pack.name+' · '+a.label,tw:128,margin:0,iso:1,url:sh.toDataURL()});
   return result.sheets.length-1;
 }
+export function outlineMiniatureFolder(pack,profile){
+  const [id,floor,props]=profile;
+  const names=[floor,...props,...(id==='dungeon'?['stoneWall']:[])];
+  const floorPath='isometric/'+floor.toLowerCase()+'_e.png';
+  for(const path of pack.paths){
+    if(path!==floorPath&&!path.endsWith('/'+floorPath))continue;
+    const folder=path.slice(0,-floorPath.length);
+    if(names.every(name=>pack.files[folder+'isometric/'+name.toLowerCase()+'_e.png']))return folder;
+  }
+  return null;
+}
+
 // Rectify the long sandstone face so it can follow curved outlines and gates.
-async function dungeonWallMaterial(result,pack){
-  const source=await loadImage({pack,path:'isometric/stonewall_e.png'});
+async function dungeonWallMaterial(result,pack,path){
+  const source=await loadImage({pack,path});
   const tile=canvas(128,128),g=tile.getContext('2d');
   const left=35,top=306,width=120,height=144;
   const scaleX=tile.width/width,scaleY=tile.height/height;
@@ -354,12 +366,14 @@ export async function outlinePackMaterials(pack,profile){
     floors=(settings.floors||[]).slice(0,4).map(row=>named(row,0));
     props=(settings.props||[]).slice(0,6).map(row=>named(row,2));
   }else if(profile){
-    const [,floor,extras]=profile,path=id=>'isometric/'+id.toLowerCase()+'_e.png';
+    const [,floor,extras]=profile,root=outlineMiniatureFolder(pack,profile);
+    if(root===null)throw Error('Thiếu mảnh isometric của '+pack.name+'.');
+    const path=id=>root+'isometric/'+id.toLowerCase()+'_e.png';
     const tile=named(path(floor),0);
     if(floor==='floorCarpet')tile.underlay='#5a473d';
     floors=[tile];
     props=extras.map(id=>named({path:path(id),anchor:[128,437],tileWidth:256},2));
-    if(profile[0]==='dungeon')await dungeonWallMaterial(result,pack);
+    if(profile[0]==='dungeon')await dungeonWallMaterial(result,pack,path('stoneWall'));
   }else{
     const assets=catalog(pack).filter(a=>!pack.hasModels||a.native||/(^|\/)(isometric|sprites)\//i.test(a.path));
     if(pack.hasModels&&!assets.length){

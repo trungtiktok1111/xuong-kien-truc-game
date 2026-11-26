@@ -16,6 +16,8 @@ Mở **2D → Đường Bao → Tự phối vật liệu Đường Bao**, bật 
 }
 ```
 
+Các bộ phối Kenney đi kèm ứng dụng và có thể dùng ngay khi mất kết nối đến kho gói. Nếu ZIP đã chọn khớp bộ Kenney Miniature, Xưởng đọc trực tiếp các mảnh trong ZIP đó. Các ảnh gốc dùng cho bộ phối và giấy phép CC0 của Kenney nằm trong `assets/kenney-outline.zip`.
+
 Dùng `shape: "square"` cho ảnh vật liệu vuông nhìn từ trên xuống. Mặc định ảnh sàn dùng góc isometric 2:1. `anchor` là điểm chân trên ảnh gốc tính bằng pixel. `tileWidth` là bề rộng pixel ứng với một ô bản đồ. Có thể chỉ khai báo sàn hoặc chỉ khai báo đạo cụ và phối với gói khác.
 
 ## Điểm neo khi đặt mảnh 2D

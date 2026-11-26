@@ -1,3 +1,4 @@
+import builtinOutlineArchive from '../assets/kenney-outline.zip';
 import {dressOutline,kenneyOutlinePacks} from './outlineDressing.js';
 import {campaignStart,linkWalkability,planMapPair} from './mapLinks2d.js';
 import {stockScenes,packPurpose} from './stockScenes.js';
@@ -13,7 +14,7 @@ import {constructionContext,gateIssue,propIssue,wallIssue,isRoof,isBearingColumn
 import {automaticPaintZones, daXoayArchProfiles, estimateContact, makePaintProfile, paintedPieces, paintFamily, roofTextureDirection, sceneEntityLayer, propContact, resizeProp, turnProp} from './placement2d.js';
 import {openArchivePicker} from './archivePicker.js';
 import {tiledDepth} from './tiledScene.js';
-import {buildReferenceScene,generateScene,openScenePack,outlinePackMaterials,reconstructPack} from './scenePacks.js';
+import {buildReferenceScene,generateScene,openScenePack,outlineMiniatureFolder,outlinePackMaterials,reconstructPack} from './scenePacks.js';
 import {settlementProfiles} from './settlementLayout.js';
 import {DA_XOAY_LEVEL} from './outlineLevels.js';
 import {mapCollision,rasterOutline} from './mapCollision.js';
@@ -3324,24 +3325,45 @@ export function init2D(root,A){
     return fresh;
   }
   const outlinePackCache=new Map();
+  let builtinOutlinePacks;
+  const outlineSourceError=(source,error)=>({
+    source,floors:[],props:[],skipReason:error.message==='invalid zip data'?'không đọc được tệp ZIP':error.message||'không đọc được gói'
+  });
+  function loadBuiltinOutlinePack(profile){
+    const [id]=profile;
+    if(!outlinePackCache.has(id)){
+      const source='Kenney Miniature '+id[0].toUpperCase()+id.slice(1);
+      const job=Promise.resolve().then(()=>{
+        builtinOutlinePacks??=unzipSync(builtinOutlineArchive);
+        return outlinePackMaterials(openScenePack(source,builtinOutlinePacks[id+'.zip']),profile);
+      }).catch(error=>{
+        outlinePackCache.delete(id);
+        return outlineSourceError(source,error);
+      });
+      outlinePackCache.set(id,job);
+    }
+    return outlinePackCache.get(id);
+  }
+  async function readOutlineFile(file){
+    try{
+      const pack=openScenePack(file.name,new Uint8Array(await file.arrayBuffer()));
+      const profile=kenneyOutlinePacks.find(item=>outlineMiniatureFolder(pack,item)!==null);
+      const materials=await outlinePackMaterials(pack,profile);
+      return {id:profile?.[0],materials};
+    }catch(error){return {materials:outlineSourceError(file.name,error)};}
+  }
   async function prepareOutlineDressing(map,target,options,arrivals=[]){
     if(!options)return null;
     const profiles=options.preset==='mix'?kenneyOutlinePacks:options.preset==='dungeon'?kenneyOutlinePacks.slice(0,1):[];
+    const uploads=await Promise.all(options.files.map(readOutlineFile));
+    const used=new Set();
     const tasks=profiles.map(profile=>{
-      const [id]=profile,file='kenney-isometric-miniature-'+id+'.zip';
-      if(!outlinePackCache.has(id)){
-        const job=stockPackList().then(()=>readStockScenePack(stockByFile(file)))
-          .then(pack=>outlinePackMaterials(pack,profile)).catch(error=>{
-            outlinePackCache.delete(id);throw error;
-          });
-        outlinePackCache.set(id,job);
-      }
-      return outlinePackCache.get(id);
+      const local=uploads.find(item=>item.id===profile[0]&&item.materials.floors.length);
+      if(!local)return loadBuiltinOutlinePack(profile);
+      used.add(local);
+      return local.materials;
     });
-    for(const file of options.files)tasks.push(file.arrayBuffer().then(bytes=>
-      outlinePackMaterials(openScenePack(file.name,new Uint8Array(bytes)))).catch(error=>({
-        source:file.name,floors:[],props:[],skipReason:error.message||'không đọc được ZIP'
-      })));
+    for(const local of uploads)if(!used.has(local))tasks.push(local.materials);
     const materials=[],skipped=[];
     for(const pack of await Promise.all(tasks)){
       if(!pack.floors.length&&!pack.props.length){skipped.push(pack.source+' — '+(pack.skipReason||'chưa nhận diện được sàn hoặc đạo cụ 2D'));continue;}

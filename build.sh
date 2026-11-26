@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 ./node_modules/.bin/esbuild src/main.js --bundle --minify --format=iife --target=chrome100,safari15.4 \
-  --loader:.json=json --loader:.wasm=binary --outfile=dist/app.js
+  --loader:.json=json --loader:.wasm=binary --loader:.zip=binary --outfile=dist/app.js
 node <<'JS'
 const { readFileSync, writeFileSync } = require('node:fs');
 const script = readFileSync('dist/app.js', 'utf8').replaceAll('</script', '<\\/script').replaceAll('</body', '<\\/body').replaceAll('</head', '<\\/head');
