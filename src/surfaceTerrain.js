@@ -1,3 +1,5 @@
+import {inSurfaceShape,surfaceLevelById,surfacePieceById} from './surfaceLibrary.js';
+
 // Surface modules compose over a full rectangular grid, displayed as a diamond in isometric view.
 export const surfaceTypes=[
  ['plain','Đồng bằng', '#879b60'],['meadow','Đồng cỏ / bãi trống','#a0ad6b'],
@@ -24,6 +26,9 @@ export function newSurface(profile='plain'){
  const {waters,settle,blank}=surfaceProfiles[profile];
  return {profile,water:[...waters],roads:!blank,land:!blank,buildings:settle,seed:1,patches:[]};
 }
+export function surfaceFromLevel(level){
+ return {...newSurface(level.profile),layout:level.id,water:[...new Set(level.shapes.map(shape=>shape.kind).filter(kind=>surfaceWater.includes(kind)))],buildings:level.lots.length>0};
+}
 export function surfaceHash(x,y,z){
  let n=Math.imul(x+19,374761393)^Math.imul(y+31,668265263)^Math.imul(z+1,1274126177);
  n=Math.imul(n^(n>>>13),1274126177);return ((n^(n>>>16))>>>0)/4294967296;
@@ -34,15 +39,16 @@ const isWet=id=>id>=K.sea&&id<=K.pond;
 // Each cell retains the base ground, a water layer, and a circulation layer until assembly.
 export function planSurface(w,h,spec){
  const n=w*h,land=new Uint8Array(n),water=new Uint8Array(n).fill(255),road=new Uint8Array(n).fill(255);
- const {seed=1,profile='plain',patches=[]}=spec;
+ const {seed=1,profile='plain',patches=[]}=spec,layout=surfaceLevelById.get(spec.layout);
  const waters=new Set(spec.water||[]),city=profile==='city',temple=profile==='temple',village=profile==='village',coast=profile==='coast';
  const phase=surfaceHash(0,0,seed)*6.28;
  const junction=Math.round(h*.51);
- const start=[Math.max(1,Math.floor(w*.12)),clamp(junction,1,h-2)];
- const goal=[clamp(Math.floor(w*(waters.has('sea')?.68:.87)),1,w-2),start[1]];
+ const cell=([x,y])=>[clamp(Math.floor(x*w/100),0,w-1),clamp(Math.floor(y*h/100),0,h-1)];
+ const start=layout?cell(layout.start):[Math.max(1,Math.floor(w*.12)),clamp(junction,1,h-2)];
+ const goal=layout?cell(layout.goal):[clamp(Math.floor(w*(waters.has('sea')?.68:.87)),1,w-2),start[1]];
  const houseLots=[];
  const delta=Math.min(w,h);
- for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+ if(!layout)for(let y=0;y<h;y++)for(let x=0;x<w;x++){
   const i=y*w+x,u=(x+.5)/w,v=(y+.5)/h;
   const wave=Math.sin(v*9+phase)*.037;
   const shore=.81+wave*.58+Math.sin(v*5+phase)*.04;
@@ -73,24 +79,39 @@ export function planSurface(w,h,spec){
    else if(x===Math.floor(w*(.135+.035*Math.sin(y*.20)))&&v>.12&&v<.54)road[i]=K.trail;
   }
  }
- for(const patch of patches){
-  const type=K[patch.kind];
-  if(type===undefined)continue;
-  const [a,b,c,d]=patch.bounds;
+ function paint(kind,i,overwrite){
+  const type=K[kind];
+  if(isWet(type)){water[i]=type;if(overwrite)road[i]=255;}
+  else if(type===K.bridge||type>=K.main&&type<=K.trail)road[i]=type;
+  else{land[i]=type;if(overwrite||type===K.plain||type===K.meadow){water[i]=255;road[i]=255;}}
+ }
+ function stamp(shapes,bounds,turn=0,overwrite=true){
+  const [a,b,c,d]=bounds;
+  if(c<=a||d<=b)return;
   for(let y=clamp(Math.floor(b),0,h);y<clamp(Math.ceil(d),0,h);y++)for(let x=clamp(Math.floor(a),0,w);x<clamp(Math.ceil(c),0,w);x++){
-   const i=y*w+x;
-   if(isWet(type)){water[i]=type;road[i]=255;}
-   else if(type===K.bridge||type>=K.main&&type<=K.trail)road[i]=type;
-   else{land[i]=type;water[i]=255;road[i]=255;}
+   const u=(x+.5-a)*100/(c-a),v=(y+.5-b)*100/(d-b);
+   if(u<0||v<0||u>=100||v>=100)continue;
+   const px=turn===1?v:turn===2?100-u:turn===3?100-v:u;
+   const py=turn===1?100-u:turn===2?100-v:turn===3?u:v;
+   for(const shape of shapes)if(inSurfaceShape(shape,px,py))paint(shape.kind,y*w+x,overwrite);
   }
  }
+ if(layout){
+  const shapes=layout.shapes.filter(({kind})=>K[kind]>=K.main&&K[kind]<=K.trail?spec.roads:isWet(K[kind])?waters.has(kind):spec.land);
+  stamp(shapes,[0,0,w,h],0,false);
+ }
+ for(const patch of patches){
+  const piece=surfacePieceById.get(patch.piece);
+  if(piece)stamp(piece.shapes,patch.bounds,patch.turn);
+  else if(K[patch.kind]!==undefined)stamp([{kind:patch.kind,box:[0,0,100,100]}],patch.bounds);
+ }
  if(spec.buildings&&w>=24&&h>=20){
-  const anchors=city?[[.20,.39],[.34,.39],[.20,.58],[.34,.58],[.74,.65]]:temple?[[.29,.40],[.36,.40],[.31,.60]]:coast?[[.20,.35],[.33,.61],[.68,.37]]:[[.22,.37],[.36,.38],[.34,.58]];
+  const anchors=layout?layout.lots.map(([x,y])=>[x/100,y/100]):city?[[.20,.39],[.34,.39],[.20,.58],[.34,.58],[.74,.65]]:temple?[[.29,.40],[.36,.40],[.31,.60]]:coast?[[.20,.35],[.33,.61],[.68,.37]]:[[.22,.37],[.36,.38],[.34,.58]];
   for(const [u,v] of anchors){
    const x=Math.floor(u*w),y=Math.floor(v*h),width=2,height=3;
    if(x+width+1>=w||y+height+1>=h)continue;
    const cells=Array.from({length:width*height},(_,j)=>(y+Math.floor(j/width))*w+x+j%width);
-   if(cells.some(i=>water[i]!==255||road[i]!==255)||houseLots.some(l=>Math.abs(x-l.x)<4&&Math.abs(y-l.y)<5))continue;
+   if(cells.some(i=>water[i]!==255||road[i]!==255||land[i]===K.mountain)||houseLots.some(l=>Math.abs(x-l.x)<4&&Math.abs(y-l.y)<5))continue;
    for(const i of cells)land[i]=K.lot;
    houseLots.push({x,y});
   }
@@ -104,9 +125,9 @@ export function planSurface(w,h,spec){
   blocked[i]=Number(isWet(tiles[i])||tiles[i]===K.mountain);
   if(route!==255||wet!==255)continue;
   const shade=surfaceHash(x,y,seed);
-  if(base===K.forest&&x%3===0&&y%3===0&&shade>.23)trees.push({x,y,kind:'tree',shade});
-  else if(base===K.mountain&&x%4===0&&y%4===0&&shade>.32)trees.push({x,y,kind:'rock',shade});
-  else if(base===K.farm&&x%5===0&&y%4===0&&shade>.4)trees.push({x,y,kind:'crop',shade});
+  if(base===K.forest&&x%3===0&&y%3===0&&(layout||shade>.23))trees.push({x,y,kind:'tree',shade});
+  else if(base===K.mountain&&x%4===0&&y%4===0&&(layout||shade>.32))trees.push({x,y,kind:'rock',shade});
+  else if(base===K.farm&&x%5===0&&y%4===0&&(layout||shade>.4))trees.push({x,y,kind:'crop',shade});
  }
  // Mark the start and goal on actual available land. Validate connectivity again after scenery is installed.
  return {tiles,blocked,trees,houseLots,start,goal};

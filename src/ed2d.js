@@ -1,3 +1,4 @@
+import {surfaceLevelById} from './surfaceLibrary.js';
 import {planSurface,surfaceReachable,surfaceKinds,surfaceHash,surfaceProfiles} from './surfaceTerrain.js';
 import {surfaceSheet,surfaceRock,SURFACE_VARIANTS} from './surfaceArt.js';
 import builtinOutlineArchive from '../assets/kenney-outline.zip';
@@ -3390,7 +3391,7 @@ export function init2D(root,A){
     const c=defCfg();c.view='iso';c.proj=level?'iso':M.cfg.proj||'iso';c.win='goal';
     if(level)c.outlineTemplate=level.id;
     else if(M.layers[0].some(Boolean)){c.smooth=M.cfg.smooth;c.hero={...M.cfg.hero};c.anims=M.cfg.anims;c.heroAnim=M.cfg.heroAnim;c.outlineHero=M.cfg.outlineHero;c.beforeOutlineHero=M.cfg.beforeOutlineHero;c.playerHeight=M.cfg.playerHeight;c.crouchHeight=M.cfg.crouchHeight;}
-    const name=outline.surface?surfaceProfiles[outline.surface.profile].name:level?.name||'Màn '+(MAPS.length+1)+' · Đường bao';
+    const name=outline.surface?(surfaceLevelById.get(outline.surface.layout)?.name||surfaceProfiles[outline.surface.profile].name):level?.name||'Màn '+(MAPS.length+1)+' · Đường bao';
     const fresh=mkMap(w,h,name,c);
     const place=i=>({x:i%w,y:Math.floor(i/w)});
     if(sourcePreset&&origin.some(Boolean))sourcePreset=rebaseOutlineSource(sourcePreset,w,h,origin);

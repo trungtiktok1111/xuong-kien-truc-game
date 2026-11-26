@@ -4,9 +4,9 @@
 
 ## Mặt đất trong Đường Bao 2D
 
-Chọn **Đường bao → Mặt đất → Phủ kín hình thoi** để tạo nền trống đi được trên toàn bộ lưới. Chọn mẫu đồng bằng, thành phố, thôn trang, tông môn hoặc ven biển. Có thể bật hoặc tắt địa hình, công trình, mạng đường và từng loại mặt nước.
+Chọn **Đường bao → Mặt đất → Phủ kín hình thoi** để tạo nền trống đi được trên toàn bộ lưới. Mở **Màn mẫu · 30** để chọn bố cục cố định theo sáu nhóm địa hình. Mỗi màn có vị trí xuất phát và đích riêng. Có thể bật hoặc tắt địa hình, công trình, mạng đường và từng loại mặt nước.
 
-Trong **Ráp vùng**, chọn một loại đất, đường, nước hoặc cầu rồi kéo trên lưới. Các vùng được ráp theo thứ tự đặt và có thể hoàn tác. Nước và vách núi chặn bước chân. Đường qua vùng nước trong đất liền được nối bằng cầu. Với cảnh biển, dùng vùng **Cầu** để đặt lối vượt nước tại vị trí mong muốn.
+Mở **Mảnh mặt đất · 30** để chọn và xoay mảnh ghép, bấm vào lưới để đặt hoặc kéo để đổi kích thước. **Ráp vùng** là cọ hình chữ nhật cho các vùng tự tô. Các vùng được ráp theo thứ tự đặt và có thể hoàn tác. Nước và vách núi chặn bước chân. Đường qua vùng nước trong đất liền được nối bằng cầu. Với cảnh biển, dùng vùng **Cầu** để đặt lối vượt nước tại vị trí mong muốn.
 
 Dùng **Chơi thử bản nháp** để kiểm tra tuyến đi. Dùng **Tạo màn mới từ hình này** để giữ cảnh hầm hiện tại và thêm màn mặt đất riêng.
 
