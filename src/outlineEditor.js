@@ -1,5 +1,5 @@
 import {canArrangeProp,propFootprint,propPlacement,propGroup,transformPropGroup} from './outlinePropPlacement.js';
-import {zPath} from './zones.js';
+import {zPath,zBounds} from './zones.js';
 import {drawSurfaceTerrain} from './surfaceContours.js';
 import {surfaceLevels,surfaceLevelById,surfacePieces} from './surfaceLibrary.js';
 import {diamondOutline,newSurface,planSurface,surfaceFromLevel,surfaceTypes,surfaceWater} from './surfaceTerrain.js';
@@ -1267,24 +1267,128 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const liveCanvas=el('canvas',{width:900,height:410,tabindex:0,style:'touch-action:none','aria-label':'Cảnh ráp isometric trong Đường Bao'});
  const liveStatus=el('p',{class:'hint',role:'status'});
  const camera={zoom:1,x:0,y:0};
- let liveView=null,liveProjection=null,selectedProp=null,gesture=null,copyProp=false;
+ let liveView=null,liveProjection=null,selectedProp=null,gesture=null;
  const snapProps=el('input',{type:'checkbox'});
  snapProps.checked=true;
  const propStatus=el('p',{class:'hint',role:'status'});
  const zoomValue=el('output',{},'100%');
- const duplicate=B('Nhân bản',()=>{
-  copyProp=!copyProp;
-  duplicate.setAttribute('aria-pressed',String(copyProp));
-  propStatus.textContent=copyProp?'Bấm trên sàn để đặt từng bản sao. Nhấn Esc để dừng.':'';
- });
+ const propPicker=el('select',{'aria-label':'Chọn vật trong cảnh'});
+ function refreshPropPicker(view){
+  const available=view.M.ents.filter(canArrangeProp);
+    propPicker.replaceChildren(el('option',{value:''},'Chọn vật hoặc bấm trên cảnh'),
+     ...available.map(e=>el('option',{value:String(e.id)},(e.name||'Vật dụng')+' · '+(e.x+1).toFixed(1)+', '+(e.y+1).toFixed(1))));
+    propPicker.value=selectedProp==null?'':String(selectedProp);
+ }
+ function selectProp(entity){
+  selectedProp=entity?.id??null;
+  propPicker.value=entity?String(entity.id):'';
+  duplicate.disabled=turnProp.disabled=!entity;
+  propStatus.textContent=entity?.name||(entity?'Vật dụng':'');
+ }
+ propPicker.onchange=()=>{
+  selectProp(liveView?.M.ents.find(entity=>String(entity.id)===propPicker.value));
+  redrawLive();liveCanvas.focus({preventScroll:true});
+ };
+ const duplicate=B('Nhân bản',openCopy);
  duplicate.disabled=true;
+ function openCopy(){
+  const source=liveView?.M.ents.find(entity=>entity.id===selectedProp);
+  if(!source||gesture)return;
+  const view=liveView;
+  const dialog=el('dialog',{style:'background:#192834;color:#fff;border:1px solid #567180;border-radius:10px;padding:18px'});
+  const count=el('input',{type:'number',min:1,max:1000,value:1,required:'',style:'width:75px'});
+  const gap=el('input',{type:'number',min:0,max:600,step:.01,value:1,required:'',style:'width:75px'});
+  const directions=[['↑','Bắc',0,-1,2,1],['←','Tây',-1,0,1,2],['→','Đông',1,0,3,2],['↓','Nam',0,1,2,3]];
+  const chosen=new Set();
+  const grid=el('div',{style:'display:grid;grid-template:repeat(3,36px)/repeat(3,42px);gap:4px;margin:10px 0'},
+   el('span',{style:'grid-area:2 / 2;display:grid;place-items:center;border:1px solid #627789'},'Gốc'));
+  for(const direction of directions){
+   const [arrow,label,,,column,row]=direction;
+   const button=B(arrow,()=>{
+    if(chosen.has(direction))chosen.delete(direction);else chosen.add(direction);
+    button.setAttribute('aria-pressed',String(chosen.has(direction)));
+    button.style.background=chosen.has(direction)?'#246158':'';
+    message.textContent='';
+   });
+   button.style.gridArea=row+' / '+column;
+   button.title=label;button.setAttribute('aria-label',label);button.setAttribute('aria-pressed','false');
+   grid.append(button);
+  }
+  const message=el('p',{class:'hint',role:'status'});
+  const form=el('form',{},el('strong',{},source.name||'Nhân bản vật phẩm'),
+   el('p',{},el('label',{},'Số bản sao mỗi hướng ',count)),
+   el('p',{},el('label',{},'Khoảng hở giữa các chân vật (ô) ',gap)),
+   grid,message,el('div',{class:'row'},el('button',{class:'b',type:'submit'},'Thực hiện'),B('Hủy',()=>dialog.close())));
+  dialog.append(form);
+  dialog.addEventListener('close',()=>{dialog.remove();liveCanvas.focus({preventScroll:true});});
+  form.onkeydown=e=>{
+   e.stopPropagation();
+   if(e.key==='Enter'){e.preventDefault();form.requestSubmit();}
+  };
+  form.onsubmit=e=>{
+   e.preventDefault();
+   if(!chosen.size){message.textContent='Chọn ít nhất một hướng.';return;}
+   if(liveView!==view){message.textContent='Cảnh đã thay đổi. Hãy mở lại hộp nhân bản.';return;}
+   const originals=propGroup(view.M.ents,source);
+   const bounds=originals.flatMap(propFootprint).map(zBounds);
+   const span=axis=>Math.max(...bounds.map(b=>b[axis+2]))-Math.min(...bounds.map(b=>b[axis]));
+   const staging={...view,M:{...view.M,ents:[...view.M.ents]}};
+   const stopped=[],copies=[];
+   for(const direction of directions){
+    if(!chosen.has(direction))continue;
+    const [,label,dx,dy]=direction,step=span(dx?0:1)+Number(gap.value)+.0001;
+    let previous=originals;
+    for(let i=1;i<=Number(count.value);i++){
+     const ignore=new Set(previous.map(part=>part.id));
+     const make=distance=>transformPropGroup(originals,source,{x:source.x+dx*distance,y:source.y+dy*distance});
+     const passes=distance=>make(distance).every(part=>!propPlacement(staging,part,ignore));
+     const samples=Math.max(1,Math.ceil(step/.25));
+     let blocked=false;
+     for(let j=1;j<=samples;j++){
+      if(!passes(step*(i-1+j/samples))){blocked=true;break;}
+     }
+     const parts=make(step*i);
+     if(blocked||parts.some(part=>propPlacement(staging,part,new Set()))){stopped.push(label);break;}
+     const group='outline-copy-'+crypto.randomUUID();
+     previous=parts.map((part,k)=>({...part,id:group+'-'+k,arrangementGroup:group}));
+     staging.M.ents.push(...previous);copies.push(...previous);
+    }
+   }
+   if(copies.length)dropProps(copies,source);
+   const total=new Set(copies.map(part=>part.arrangementGroup)).size;
+   propStatus.textContent='Đã đặt '+total+' bản sao.'+(stopped.length?' Dừng do gặp mép sàn hoặc vật cản: '+stopped.join(', ')+'.':'');
+   dialog.close();redrawLive();
+  };
+  document.body.append(dialog);dialog.showModal();count.select();
+ }
  function redrawLive(){
   if(!liveView)return;
-  liveProjection=drawOutlineDraft(liveCanvas,liveView,camera);
+  const parts=gesture?.parts;
+  const preview=parts&&!gesture.problem?{...liveView,M:{...liveView.M,
+   ents:liveView.M.ents.map(entity=>parts.find(part=>part.id===entity.id)||entity)}}:liveView;
+  liveProjection=drawOutlineDraft(liveCanvas,preview,camera);
   zoomValue.textContent=Math.round(camera.zoom*100)+'%';
   const candidate=gesture?.candidate,entity=candidate||liveView.M.ents.find(e=>e.id===selectedProp);
-  if(!entity||!liveProjection)return;
+  if(!liveProjection)return;
   const ctx=liveCanvas.getContext('2d'),{project}=liveProjection;
+  function guide(x,y,dx,dy){
+   const reach=2*Math.hypot(liveCanvas.width,liveCanvas.height),length=Math.hypot(dx,dy)||1;
+   dx=dx*reach/length;dy=dy*reach/length;
+   ctx.beginPath();ctx.moveTo(x-dx,y-dy);ctx.lineTo(x+dx,y+dy);ctx.stroke();
+  }
+  const center=project(liveView.M.w/2,liveView.M.h/2);
+  ctx.save();ctx.strokeStyle='#ae934d99';ctx.setLineDash([5,5]);
+  for(const [dx,dy] of [[1,0],[0,1],[2,1],[2,-1]])guide(...center,dx,dy);
+  if(gesture?.parts){
+   ctx.strokeStyle='#52b8daaa';
+   const bounds=gesture.parts.flatMap(propFootprint).map(zBounds);
+   const [x0,y0,x1,y1]=[Math.min(...bounds.map(b=>b[0])),Math.min(...bounds.map(b=>b[1])),
+    Math.max(...bounds.map(b=>b[2])),Math.max(...bounds.map(b=>b[3]))];
+   for(const x of [x0,x1])guide(...project(x,y0),-2,1);
+   for(const y of [y0,y1])guide(...project(x0,y),2,1);
+  }
+  ctx.restore();
+  if(!entity)return;
   const color=gesture?.problem?'#ff7777':candidate?'#7fffab':'#ffd879';
   ctx.save();
   ctx.lineWidth=2;ctx.strokeStyle=color;ctx.fillStyle=color+'48';
@@ -1305,27 +1409,26 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const bounds=liveCanvas.getBoundingClientRect();
   return [(e.clientX-bounds.left)*liveCanvas.width/bounds.width,(e.clientY-bounds.top)*liveCanvas.height/bounds.height];
  };
- function propChange(source,target,copy=false,mirror=false){
+ function propChange(source,target,mirror=false){
   const originals=propGroup(liveView.M.ents,source);
   const parts=transformPropGroup(originals,source,target,mirror);
-  const ignore=new Set(copy?[]:originals.map(part=>part.id));
+  const ignore=new Set(originals.map(part=>part.id));
   const problem=parts.map(part=>propPlacement(liveView,part,ignore)).find(Boolean);
   return {parts,problem};
  }
- function dropProps(parts,entity,copy=false){
+ function dropProps(placed,entity){
   record();
-  const group='outline-copy-'+crypto.randomUUID();
-  const placed=copy?parts.map((part,i)=>({...part,id:group+'-'+i,arrangementGroup:group})):parts;
   const ids=new Set(placed.map(part=>part.id));
   liveView.M.ents=liveView.M.ents.filter(part=>!ids.has(part.id)).concat(placed);
   const saved=placed.map(part=>({entity:structuredClone(part),sheet:liveView.sheets[part.tile.sid].name}));
   propEdits=[...propEdits.filter(edit=>!ids.has(edit.entity.id)),...saved];
+  refreshPropPicker(liveView);
   propStatus.textContent='Đã đặt vật tại '+(entity.x+1).toFixed(2)+' × '+(entity.y+1).toFixed(2)+' ô.';
  }
  const turnProp=B('Đổi hướng ↔',()=>{
   const source=liveView?.M.ents.find(entity=>entity.id===selectedProp);
   if(!source||gesture)return;
-  const {parts,problem}=propChange(source,source,false,true);
+  const {parts,problem}=propChange(source,source,true);
   if(problem)propStatus.textContent=problem;
   else dropProps(parts,source);
   liveCanvas.focus({preventScroll:true});
@@ -1333,11 +1436,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  });
  turnProp.disabled=true;
  function aimProp(point){
-  const [x,y]=liveProjection.unproject(...point),{source,dx,dy,copy}=gesture;
+  const [x,y]=liveProjection.unproject(...point),{source,dx,dy}=gesture;
   const snap=value=>snapProps.checked?Math.floor(value)+.5:Math.round(value*100)/100;
   const candidate={...source,x:snap(x+dx)-1,y:snap(y+dy)-1};
   gesture.candidate=candidate;
-  Object.assign(gesture,propChange(source,candidate,copy));
+  Object.assign(gesture,propChange(source,candidate));
   propStatus.textContent=gesture.problem||'Điểm neo '+(candidate.x+1).toFixed(2)+' × '+(candidate.y+1).toFixed(2)+' ô';
   redrawLive();
  }
@@ -1355,27 +1458,27 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    const imageX=hit.e.spriteFlip&1?1-u:u;
    return imageX>=left&&imageX<=right&&v>=top&&v<=bottom;
   });
-  const source=e.button===0&&copyProp?liveView.M.ents.find(e=>e.id===selectedProp):hit?.e;
+  const source=hit?.e;
   if(source){
    const [a,b]=liveProjection.unproject(x,y);
-   gesture={source,copy:copyProp,point,dx:copyProp?0:source.x+1-a,dy:copyProp?0:source.y+1-b};
-   if(!copyProp){selectedProp=source.id;duplicate.disabled=turnProp.disabled=false;propStatus.textContent=source.name||'Vật dụng';}
-   if(copyProp)aimProp(point);
-  }else gesture={point,pan:[camera.x,camera.y]};
+   gesture={source,point,dx:source.x+1-a,dy:source.y+1-b};
+   selectProp(source);
+  }else{if(e.button===0)selectProp(null);gesture={point,pan:[camera.x,camera.y]};}
   liveCanvas.focus({preventScroll:true});
   liveCanvas.setPointerCapture(e.pointerId);redrawLive();
  };
+ liveCanvas.ondblclick=e=>{if(!duplicate.disabled){e.preventDefault();openCopy();}};
  liveCanvas.onpointermove=e=>{
   if(!gesture||!liveProjection)return;
   const point=livePoint(e),dx=point[0]-gesture.point[0],dy=point[1]-gesture.point[1];
   if(gesture.pan){camera.x=gesture.pan[0]+dx;camera.y=gesture.pan[1]+dy;redrawLive();}
-  else if(gesture.copy||gesture.candidate||Math.hypot(dx,dy)>3)aimProp(point);
+  else if(gesture.candidate||Math.hypot(dx,dy)>3)aimProp(point);
  };
  liveCanvas.onpointerup=()=>{
   if(!gesture)return;
-  const {candidate,problem,copy,parts}=gesture;
+  const {candidate,problem,parts}=gesture;
   gesture=null;
-  if(candidate&&!problem)dropProps(parts,candidate,copy);
+  if(candidate&&!problem)dropProps(parts,candidate);
   redrawLive();
  };
  liveCanvas.onpointercancel=()=>{gesture=null;redrawLive();};
@@ -1384,9 +1487,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  liveCanvas.onkeydown=e=>{
   if(!liveView||e.isComposing)return;
   const key=e.key.toLowerCase(),direction=arrows[e.key];
-  if(key==='escape'&&(copyProp||gesture)){
+  if(key==='escape'&&gesture){
    gesture=null;
-   if(copyProp)duplicate.click();
    propStatus.textContent='';redrawLive();
   }else if(gesture)return;
   else if((e.ctrlKey||e.metaKey)&&key!=='d')return;
@@ -1418,10 +1520,10 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const liveTools=el('div',{class:'row'},el('button',{type:'button',class:'b','aria-label':'Thu nhỏ cảnh ráp',onclick:()=>zoomLive(1/1.25)},'−'),zoomValue,
   el('button',{type:'button',class:'b','aria-label':'Phóng to cảnh ráp',onclick:()=>zoomLive(1.25)},'+'),
   B('Vừa khung',fitLive),
-  duplicate,turnProp,el('label',{},snapProps,' Bám tâm ô'));
+  el('label',{},'Chọn vật ',propPicker),duplicate,turnProp,el('label',{},snapProps,' Bám tâm ô'));
  const livePanel=is3D?null:el('section',{class:'outline-live-view','aria-label':'Xem trước cảnh ráp'},
   el('strong',{},'Xem trước cảnh ráp'),liveTools,
-  el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),el('p',{class:'hint'},'Phím tắt khi bấm vào cảnh: +/− thu phóng, 0 vừa khung, mũi tên dịch vật theo trục lưới, Shift + mũi tên dịch khung nhìn, D nhân bản, R đổi hướng, G bật/tắt bám tâm ô, Esc hủy.'),liveCanvas,propStatus,liveStatus);
+  el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),el('p',{class:'hint'},'Phím tắt khi bấm vào cảnh: +/− thu phóng, 0 vừa khung, mũi tên dịch vật theo trục lưới, Shift + mũi tên dịch khung nhìn, D hoặc nhấp đúp vào vật để nhân bản, R đổi hướng, G bật/tắt bám tâm ô, Esc hủy.'),liveCanvas,propStatus,liveStatus);
  let liveTimer,liveKey='',liveRevision=0;
  queueLivePreview=(force=false)=>{
   if(is3D||!ov.isConnected||surface?.finish!==false&&layerControls.some(row=>row.loading))return;
@@ -1437,9 +1539,9 @@ export function openOutlineEditor(editor,initialTab='shapes'){
     const view=await editor.liveOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,opts,collision.checked);
     if(revision!==liveRevision||!ov.isConnected)return;
     gesture=null;liveView=view;
+    refreshPropPicker(view);
     if(!view.M.ents.some(e=>e.id===selectedProp)){
      selectedProp=null;duplicate.disabled=turnProp.disabled=true;
-     copyProp=false;duplicate.setAttribute('aria-pressed','false');
     }
     redrawLive();
     liveCanvas.hidden=false;
