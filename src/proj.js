@@ -27,7 +27,7 @@ export const depthAng=d=>{const z=d.zb;return d.y+1+(z&&(z[2]||z[3])?z[1]+z[3]:0
 export const roofThickness=e=>Number.isFinite(e.roofThickness)?Math.max(.02,Math.min(.8,e.roofThickness)):.16;
 
 // Source atlas contact points, measured at the center of the base on the ground.
-const surfaceContacts={tree:[171/336,222/336],crop:[147/296,262/296],rock:[49/96,87/96]};
+const surfaceContacts={tree:[171/336,209/336],crop:[147/296,262/296],rock:[49/96,87/96]};
 
 // A placed prop uses the same frame, scale and ground anchor in the preview and the game.
 export function placedPropFrame(e,project,unit,projection){

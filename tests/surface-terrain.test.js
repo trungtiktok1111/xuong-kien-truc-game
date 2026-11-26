@@ -75,7 +75,9 @@ test('saved surface tree art and its collision use the same projected ground con
  const frame=placedPropFrame(e,project,100,'iso');
  const [x,y]=project(zone.x+zone.w/2,zone.y+zone.h/2);
  assert.ok(Math.abs(frame.x+frame.size*171/336-x)<1e-8);
- assert.ok(Math.abs(frame.y+frame.size*222/336-y)<1e-8);
+ assert.ok(Math.abs(frame.y+frame.size*209/336-y)<1e-8);
+ assert.equal(zone.k,'rect');
+ assert.ok(Math.abs(zone.w*150-frame.size*80/336)<1e-8);
  assert.ok(zonesHit([zone],e.x+1,e.y+1,0));
  assert.ok(!zonesHit([zone],e.x+1,e.y+1+.45,0));
 });

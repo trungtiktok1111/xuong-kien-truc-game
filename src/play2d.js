@@ -389,7 +389,7 @@ export function play2D(o){
       else if(dbgMode===2||window.__dbg){cx.fillStyle='rgba(40,220,90,.2)';cx.beginPath();for(const [a,b] of [[0,0],[W,0],[W,H],[0,H]]){const q=Tq(a,b);cx.lineTo(q[0],q[1]);}cx.closePath();cx.fill();}
       cx.save();if(collision.floor)clipOutline(cx,collision.floor,Tq);
       cx.fillStyle='rgba(255,40,40,.5)';for(let i=0;i<W*H;i++)if(collision.tileBlocked(i)){const x=i%W,y=(i/W)|0;cx.beginPath();for(const [a,b] of [[x,y],[x+1,y],[x+1,y+1],[x,y+1]]){const q=Tq(a,b);cx.lineTo(q[0],q[1]);}cx.closePath();cx.fill();}
-      cx.restore();cx.strokeStyle='#ff8a8a';cx.lineWidth=1.5;for(const q of ZS){if(q.k==='line'){cx.save();cx.strokeStyle='rgba(255,40,40,.5)';cx.lineWidth=(q.th||.6)*s;cx.lineJoin='round';zPath(cx,q,Tq);cx.stroke();cx.restore();}else{zPath(cx,q,Tq);cx.fill();cx.stroke();}}
+      cx.restore();cx.fillStyle='rgba(255,40,40,.30)';cx.strokeStyle='#ff8a8a';cx.lineWidth=1.5;for(const q of ZS){if(q.k==='line'){cx.save();cx.strokeStyle='rgba(255,40,40,.5)';cx.lineWidth=(q.th||.6)*s;cx.lineJoin='round';zPath(cx,q,Tq);cx.stroke();cx.restore();}else{zPath(cx,q,Tq);cx.fill();cx.stroke();}}
       for(const q of M.placementZones||[]){
         cx.fillStyle=q.estimated===false?'rgba(255,40,40,.5)':'rgba(255,170,45,.45)';
         cx.strokeStyle=q.estimated===false?'#ff8a8a':'#ffbd69';
