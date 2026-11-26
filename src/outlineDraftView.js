@@ -1,5 +1,5 @@
 import {drawSurfaceTerrain,surfaceTerrainTile} from './surfaceContours.js';
-import {clipOutline,outline2D,outlineWallImage,stoneBackdrop,stoneWall} from './outline2d.js';
+import {clipOutline,outline2D,outlineWallImage,stoneBackdrop,drawFloorSlab,stoneWall} from './outline2d.js';
 import {slab,tile192,mirF} from './isoslab.js';
 import {drawPlacedProp,placedPropFrame} from './proj.js';
 import {builtWallFaces} from './wall2d.js';
@@ -19,9 +19,10 @@ export function drawOutlineDraft(canvas,{M:map,sheets}){
  const {w,h,ents}=map,geo=outline2D(map.cfg.outline,false,ents);
  if(!geo)return;
  const [x0,y0,x1,y1]=geo.bounds;
- const s=Math.min((width-28)/Math.max(1,x1-x0),(height-28)/Math.max(1,y1-y0+Math.max(geo.front,geo.rear,3)));
+ const s=Math.min((width-28)/Math.max(1,x1-x0),(height-28)/Math.max(1,y1-y0+Math.max(geo.front,geo.rear,3)+geo.floorThickness));
  const project=(x,y)=>[width/2+(x-y-(x0+x1)/2)*s,height/2+((x+y)/2-(y0+y1)/2+1.2)*s];
  stoneBackdrop(cx,width,height);
+ drawFloorSlab(cx,geo,project,s);
  cx.save();clipOutline(cx,geo,project);
  const {surface,surfaceMaterials}=map.cfg.outline;
  if(surface)drawSurfaceTerrain(cx,w,h,surface,project,{sheets,materials:surfaceMaterials});

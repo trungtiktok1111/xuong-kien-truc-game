@@ -23,7 +23,7 @@ import {buildReferenceScene,generateScene,openScenePack,outlineMiniatureFolder,o
 import {settlementProfiles} from './settlementLayout.js';
 import {DA_XOAY_LEVEL} from './outlineLevels.js';
 import {mapCollision,rasterOutline} from './mapCollision.js';
-import {outline2D,clipOutline,stoneBackdrop,stoneWall,outlineWallImage,wallSurface,drawFloorCollision} from './outline2d.js';
+import {outline2D,clipOutline,stoneBackdrop,drawFloorSlab,stoneWall,outlineWallImage,wallSurface,drawFloorCollision} from './outline2d.js';
 import {drawOutlineDraft} from './outlineDraftView.js';
 import {validOutline,OUTLINE_STONE,MAX_MAP_SIDE} from './outlineEditor.js';
 import {newMeta,openProjectFile,saveProjectFile} from './studio.js';
@@ -182,7 +182,7 @@ export function init2D(root,A){
     const B=isoBuild(),S=CELL*view.z,w=cv.clientWidth,h=cv.clientHeight,O=g2s(0,0),sc=S/.75;
     const geo=outline2D(M.cfg.outline,AG,renderWallEnts());
     const wallImage=outlineWallImage(M.cfg.outline,sheets);
-    if(geo)stoneBackdrop(cx,w,h);
+    if(geo){stoneBackdrop(cx,w,h);if(vis[0])drawFloorSlab(cx,geo,g2s,S);}
     if(geo){cx.save();clipOutline(cx,geo,g2s);}
     if(vis[0]&&M.cfg.outline?.surface)drawSurfaceTerrain(cx,M.w,M.h,M.cfg.outline.surface,g2s,{sheets,materials:M.cfg.outline.surfaceMaterials});
     cx.save();cx.imageSmoothingEnabled=true;if(AG)cx.transform(2*S/B.CQ,0,0,2*S*ANG_R/B.CQ,O[0],O[1]);else cx.transform(S/B.CQ,S/(2*B.CQ),-S/B.CQ,S/(2*B.CQ),O[0],O[1]);cx.drawImage(B.gnd,0,0);cx.restore();cx.imageSmoothingEnabled=false;
@@ -3530,7 +3530,8 @@ export function init2D(root,A){
     const pack=await outlineLayerPack(source,files,style);
     const choices=pack[outlineRoles[role]]||[],suggested=new Set(choices.map(a=>a.id));
     const primary=await Promise.all(choices.map(async item=>({id:item.id,label:item.label,recommended:true,
-      thumb:role==='house'?await outlineHouseThumb(pack,item):pack.sheets[item.sid]?.url})));
+      thumb:role==='house'?await outlineHouseThumb(pack,item):pack.sheets[item.sid]?.url,
+      image:pack.raw?.files?.[item.id]?()=>new Blob([pack.raw.files[item.id]]):undefined})));
     const others=pack.raw?outlineImageChoices(pack.raw).filter(a=>!suggested.has(a.id)).map(a=>({...a,
       image:()=>new Blob([pack.raw.files[a.id]],{type:a.id.endsWith('.png')?'image/png':a.id.endsWith('.webp')?'image/webp':'image/jpeg'})})): [];
     return {items:[...primary,...others],message:pack.skipReason||pack.assetWarning||'',scale:pack.scale};
@@ -3566,7 +3567,8 @@ export function init2D(root,A){
     const picks=await Promise.all(requested.map(async ([role,source,ids])=>{
       const items=[],errors=[];
       try{
-        const style={...options,manualScale:options.scaleOverrides?.[source]};
+        const scaleOverrides=options.scaleOverrides||{},scaleKey=JSON.stringify([role,source]);
+        const style={...options,manualScale:Object.hasOwn(scaleOverrides,scaleKey)?scaleOverrides[scaleKey]:scaleOverrides[source]};
         const pack=await outlineLayerPack(source,options.files,style),key=outlineRoles[role];
         for(const id of new Set(ids)){
           try{

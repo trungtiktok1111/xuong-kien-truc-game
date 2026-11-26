@@ -10,7 +10,7 @@ import {gateWalls} from './gate2d.js';
 import {paintedPieces,sceneEntityLayer} from './placement2d.js';
 import {tileFoot,tileSpan} from './spriteFoot.js';
 import {mapCollision} from './mapCollision.js';
-import {outline2D,clipOutline,stoneBackdrop,stoneWall,outlineWallImage,drawFloorCollision} from './outline2d.js';
+import {outline2D,clipOutline,stoneBackdrop,drawFloorSlab,stoneWall,outlineWallImage,drawFloorCollision} from './outline2d.js';
 import {createLogic} from './logic.js';
 import {el} from './util.js';
 import {zonesHit,zRaster,zPath,decoZones} from './zones.js';
@@ -326,12 +326,12 @@ export function play2D(o){
     let pX=()=>0,pY=()=>0;
     const geo=ISO&&outline2D(CF.outline,ANG,EN);
     const wallImage=outlineWallImage(CF.outline,sheets);
-    if(ANG){const cw=s*1.5,ch=cw*ANG_R,ox0=w/2-CEN.x*cw,oy0=h/2-CEN.y*ch,hw=cw/2;pX=(x,y)=>ox0+x*cw;pY=(x,y)=>oy0+y*ch;VIEW={iso:1,ang:1,ox0,oy0,cw,ch};if(geo){stoneBackdrop(cx,w,h);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
+    if(ANG){const cw=s*1.5,ch=cw*ANG_R,ox0=w/2-CEN.x*cw,oy0=h/2-CEN.y*ch,hw=cw/2;pX=(x,y)=>ox0+x*cw;pY=(x,y)=>oy0+y*ch;VIEW={iso:1,ang:1,ox0,oy0,cw,ch};if(geo){stoneBackdrop(cx,w,h);drawFloorSlab(cx,geo,(x,y)=>[pX(x,y),pY(x,y)],s*.75);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
       if(CF.outline?.surface)drawSurfaceTerrain(cx,W,H,CF.outline.surface,(x,y)=>[pX(x,y),pY(x,y)],{sheets,materials:CF.outline.surfaceMaterials});
       if(gnd){cx.save();cx.transform(cw/CQ,0,0,ch/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();}
       for(const q of SL){const X=pX(q.x,q.y),Y=pY(q.x,q.y);if(X>w||X<-cw||Y>h||Y<-2*cw)continue;const sh=sheets[q.sid];if(sh&&sh.A)tileAng(cx,sh.A,q.idx,X,Y,cw);}
       if(geo)cx.restore();}
-    else if(ISO){const hw=s*.75,hh=s*.375,ox0=w/2-(CEN.x-CEN.y)*hw,oy0=h/2-(CEN.x+CEN.y)*hh;pX=(x,y)=>ox0+(x-y)*hw;pY=(x,y)=>oy0+(x+y)*hh;VIEW={iso:1,ox0,oy0,hw,hh};if(geo){stoneBackdrop(cx,w,h);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
+    else if(ISO){const hw=s*.75,hh=s*.375,ox0=w/2-(CEN.x-CEN.y)*hw,oy0=h/2-(CEN.x+CEN.y)*hh;pX=(x,y)=>ox0+(x-y)*hw;pY=(x,y)=>oy0+(x+y)*hh;VIEW={iso:1,ox0,oy0,hw,hh};if(geo){stoneBackdrop(cx,w,h);drawFloorSlab(cx,geo,(x,y)=>[pX(x,y),pY(x,y)],s*.75);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
       if(CF.outline?.surface)drawSurfaceTerrain(cx,W,H,CF.outline.surface,(x,y)=>[pX(x,y),pY(x,y)],{sheets,materials:CF.outline.surfaceMaterials});
       if(gnd){cx.save();cx.transform(hw/CQ,hh/CQ,-hw/CQ,hh/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();}
       for(const q of SL){const X=pX(q.x,q.y)-hw,Y=pY(q.x,q.y);if(X>w||X<-2*hw||Y>h||Y<-2*hw)continue;const sh=sheets[q.sid],sx=(q.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(q.idx/sh.cols)*(sh.tw+sh.margin);if(sh.iso===2)tile192(cx,sh.img,sx,sy,sh.tw,sh.cy||0,X+hw,Y,hw,sh.wat&&sh.wat.includes(q.idx)?mirF(q.x,q.y):0);else slab(cx,sh.img,sx,sy,sh.tw,X+hw,Y,hw,q.f);}
