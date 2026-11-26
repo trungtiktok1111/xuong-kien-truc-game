@@ -13,7 +13,7 @@ import {play3D} from './play3d.js';
 import {fitGate3D,inOutline} from './outline3d.js';
 import {combineOutline,ellipseLoop,fitShape,outlineShapes,rectangleLoop,cropOutline,moveOutline,corridorLoop,relatedLoops} from './outlineShapes.js';
 import {guideBox,appGuides} from './editorHelp.js';
-import {el,toast,yes,ask,idbGet,idbSet} from './util.js';
+import {el,toast,yes,ask,idbGet,idbSet,idbDel} from './util.js';
 import {listOutlinePresets,loadOutlinePreset,saveOutlinePreset,deleteOutlinePreset} from './outlinePresets.js';
 
 export const MAX_MAP_SIDE=600;
@@ -44,6 +44,21 @@ function persistOutlineZip(id,file){
   if(!ids.includes(id)&&!await idbSet(outlineZipIndexKey,[...ids,id]))throw Error('Không cập nhật được danh mục ZIP dùng chung.');
  }).catch(error=>{throw error;});
  return outlineZipWrite;
+}
+function removeOutlineZips(ids){
+ const operation=outlineZipWrite.catch(()=>{}).then(async()=>{
+  const removed=[];
+  for(const id of ids){
+   if(await idbDel('outline-zip-library-v1:'+id)){
+    outlineZipFiles.delete(id);removed.push(id);
+   }
+  }
+  const saved=await idbGet(outlineZipIndexKey)||[];
+  const indexSaved=await idbSet(outlineZipIndexKey,saved.filter(id=>!removed.includes(id)));
+  return {removed,indexSaved};
+ });
+ outlineZipWrite=operation;
+ return operation;
 }
 export function openOutlineEditor(editor,initialTab='shapes'){
  const is3D=editor.kind==='3d';
@@ -1045,7 +1060,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const style={...surfaceStyle(),manualScale:layerScale(control,currentSource)};
   try{
    let result=control.catalogs.get(currentSource);
-   if(!result){result=await editor.outlineLayerChoices(control.key,currentSource,outlineZipFiles,style);control.catalogs.set(currentSource,result);}
+   if(!result){result=await editor.outlineLayerChoices(control.key,currentSource,outlineZipFiles,style);if(!currentSource.startsWith('zip:')||outlineZipFiles.has(currentSource))control.catalogs.set(currentSource,result);}
    if(revision!==control.revision||!ov.isConnected)return;
    control.items=result.items.map(item=>({...item,source:currentSource,assetId:item.id,id:assetToken(currentSource,item.id),packageName:sourceTitle(control,currentSource)}));
    control.message=result.message;control.scale=result.scale;
@@ -1071,7 +1086,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const style={...surfaceStyle(),manualScale:layerScale(control,sourceId)};
   try{
    let result=control.catalogs.get(sourceId);
-   if(!result){result=await editor.outlineLayerChoices(control.key,sourceId,outlineZipFiles,style);control.catalogs.set(sourceId,result);}
+   if(!result){result=await editor.outlineLayerChoices(control.key,sourceId,outlineZipFiles,style);if(!sourceId.startsWith('zip:')||outlineZipFiles.has(sourceId))control.catalogs.set(sourceId,result);}
    if(revision!==control.revision||!ov.isConnected)return;
    const items=result.items.map(item=>({...item,source:sourceId,assetId:item.id,id:assetToken(sourceId,item.id),packageName:sourceTitle(control,sourceId)}));
    control.items=items;control.message=result.message;control.scale=result.scale;
@@ -1087,6 +1102,54 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   releaseGallery(control);control.trial=null;control.loading=false;control.limits=[24,24];
   renderGallery(control);syncLayer(control);queueLivePreview(true);
  }
+ const zipPicker=el('select',{'aria-label':'Gói ZIP cần xóa'});
+ const deleteZip=B('Xóa gói đã chọn',()=>deleteZipSelection([zipPicker.value]));
+ const deleteAllZips=B('Xóa tất cả ZIP đã nhập',()=>deleteZipSelection([...outlineZipFiles.keys()]));
+ let managingZips=false;
+ function refreshZipManager(){
+  const selected=zipPicker.value;
+  const mb=bytes=>new Intl.NumberFormat('vi-VN',{maximumFractionDigits:2}).format(bytes/1048576)+' MB';
+  const files=[...outlineZipFiles];
+  zipPicker.replaceChildren(el('option',{value:''},'Chọn gói ZIP'),
+   ...files.map(([id,file])=>el('option',{value:id},file.name+' · '+mb(file.size))));
+  zipPicker.value=outlineZipFiles.has(selected)?selected:'';
+  catalogNote.textContent=files.length+' ZIP đã nhập · '+mb(files.reduce((sum,[,file])=>sum+file.size,0));
+  syncZipButtons();
+ }
+ function syncZipButtons(){
+  deleteZip.disabled=managingZips||!zipPicker.value;
+  deleteAllZips.disabled=managingZips||!outlineZipFiles.size;
+  zipFiles.disabled=managingZips;
+  openPresetButton.disabled=managingZips;
+ }
+ zipPicker.onchange=syncZipButtons;
+ async function deleteZipSelection(ids){
+  ids=ids.filter(id=>outlineZipFiles.has(id));
+  if(!ids.length||managingZips)return;
+  managingZips=true;syncZipButtons();
+  try{
+   const label=ids.length===1?outlineZipFiles.get(ids[0]).name:ids.length+' gói ZIP';
+   if(!await yes('Xóa '+label+' khỏi kho Đường Bao trên trình duyệt này? Các lớp dùng gói đó sẽ bỏ lựa chọn ảnh từ gói đã xóa.'))return;
+   const {removed,indexSaved}=await removeOutlineZips(ids);
+   const deleted=new Set(removed);
+   clearTrials();
+   for(const row of layerControls){
+    const previous=row.source.value;
+    row.sources=row.sources.filter(id=>!deleted.has(id));
+    row.ids=row.ids.filter(token=>!deleted.has(splitAssetToken(token)?.source));
+    for(const id of deleted)row.catalogs.delete(id);
+    if(deleted.has(previous)){
+     refreshSources(row,row.sources[0]||(row.key==='character'?'builtin:character':defaultSource));
+     void refreshLayer(row,row.ids);
+    }else{
+     refreshSources(row,previous);renderSources(row);syncLayer(row);
+    }
+   }
+   refreshZipManager();queueLivePreview(true);
+   if(removed.length!==ids.length||!indexSaved)toast('Đã xóa '+removed.length+' gói. Một phần dữ liệu chưa được dọn sạch.');
+   else toast('Đã xóa '+removed.length+' gói ZIP khỏi kho.');
+  }finally{managingZips=false;syncZipButtons();}
+ }
  zipFiles.onchange=()=>{
   const imported=[];
   for(const file of zipFiles.files){
@@ -1095,7 +1158,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    imported.push(persistOutlineZip(id,file));
   }
   zipFiles.value='';
-  catalogNote.textContent=outlineZipFiles.size+' ZIP trong thư viện dùng chung; các lớp đều có thể chọn.';
+  refreshZipManager();
   Promise.allSettled(imported).then(results=>{
    const failed=results.filter(result=>result.status==='rejected');
    if(failed.length)catalogNote.textContent='Không lưu được '+failed.length+' ZIP: '+failed.map(result=>result.reason?.message||'lỗi bộ nhớ').join(' ');
@@ -1145,7 +1208,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const data=await loadOutlinePreset(id);
   if(!data){toast('Không mở được bộ đã lưu, có thể đã bị xoá.');await refreshPresetList();return;}
   clearTrials();
-  for(const [id,file] of data.zips||[]){outlineZipFiles.set(id,file);void persistOutlineZip(id,file);}
+  for(const [id,file] of data.zips||[]){outlineZipFiles.set(id,file);void persistOutlineZip(id,file).catch(error=>toast(error.message));}
+  refreshZipManager();
   if(data.wall){
    front.value=data.wall.front;rear.value=data.wall.rear;thickness.value=data.wall.thickness;floorThickness.value=data.wall.floorThickness??.35;
    collision.checked=data.wall.collision;
@@ -1215,7 +1279,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    el('label',{},'Thêm ZIP ',zipFiles)),
   presetPanel,
   el('p',{class:'hint'},'Nhân vật được chọn đầu tiên dùng để chơi. Các ảnh chọn tiếp theo là nhân vật phụ trong cảnh.'),
-  catalogNote,
+  el('details',{},el('summary',{},'Quản lý ZIP đã nhập'),catalogNote,
+   el('div',{class:'row'},zipPicker,deleteZip,deleteAllZips)),
   el('div',{class:'row'},el('label',{},'Cỡ viên gạch nền ',floorScale),el('label',{},matchJoints,' Tự khớp mạch')),
   el('div',{class:'outline-stage-controls'},...layerControls.map(row=>row.element)));
  const surfaceBrush=el('select',{'aria-label':'Loại vùng cần ráp'},...surfaceTypes
@@ -1363,12 +1428,19 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   };
   document.body.append(dialog);dialog.showModal();count.select();
  }
- function redrawLive(){
+ const liveBitmap=document.createElement('canvas');
+ function redrawLive(guidesOnly=false){
   if(!liveView)return;
   const parts=gesture?.parts;
   const preview=parts&&!gesture.problem?{...liveView,M:{...liveView.M,
    ents:liveView.M.ents.map(entity=>parts.find(part=>part.id===entity.id)||entity)}}:liveView;
-  liveProjection=drawOutlineDraft(liveCanvas,preview,camera);
+  if(guidesOnly!==true||!liveProjection||liveBitmap.width!==liveCanvas.width||liveBitmap.height!==liveCanvas.height){
+   liveBitmap.width=liveCanvas.width;liveBitmap.height=liveCanvas.height;
+   liveProjection=drawOutlineDraft(liveBitmap,preview,camera);
+  }
+  const sceneContext=liveCanvas.getContext('2d');
+  sceneContext.clearRect(0,0,liveCanvas.width,liveCanvas.height);
+  sceneContext.drawImage(liveBitmap,0,0);
   zoomValue.textContent=Math.round(camera.zoom*100)+'%';
   const candidate=gesture?.candidate,entity=candidate||liveView.M.ents.find(e=>e.id===selectedProp);
   if(!liveProjection)return;
@@ -1504,11 +1576,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  };
  liveCanvas.ondblclick=e=>{if(!duplicate.disabled){e.preventDefault();openCopy();}};
  let hoverFrame=0;
- liveCanvas.onpointerleave=()=>{guidePointer=null;if(!gesture)redrawLive();};
+ liveCanvas.onpointerleave=()=>{guidePointer=null;if(!gesture)redrawLive(true);};
  liveCanvas.onpointermove=e=>{
   guidePointer=livePoint(e);
   if(!gesture||!liveProjection){
-   if(!hoverFrame)hoverFrame=requestAnimationFrame(()=>{hoverFrame=0;if(ov.isConnected)redrawLive();});
+   if(!hoverFrame)hoverFrame=requestAnimationFrame(()=>{hoverFrame=0;if(ov.isConnected)redrawLive(true);});
    return;
   }
   const point=guidePointer,dx=point[0]-gesture.point[0],dy=point[1]-gesture.point[1];
@@ -1660,7 +1732,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  if(!is3D){
  void (async()=>{
   await restoreOutlineZipLibrary();
-  catalogNote.textContent=outlineZipFiles.size+' ZIP trong thư viện dùng chung; các lớp đều có thể chọn.';
+  refreshZipManager();
   for(const row of layerControls){
    const initSources=row.initialSources?.length?row.initialSources:[row.initialSource];
    row.sources=[];refreshSources(row,row.initialSource);
