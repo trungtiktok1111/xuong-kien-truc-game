@@ -60,7 +60,11 @@ export function play2D(o){
   cv.addEventListener('touchmove',e=>{if(e.touches.length===2&&pd){const a=e.touches[0],b=e.touches[1],d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);setZ(zm*d/pd);pd=d;}},{passive:true});
   cv.addEventListener('touchend',()=>{pd=0;});
   if(o.onExit)ov.append(el('div',{style:'position:absolute;right:10px;top:calc(env(safe-area-inset-top) + 10px);padding:8px 14px;border-radius:16px;background:#263342cc;color:#fff;font:600 14px system-ui',onclick:()=>stop()},o.onSnapshot?'Lưu & về menu':'✕ Thoát'));
-  document.body.append(ov);if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+  if(o.notice){
+    const note=el('aside',{class:'play-import-notice',role:'status'},el('span',{},o.notice));
+    note.append(el('button',{type:'button',class:'b','aria-label':'Đóng thông báo gói ZIP',onclick:()=>note.remove()},'×'));
+    ov.append(note);
+  }
   const AN=makeAnims(CF,sheets);
   const collision=mapCollision(M);
   const portalFloor=CF.outline?.loops?.length?mapCollision({...M,cfg:{...CF,outline:{...CF.outline,floorCollision:true}}}).floor:null;
@@ -88,7 +92,11 @@ export function play2D(o){
       for(let i=0;i<a.length;i++){const v=a[i];if(!v)continue;const n=v-1,f=n&7,t=n>>3,sid=t>>12,idx=t&4095,sh=sheets[sid];if(!sh||!sh.img)continue;if(top===2&&sh.iso)continue;
       const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin),dx=(i%W)*CQ,dy=Math.floor(i/W)*CQ;
       if(!f)g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,CQ,CQ);else{g.save();g.translate(dx+h2,dy+h2);if(f&4){g.rotate(Math.PI/2);g.scale(1,-1);}if(f&1)g.scale(-1,1);if(f&2)g.scale(1,-1);g.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-h2,-h2,CQ,CQ);g.restore();}}}if(SM)noiseOverlay(g,W,H,CQ);return c;}
-  const base=ISO?null:mk(false),top=ISO?null:mk(true),gnd=ISO?mk(2):null;
+  const hasBakedGround=ISO&&(SMG||M.layers.slice(0,2).some(layer=>layer.some(v=>{
+    const sheet=v&&sheets[((v-1)>>3)>>12];
+    return sheet?.img&&!sheet.iso;
+  })));
+  const base=ISO?null:mk(false),top=ISO?null:mk(true),gnd=hasBakedGround?mk(2):null;
   const SL=[];if(ISO){for(const l of [0,1])for(let i=0;i<W*H;i++){const v=M.layers[l][i];if(!v)continue;const t=(v-1)>>3,sid=t>>12,sh=sheets[sid];if(sh&&sh.img&&sh.iso&&!(SMG&&l===0&&bakedOk(v)))SL.push({x:i%W,y:(i/W)|0,sid,idx:t&4095,l,f:(v-1)&7});}SL.sort(ANG?((a,b)=>(a.y-b.y)||(a.x-b.x)||a.l-b.l):((a,b)=>(a.x+a.y)-(b.x+b.y)||a.l-b.l));}
   const images=new Map();
   const mkG=l=>ISO?paintedPieces(M.layers[l],W,H).map(group=>{
@@ -315,11 +323,11 @@ export function play2D(o){
     const geo=ISO&&outline2D(CF.outline,ANG,EN);
     const wallImage=outlineWallImage(CF.outline,sheets);
     if(ANG){const cw=s*1.5,ch=cw*ANG_R,ox0=w/2-CEN.x*cw,oy0=h/2-CEN.y*ch,hw=cw/2;pX=(x,y)=>ox0+x*cw;pY=(x,y)=>oy0+y*ch;VIEW={iso:1,ang:1,ox0,oy0,cw,ch};if(geo){stoneBackdrop(cx,w,h);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
-      cx.save();cx.transform(cw/CQ,0,0,ch/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();
+      if(gnd){cx.save();cx.transform(cw/CQ,0,0,ch/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();}
       for(const q of SL){const X=pX(q.x,q.y),Y=pY(q.x,q.y);if(X>w||X<-cw||Y>h||Y<-2*cw)continue;const sh=sheets[q.sid];if(sh&&sh.A)tileAng(cx,sh.A,q.idx,X,Y,cw);}
       if(geo)cx.restore();}
     else if(ISO){const hw=s*.75,hh=s*.375,ox0=w/2-(CEN.x-CEN.y)*hw,oy0=h/2-(CEN.x+CEN.y)*hh;pX=(x,y)=>ox0+(x-y)*hw;pY=(x,y)=>oy0+(x+y)*hh;VIEW={iso:1,ox0,oy0,hw,hh};if(geo){stoneBackdrop(cx,w,h);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
-      cx.save();cx.transform(hw/CQ,hh/CQ,-hw/CQ,hh/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();
+      if(gnd){cx.save();cx.transform(hw/CQ,hh/CQ,-hw/CQ,hh/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();}
       for(const q of SL){const X=pX(q.x,q.y)-hw,Y=pY(q.x,q.y);if(X>w||X<-2*hw||Y>h||Y<-2*hw)continue;const sh=sheets[q.sid],sx=(q.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(q.idx/sh.cols)*(sh.tw+sh.margin);if(sh.iso===2)tile192(cx,sh.img,sx,sy,sh.tw,sh.cy||0,X+hw,Y,hw,sh.wat&&sh.wat.includes(q.idx)?mirF(q.x,q.y):0);else slab(cx,sh.img,sx,sy,sh.tw,X+hw,Y,hw,q.f);}
       {const wc=SL.filter(q=>q.f&4);if(wc.length)shore(cx,wc,(x,y)=>[pX(x,y),pY(x,y)],hw);}
       if(geo)cx.restore();}
@@ -425,7 +433,15 @@ export function play2D(o){
   const saveOnClose=()=>{if(o.onSnapshot&&P?.hp>0)o.onSnapshot(snapshot());};
   if(o.onSnapshot)addEventListener('pagehide',saveOnClose);
   function stop(silent){removeEventListener('pagehide',saveOnClose);dead=1;cancelAnimationFrame(raf);removeEventListener('keydown',kd);removeEventListener('keyup',ku);ov.remove();if(!silent&&o.onSnapshot&&P.hp>0)o.onSnapshot(snapshot());if(!silent&&o.onExit)o.onExit();}
-  start();if(o.onSnapshot&&P.hp>0)o.onSnapshot(snapshot());raf=requestAnimationFrame(loop);return {stop};
+  try{
+    document.body.append(ov);
+    document.activeElement?.blur?.();
+    start();
+    if(o.escapeExit)draw();
+    if(o.onSnapshot&&P.hp>0)o.onSnapshot(snapshot());
+    raf=requestAnimationFrame(loop);
+    return {stop};
+  }catch(error){stop(true);throw error;}
 }
 
 /* Nhiều màn: nối các bản đồ bằng cửa, lưu tiến độ trong trình duyệt */

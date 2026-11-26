@@ -130,6 +130,9 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
 .outline-levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;overflow:auto;scrollbar-gutter:stable;padding:1px 5px 2px 1px}
 .outline-levels small{color:#b4c5d3}.outline-levels strong{font-weight:600}.outline-actions{margin-top:8px}
 .outline-actions .b:not(:disabled):nth-child(2),.outline-level-actions .b:not(:disabled):last-child{background:#2e7558}
+.outline-action-status{position:sticky;bottom:0;z-index:5;margin:6px 0 0;padding:8px 10px;border-radius:7px;background:#243747;color:#fff;overflow-wrap:anywhere}
+.outline-action-status:empty{display:none}.outline-action-status.is-error{background:#592c2f}
+.play-import-notice{position:absolute;z-index:5;left:50%;bottom:36px;transform:translateX(-50%);width:max-content;max-width:min(72vw,580px);display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:8px;background:#253747;color:#fff;font:13px system-ui;overflow-wrap:anywhere}
 .outline-actions [hidden],.outline-level-actions[hidden]{display:none}
 .outline-workspace details:not(.editor-guide){margin-bottom:8px}
 @media(max-width:660px){.outline-layout{display:block}.outline-patterns{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -146,7 +149,7 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
  .outline-tools{order:3}
  .outline-setup{order:4}
  .outline-library{order:5}
- .outline-actions{order:6}
+ .outline-actions,.outline-action-status{order:6}
  .outline-workspace .hint:not(.outline-view-tools .hint){order:7}
  .outline-grid-size{order:8}.outline-grid-note{order:8}
  .outline-workspace>details:not(.editor-guide){order:9}

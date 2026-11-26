@@ -17,12 +17,17 @@ const family=path=>slug(path).replace(/[_ -]\d+(?=[_. -]|$)/g,'').replace(/[_-][
 const readJSON=(files,path)=>path?JSON.parse(decoder.decode(files[path])):null;
 
 export function openScenePack(name,bytes){
-  const raw=unzipSync(bytes,{filter:e=>e.originalSize<=24_000_000&&/\.(json|tmx|tsx|png|jpe?g|webp)$/i.test(e.name)&&!/(^|\/)(__MACOSX|\._)/.test(e.name)});
+  let hasModels=false;
+  const raw=unzipSync(bytes,{filter:e=>{
+    if(/(^|\/)(__MACOSX|\._)/.test(e.name))return false;
+    if(/\.(glb|gltf|fbx|obj|blend)$/i.test(e.name))hasModels=true;
+    return e.originalSize<=24_000_000&&/\.(json|tmx|tsx|png|jpe?g|webp)$/i.test(e.name);
+  }});
   const files=Object.fromEntries(Object.entries(raw).map(([path,data])=>[norm(path),data]));
   const paths=Object.keys(files);
   const metadata=readJSON(files,paths.find(p=>/(^|\/)manifest\.json$/.test(p)));
   const scene=readJSON(files,paths.find(p=>/(^|\/)(canh-mau|ban-do)\.json$/.test(p)));
-  return {name,bytes,files,paths,metadata,scene,
+  return {name,bytes,files,paths,metadata,scene,hasModels,
     tsx:paths.filter(p=>p.endsWith('.tsx')).map(p=>readTileset(p,decoder.decode(files[p]))).filter(Boolean)};
 }
 
@@ -356,7 +361,11 @@ export async function outlinePackMaterials(pack,profile){
     props=extras.map(id=>named({path:path(id),anchor:[128,437],tileWidth:256},2));
     if(profile[0]==='dungeon')await dungeonWallMaterial(result,pack);
   }else{
-    const assets=catalog(pack);
+    const assets=catalog(pack).filter(a=>!pack.hasModels||a.native||/(^|\/)(isometric|sprites)\//i.test(a.path));
+    if(pack.hasModels&&!assets.length){
+      result.skipReason='gói mô hình 3D, chưa có mảnh phù hợp cho Đường Bao 2D';
+      return result;
+    }
     floors=assets.filter(a=>a.layer===0&&!/high|float|stairs|water|river|sea|lake|corner|cliff|transition/i.test(a.label))
       .slice(0,3).map(a=>({...a,flatTop:true}));
     props=assets.filter(a=>a.layer===2&&/^(?:barrel|crate|chest|chair|bookstand|lamp|statue|ruong|thung|chum|den)/i.test(stem(a.path)))

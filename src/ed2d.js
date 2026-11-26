@@ -3259,7 +3259,7 @@ export function init2D(root,A){
     const error=structureError(current,m);if(error)throw Error(error);
     sheets.push(...prepared.slice(sheets.length));
     pushUndo();M=m;sel=null;hov=null;
-    after();fit();draw();toast('Đã áp dụng đường bao.'+(dressing?' '+dressing:''));
+    after();fit();draw();toast('Đã áp dụng đường bao.'+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
   }
   function outlineFill(source,stamps){
     return source?.layers[0].find(Boolean)||stamps.flatMap(stamp=>stamp).find(cell=>cell.tiles[0])?.tiles[0];
@@ -3339,10 +3339,12 @@ export function init2D(root,A){
       return outlinePackCache.get(id);
     });
     for(const file of options.files)tasks.push(file.arrayBuffer().then(bytes=>
-      outlinePackMaterials(openScenePack(file.name,new Uint8Array(bytes)))));
+      outlinePackMaterials(openScenePack(file.name,new Uint8Array(bytes)))).catch(error=>({
+        source:file.name,floors:[],props:[],skipReason:error.message||'không đọc được ZIP'
+      })));
     const materials=[],skipped=[];
     for(const pack of await Promise.all(tasks)){
-      if(!pack.floors.length&&!pack.props.length){skipped.push(pack.source);continue;}
+      if(!pack.floors.length&&!pack.props.length){skipped.push(pack.source+' — '+(pack.skipReason||'chưa nhận diện được sàn hoặc đạo cụ 2D'));continue;}
       const ids=[];
       for(const sheet of pack.sheets)ids.push(await loadBuiltinSheet(sheet,target));
       const props=pack.props.map(art=>({...art,create:(...args)=>{
@@ -3350,19 +3352,25 @@ export function init2D(root,A){
       }}));
       materials.push({...pack,floors:pack.floors.map(f=>({...f,sid:ids[f.sid]})),props});
     }
+    if(!materials.some(pack=>pack.floors.length)){
+      throw Error('Chưa có sàn phù hợp. Hãy chọn Kenney Dungeon 2.3 hoặc dùng ZIP có sàn 2D.'+
+        (skipped.length?' '+skipped.join('. ')+'.':''));
+    }
     map.cfg.proj='iso';map.cfg.smooth=false;
     const info=dressOutline(map,materials,sid=>enc(sid,0),automaticPaintZones(map,makePaintLookup(target)),arrivals);
     map.cfg.outline.wallMaterial=materials.find(pack=>pack.wallMaterial)?.wallMaterial;
     map.cfg.outlineMaterials={...info,preset:options.preset};
-    return 'Đã phối '+info.sources.length+' gói và đặt '+info.props+' vật thể.'+
-      (skipped.length?' Chưa nhận diện được vai trò trong '+skipped.join(', ')+'.':'');
+    return {
+      summary:'Đã phối '+info.sources.length+' gói và đặt '+info.props+' vật thể.',
+      warnings:skipped.length?'Đã bỏ qua '+skipped.join('. ')+'.':''
+    };
   }
   async function previewOutlineMap(outline,w,h,level,stamps=[],origin=[0,0],materials=null){
     const previewSheets=sheets.slice();
     const draft=await buildOutlineMap(outline,w,h,level,previewSheets,stamps,true,null,origin);
-    await prepareOutlineDressing(draft,previewSheets,materials);
+    const dressing=await prepareOutlineDressing(draft,previewSheets,materials);
     if(draft.cfg.proj==='angle')await ensureAngle(previewSheets);
-    return {M:draft,sheets:previewSheets};
+    return {M:draft,sheets:previewSheets,dressing};
   }
   async function replaceWithOutlineMap(outline,w,h,level,stamps=[],origin=[0,0],materials=null){
     const before=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
@@ -3377,7 +3385,7 @@ export function init2D(root,A){
     sheets.push(...prepared.slice(sheets.length));
     pushUndo();M=replacement;selId=null;sel=null;hov=null;
     syncCur();after();fit();draw();cv.focus({preventScroll:true});
-    toast('Đã áp dụng '+level.name+'. Có thể hoàn tác trong trình sửa.'+(dressing?' '+dressing:''));
+    toast('Đã áp dụng '+level.name+'. Có thể hoàn tác trong trình sửa.'+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
   }
   async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true,connect=false,materials=null){
     const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
@@ -3394,7 +3402,7 @@ export function init2D(root,A){
     if(connect)addPair(current,fresh,index,next,prepared);
     sheets.push(...prepared.slice(sheets.length));syncCur();curMap=MAPS.push(clone(fresh))-1;M=fresh;undo=[];redo=[];selId=null;sel=null;
     after();fit();draw();await save();
-    toast('Đã tạo '+fresh.name+(connect?' và nối hai chiều với '+current.name:'.')+(dressing?' '+dressing:''));
+    toast('Đã tạo '+fresh.name+(connect?' và nối hai chiều với '+current.name:'.')+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
   }
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   return {ready,connectMap,mapConnectionBox,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};

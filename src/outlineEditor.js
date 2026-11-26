@@ -568,6 +568,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  setTab(initialTab);
  footer.append(el('label',{},'Tường trước ',front),el('label',{},'Tường sau ',rear),el('label',{},'Độ dày tường bao ',thickness,' ô'),el('label',{},collision,' Cập nhật vùng chặn'));
  const buttons=el('div',{class:'row outline-actions'});
+ const actionStatus=el('p',{class:'outline-action-status',role:'status','aria-live':'polite'});
+ function showActionStatus(message,isError=false){
+  actionStatus.textContent=message;
+  actionStatus.classList.toggle('is-error',isError);
+ }
  const outlineData=()=>({loops:copy(loops),front:+front.value,rear:+rear.value,thickness:+thickness.value,
   areas:((levelDraft?levelDraft.areas:map.cfg.outline?.areas)||[]).map(([n,x,y])=>[n,x-origin[0],y-origin[1]]),
   color:levelDraft?.color||map.cfg.outline?.color,
@@ -576,9 +581,13 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  async function runAction(action,close){
   if(commitBusy||!readGrid())return;
   commitBusy=true;
+  showActionStatus('Đang chuẩn bị bản đồ…');
   const actions=[...buttons.children,...levelActions.children,scanMapButton];actions.forEach(b=>{b.disabled=true;});
-  try{const result=await action();if(close&&result!==false)ov.remove();}
-  catch(e){toast(e.message);}
+  try{
+   const result=await action();
+   showActionStatus(result?.warning||'');
+   if(close&&result!==false)ov.remove();
+  }catch(e){showActionStatus(e.message||'Không mở được bản đồ. Hãy thử lại.',true);}
   finally{commitBusy=false;actions.forEach(b=>{b.disabled=false;});draw();}
  }
  applyButton=B('Áp dụng vào bản đồ',()=>runAction(async()=>{
@@ -630,8 +639,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    const data=await editor.previewOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,materials());
    const back=()=>{ov.hidden=false;ov.style.display='grid';box.focus();};
    ov.hidden=true;ov.style.display='none';
-   try{(is3D?play3D:play2D)({...data,escapeExit:true,onExit:back});}
-   catch(e){back();throw e;}
+   try{
+    const warning=data.dressing?.warnings;
+    (is3D?play3D:play2D)({...data,notice:warning,escapeExit:true,onExit:back});
+    return {warning};
+   }catch(e){back();throw e;}
   },false);
  }
  createLabel=B('Tạo màn mới từ hình này',()=>createDraft());
@@ -641,6 +653,6 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  if(!is3D)buttons.insertBefore(B('Tạo và nối hai chiều',()=>createDraft(true)),tryLabel);
  box.append(el('h2',{},(is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ')),guideBox('outline',appGuides.outline),setup,toolbar,
   el('div',{class:'outline-layout'},el('div',{},gridSetup,gridNote,viewTools,el('div',{class:'outline-canvas-wrap',style:'position:relative'},canvas,aim),status),library),
-  editShape,materialsPanel,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons);
+  editShape,materialsPanel,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons,actionStatus);
  ov.append(box);document.body.append(ov);draw();
 }
