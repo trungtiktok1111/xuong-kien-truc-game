@@ -3375,7 +3375,7 @@ export function init2D(root,A){
     return variants.get(key);
   }
   const outlineStockFiles=new Map();
-  const outlineRoles={floor:'floors',overlay:'overlays',wall:'walls',props:'props',house:'houses'};
+  const outlineRoles={floor:'floors',overlay:'overlays',wall:'walls',props:'props',house:'houses',character:'characters'};
   async function outlineLayerPack(source,files,style){
     if(source.startsWith('builtin:')){
       const profile=kenneyOutlinePacks.find(p=>p[0]===source.slice(8));
@@ -3404,6 +3404,15 @@ export function init2D(root,A){
       image:()=>new Blob([pack.raw.files[a.id]],{type:a.id.endsWith('.png')?'image/png':a.id.endsWith('.webp')?'image/webp':'image/jpeg'})})): [];
     return {items:[...primary,...others],message:pack.skipReason||pack.assetWarning||''};
   }
+  async function outlineCharacterPreview(source,id,files,style){
+    const pack=await outlineLayerPack(source,files,style);
+    const item=pack.characters?.find(a=>a.id===id);
+    if(!item)return null;
+    const fresh=[];
+    const sid=await loadBuiltinSheet(pack.sheets[item.sid],fresh);
+    const ent=item.create(1,1,'outline-character-preview');
+    return {ent:{...ent,tile:{...ent.tile,sid}},sheets:fresh,scale:pack.scale};
+  }
   const outlineHouseThumbs=new WeakMap();
   function outlineHouseThumb(pack,house){
     if(!outlineHouseThumbs.has(house))outlineHouseThumbs.set(house,(async()=>{
@@ -3420,7 +3429,7 @@ export function init2D(root,A){
     return outlineHouseThumbs.get(house);
   }
   async function prepareOutlineLayerDressing(map,target,options,arrivals){
-    const requested=Object.entries(options.layers).map(([role,choice])=>
+    const requested=Object.entries(options.layers).filter(([role])=>role!=='character').map(([role,choice])=>
       [role,choice.source,choice.assets??(choice.asset?[choice.asset]:[])]).filter(([, ,ids])=>ids.length);
     const stages={},materials=[],warnings=[],preserve=new Set(),wallNames=[];
     const picks=await Promise.all(requested.map(async ([role,source,ids])=>{
@@ -3572,5 +3581,5 @@ export function init2D(root,A){
     toast('Đã tạo '+fresh.name+(source?' và nối hai chiều với '+source.name:'.')+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
   }
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
-  return {ready,connectMap,mapConnectionBox,outlineConnectionTargets,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  return {ready,connectMap,mapConnectionBox,outlineConnectionTargets,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlineCharacterPreview,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
 }

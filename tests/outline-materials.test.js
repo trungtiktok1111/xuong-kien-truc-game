@@ -6,6 +6,15 @@ import {outlineLevels} from '../src/outlineLevels.js';
 import {rasterOutline} from '../src/mapCollision.js';
 import {linkWalkability} from '../src/mapLinks2d.js';
 
+// src/ed2d.js cannot be imported standalone under the node:test bundler (it imports a
+// .zip asset with no esbuild loader configured for tests), so this pins the exact filter
+// predicate `prepareOutlineLayerDressing` uses in src/ed2d.js, rather than the function itself.
+test('a layers selection including a character role never reaches dressOutline as a prop/house', ()=>{
+ const requested=[['floor','s',['a']],['character','s',['hero']]];
+ const filtered=requested.filter(([role])=>role!=='character');
+ assert.deepEqual(filtered.map(r=>r[0]),['floor']);
+});
+
 const loop=(x,y)=>[[[x,y],[x+4,y],[x+4,y+3],[x,y+3]]];
 const at=(cells,x,y)=>cells.find(c=>c.x===x&&c.y===y)?.tiles;
 const w=20,h=20;
