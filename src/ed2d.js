@@ -3340,7 +3340,7 @@ export function init2D(root,A){
     source,floors:[],props:[],skipReason:error.message==='invalid zip data'?'không đọc được tệp ZIP':error.message||'không đọc được gói'
   });
   function loadBuiltinOutlinePack(profile,style){
-    const [id]=profile,key=id+'|'+style.floorScale+'|'+style.matchJoints;
+    const [id]=profile,key=id+'|'+style.floorScale+'|'+style.matchJoints+'|'+style.manualScale;
     if(!outlinePackCache.has(key)){
       const source='Kenney Miniature '+id[0].toUpperCase()+id.slice(1);
       const job=Promise.resolve().then(()=>{
@@ -3370,7 +3370,7 @@ export function init2D(root,A){
   function readOutlineFile(file,style){
     let variants=outlineUploads.get(file);
     if(!variants){variants=new Map();outlineUploads.set(file,variants);}
-    const key=style.floorScale+'|'+style.matchJoints;
+    const key=style.floorScale+'|'+style.matchJoints+'|'+style.manualScale;
     if(!variants.has(key))variants.set(key,parseOutlineFile(file,style));
     return variants.get(key);
   }
@@ -3435,7 +3435,8 @@ export function init2D(root,A){
     const picks=await Promise.all(requested.map(async ([role,source,ids])=>{
       const items=[],errors=[];
       try{
-        const pack=await outlineLayerPack(source,options.files,options),key=outlineRoles[role];
+        const style={...options,manualScale:options.scaleOverrides?.[source]};
+        const pack=await outlineLayerPack(source,options.files,style),key=outlineRoles[role];
         for(const id of new Set(ids)){
           try{
             const item=pack[key]?.find(a=>a.id===id);
@@ -3476,7 +3477,7 @@ export function init2D(root,A){
     if(stages.overlay&&!info.overlays)warnings.push('Phủ nền chưa có chỗ phù hợp.');
     if(stages.props&&info.propKinds<materials.reduce((count,part)=>count+part.props.length,0))warnings.push('Một số mẫu vật dụng chưa có vị trí an toàn.');
     if(stages.house&&info.houses<materials.reduce((count,part)=>count+part.houses.length,0))warnings.push('Một số mẫu nhà chưa có chỗ đặt và lối vào an toàn.');
-    map.cfg.outlineMaterials={...info,layers:options.layers,floorScale:options.floorScale,matchJoints:options.matchJoints};
+    map.cfg.outlineMaterials={...info,layers:options.layers,floorScale:options.floorScale,matchJoints:options.matchJoints,scaleOverrides:options.scaleOverrides};
     return {summary:`${info.props} vật dụng · ${info.overlays} ô phủ · ${info.houses} nhà.`,warnings:warnings.join(' ')};
   }
   async function prepareOutlineDressing(map,target,options,arrivals=[]){

@@ -27,3 +27,26 @@ test('packScale ignores a non-finite or non-positive manual override',()=>{
  assert.equal(packScale({},NaN).via,'none');
  assert.equal(packScale({},undefined).via,'none');
 });
+
+// Review finding (Critical #1): sc = 1.5*side/tileWidth, so on-screen size is inversely
+// proportional to tileWidth. An anchor measured taller than the generic per-object guess
+// implies true pixels-per-tile T is bigger than the guess G, meaning objects drawn using
+// G were too large — the correction must SHRINK them (factor = G/T < 1), not grow them.
+test('anchorFactor shrinks art when the anchor measures taller than the generic guess implies',()=>{
+ const w=95,h=300; // deliberately much taller than guessTileWidth(95,300) assumes for a door
+ const g=guessTileWidth(w,h),t=h/REFERENCE_HEIGHT.door;
+ assert.ok(t>g,'test setup should put the true tileWidth above the generic guess');
+ const factor=anchorFactor('door',w,h);
+ assert.ok(factor<1,'expected a shrink factor (G/T), not a growth factor (T/G)');
+ assert.ok(Math.abs(factor-g/t)<1e-9);
+});
+
+// Review finding (Critical #2a): the design doc says manual override is also for "người
+// dùng thấy máy đoán sai" (the user feels the automatic guess is wrong) — it must be able
+// to override an anchor the app DID find, not just fill in when none was found.
+test('packScale lets a valid manual override win over an automatically detected anchor',()=>{
+ const door={w:95,h:300};
+ assert.equal(packScale({door},2.5).via,'manual');
+ assert.equal(packScale({door},2.5).factor,2.5);
+ assert.equal(packScale({door}).via,'door'); // no override given: automatic still applies
+});

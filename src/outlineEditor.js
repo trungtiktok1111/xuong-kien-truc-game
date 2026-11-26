@@ -805,7 +805,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   }));
   const item=items.find(a=>a.id===trial);
   const first=layerControls.findIndex(c=>c.source.value===control.source.value)===layerControls.indexOf(control);
-  const scaleNote=first&&control.scale?'Tỉ lệ theo '+scaleViaLabel[control.scale.via]:'';
+  const scaleNote=first&&control.scale?(control.scale.via==='none'?'Tỉ lệ: chưa nhận ra — chỉnh tay':'Tỉ lệ theo '+scaleViaLabel[control.scale.via]):'';
   control.note.textContent=loading?'Đang đọc gói…':[
    item?'Đang thử '+(items.indexOf(item)+1)+'/'+items.length+' · '+item.label:items.length+' ảnh',
    control.message,scaleNote].filter(Boolean).join(' · ');
@@ -873,7 +873,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const materials=(preview=false)=>{
   if(is3D||!dressing.checked)return null;
   const layers=Object.fromEntries(layerControls.filter(({key})=>key!=='character').map(({key,source,ids,trial})=>[key,{source:source.value,assets:preview&&trial?[trial]:[...ids]}]));
-  return {layers,files:new Map(outlineZipFiles),...surfaceStyle()};
+  return {layers,files:new Map(outlineZipFiles),scaleOverrides:Object.fromEntries(scaleOverrides),...surfaceStyle()};
  };
  // The saved-preset snapshot is deliberately separate from materials(): it keeps the
  // character row (never sent to materials(), which feeds the real-map commit path) and
@@ -911,23 +911,29 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   openPreset={id,name:presetList.find(p=>p.id===id)?.name||''};
   queueLivePreview(true);
  });
- const savePresetButton=B('Lưu…',async()=>{
-  const name=openPreset?openPreset.name:await ask('Đặt tên cho bộ chọn này:','');
+ async function savePreset(asNew){
+  const name=(!asNew&&openPreset)?openPreset.name:await ask('Đặt tên cho bộ chọn này:',openPreset?.name||'');
   if(name==null)return;
-  const saved=await saveOutlinePreset(openPreset?.id??null,name,presetData());
-  openPreset={id:saved.id,name:saved.name};
-  await refreshPresetList(saved.id);
-  toast('Đã lưu bộ chọn “'+saved.name+'”.');
- });
+  try{
+   const saved=await saveOutlinePreset(asNew?null:(openPreset?.id??null),name,presetData());
+   openPreset={id:saved.id,name:saved.name};
+   await refreshPresetList(saved.id);
+   toast('Đã lưu bộ chọn “'+saved.name+'”.');
+  }catch(error){toast('Không lưu được bộ chọn: '+(error.message||'lỗi không rõ')+'.');}
+ }
+ const savePresetButton=B('Lưu…',()=>savePreset(false));
+ const saveAsNewPresetButton=B('Lưu bộ mới…',()=>savePreset(true));
  const deletePresetButton=B('Xoá',async()=>{
   const id=presetSelect.value;if(!id)return;
   const name=presetList.find(p=>p.id===id)?.name||'';
   if(!await yes('Xoá bộ đã lưu “'+name+'”? Không thể hoàn tác.'))return;
-  await deleteOutlinePreset(id);
-  if(openPreset?.id===id)openPreset=null;
-  await refreshPresetList();
+  try{
+   await deleteOutlinePreset(id);
+   if(openPreset?.id===id)openPreset=null;
+   await refreshPresetList();
+  }catch(error){toast('Không xoá được bộ đã lưu: '+(error.message||'lỗi không rõ')+'.');}
  });
- const presetPanel=el('div',{class:'row'},el('label',{},'Bộ đã lưu ',presetSelect),openPresetButton,savePresetButton,deletePresetButton);
+ const presetPanel=el('div',{class:'row'},el('label',{},'Bộ đã lưu ',presetSelect),openPresetButton,savePresetButton,saveAsNewPresetButton,deletePresetButton);
  void refreshPresetList();
  const assembly=B('Ráp toàn bộ',()=>{
   clearTrials();dressing.checked=true;

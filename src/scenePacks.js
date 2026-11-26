@@ -480,14 +480,25 @@ export async function outlinePackMaterials(pack,profile,style){
   const characters=settings?(settings.characters||[]).map(row=>named(row,2)):catalogCharacters(pack);
   const doors=settings?(settings.doors||[]).map(row=>named(row,2)):[];
   async function measure(path){
+    if(!path||!isImage(path))return null;
     try{const image=await loadImage({pack,path});const art=crop(image,[0,0,image.width,image.height]);return art&&{w:art.w,h:art.h};}
     catch{return null;}
   }
-  const declaredDoorPath=doors[0]?.path;
-  const doorPath=declaredDoorPath||pickAnchorArt(pack.paths,'door');
-  const wallPath=!doorPath&&pickAnchorArt(pack.paths,'wall');
-  const charPath=characters[0]?.path;
-  const anchors={door:doorPath&&await measure(doorPath),wall:wallPath&&await measure(wallPath),character:charPath&&await measure(charPath)};
+  // Built-in Kenney "native" packs (profile given) already share one internal pixel/tile
+  // convention across floor/wall/prop art, and their stylized proportions do not match the
+  // human-scale REFERENCE_HEIGHT constants (a Kenney wall art-directed to read "about one
+  // tile tall" measures nothing like a real 2-tile wall) — auto-anchoring them would
+  // miscalibrate an already-correct pack, so they keep factor 1 unless manually overridden.
+  let anchors={};
+  if(!profile){
+    const declaredDoorPath=doors[0]?.path;
+    const door=await measure(declaredDoorPath||pickAnchorArt(pack.paths,'door'));
+    // Only fall back to a wall/character anchor once the door anchor has actually failed
+    // to measure — not merely because no door-like path string was found above.
+    const wall=!door&&await measure(pickAnchorArt(pack.paths,'wall'));
+    const character=!door&&!wall&&await measure(characters[0]?.path);
+    anchors={door,wall,character};
+  }
   result.scale=packScale(anchors,style?.manualScale);
   for(const a of floors)await attempt(a,async()=>{
     const sid=await groundTile(result,a,style);
@@ -500,7 +511,9 @@ export async function outlinePackMaterials(pack,profile,style){
   for(const a of props)await attempt(a,async()=>{
     const art=await sprite(a);
     const tileWidth=Math.max(a.tileWidth||1,art.w/.95,art.h/1.65);
-    const radius=Math.max(.22,Math.min(.46,art.w/tileWidth*.55));
+    // Scale the collision radius by the same factor as the on-screen size (sc) below, so
+    // a shrunk/grown prop's blocked area still matches what the player actually sees.
+    const radius=Math.max(.22,Math.min(.46,art.w/tileWidth*.55))*result.scale.factor;
     const piece=addSprite(result,{...a,tileWidth,collision:{shape:'circle',radius}},art);
     result.props.push({sid:piece.sid,id:a.path,label:a.label,source:pack.name,radius,
       create:(x,y,id)=>{const e=entity(piece,x,y,0,id);return {...e,sc:e.sc*result.scale.factor,outlineAutoProp:true};}});
@@ -522,8 +535,12 @@ export async function outlinePackMaterials(pack,profile,style){
       if(!parts.every(p=>pack.files[folder+miniatureAsset(pack,p.asset,p.dir).path]))continue;
       const ents=[],assembly={sheets:result.sheets,ents};
       for(const part of parts)ents.push(await miniaturePiece(assembly,[pack],part,cache,folder));
-      const scaled=ents.map(e=>({...e,sc:e.sc*result.scale.factor}));
-      result.houses.push({w,h,ents:scaled,id:`barn-${w}x${h}`,label:`Nhà gỗ ${w} × ${h} ô`,source:pack.name});
+      // Deliberately NOT scaled by result.scale.factor: each piece's assembled x/y offset
+      // and wall-segment collision are fixed relative to the others, so scaling only `sc`
+      // would open seams or overlaps between pieces. Houses stay at their pack's native
+      // calibration; only standalone props (which have no neighboring pieces to misalign
+      // with) get the scale correction.
+      result.houses.push({w,h,ents,id:`barn-${w}x${h}`,label:`Nhà gỗ ${w} × ${h} ô`,source:pack.name});
     }
   }
   result.wallMaterial=result.sheets[result.walls[0]?.sid]?.name;

@@ -29,3 +29,13 @@ test('delete removes the preset; loading a missing id returns null',async()=>{
  assert.deepEqual(await listOutlinePresets(io),[]);
  assert.equal(await loadOutlinePreset(saved.id,io),null);
 });
+
+// Review finding (Important #5): idbSet resolves to `false` on a storage failure instead
+// of rejecting; saveOutlinePreset/deleteOutlinePreset must not silently report success
+// (and toast "Đã lưu") when the underlying write never actually happened.
+test('save and delete reject when the underlying write fails instead of reporting success',async()=>{
+ const failingIo={get:async k=>store.get(k),set:async()=>false};
+ await assert.rejects(saveOutlinePreset(null,'Bộ lỗi',{n:1},failingIo));
+ const saved=await saveOutlinePreset(null,'Bộ C',{n:1},io);
+ await assert.rejects(deleteOutlinePreset(saved.id,{get:async k=>store.get(k),set:async()=>false}));
+});

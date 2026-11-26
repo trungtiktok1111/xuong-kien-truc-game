@@ -18,10 +18,11 @@ export async function saveOutlinePreset(id,name,data,io=defaultIo){
  const entry={id:id??crypto.randomUUID(),name,savedAt:Date.now(),data};
  const at=list.findIndex(p=>p.id===entry.id);
  if(at>=0)list[at]=entry;else list.push(entry);
- await io.set(KEY,list);
+ if(!await io.set(KEY,list))throw Error('Không ghi được bộ chọn vào bộ nhớ trình duyệt.');
  return {id:entry.id,name:entry.name,savedAt:entry.savedAt};
 }
 
 export async function deleteOutlinePreset(id,io=defaultIo){
- await io.set(KEY,(await readAll(io)).filter(p=>p.id!==id));
+ if(!await io.set(KEY,(await readAll(io)).filter(p=>p.id!==id)))
+  throw Error('Không xoá được bộ chọn khỏi bộ nhớ trình duyệt.');
 }
