@@ -1,4 +1,4 @@
-import {canArrangeProp,propFootprint,propPlacement} from './outlinePropPlacement.js';
+import {canArrangeProp,propFootprint,propPlacement,propGroup,transformPropGroup} from './outlinePropPlacement.js';
 import {zPath} from './zones.js';
 import {drawSurfaceTerrain} from './surfaceContours.js';
 import {surfaceLevels,surfaceLevelById,surfacePieces} from './surfaceLibrary.js';
@@ -1288,7 +1288,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const color=gesture?.problem?'#ff7777':candidate?'#7fffab':'#ffd879';
   ctx.save();
   ctx.lineWidth=2;ctx.strokeStyle=color;ctx.fillStyle=color+'48';
-  for(const zone of propFootprint(entity)){
+  for(const zone of (gesture?.parts||propGroup(liveView.M.ents,entity)).flatMap(propFootprint)){
    zPath(ctx,zone,project);ctx.fill();ctx.stroke();
   }
   const [x,y]=project(entity.x+1,entity.y+1);
@@ -1305,20 +1305,39 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const bounds=liveCanvas.getBoundingClientRect();
   return [(e.clientX-bounds.left)*liveCanvas.width/bounds.width,(e.clientY-bounds.top)*liveCanvas.height/bounds.height];
  };
- function dropProp(entity){
-  record();
-  const current=liveView.M.ents.findIndex(e=>e.id===entity.id);
-  if(current<0)liveView.M.ents.push(entity);else liveView.M.ents[current]=entity;
-  const saved={entity:structuredClone(entity),sheet:liveView.sheets[entity.tile.sid].name};
-  propEdits=[...propEdits.filter(edit=>edit.entity.id!==entity.id),saved];
-  propStatus.textContent='Đã đặt '+(entity.name||'vật dụng')+' tại '+(entity.x+1).toFixed(2)+' × '+(entity.y+1).toFixed(2)+' ô.';
+ function propChange(source,target,copy=false,mirror=false){
+  const originals=propGroup(liveView.M.ents,source);
+  const parts=transformPropGroup(originals,source,target,mirror);
+  const ignore=new Set(copy?[]:originals.map(part=>part.id));
+  const problem=parts.map(part=>propPlacement(liveView,part,ignore)).find(Boolean);
+  return {parts,problem};
  }
+ function dropProps(parts,entity,copy=false){
+  record();
+  const group='outline-copy-'+crypto.randomUUID();
+  const placed=copy?parts.map((part,i)=>({...part,id:group+'-'+i,arrangementGroup:group})):parts;
+  const ids=new Set(placed.map(part=>part.id));
+  liveView.M.ents=liveView.M.ents.filter(part=>!ids.has(part.id)).concat(placed);
+  const saved=placed.map(part=>({entity:structuredClone(part),sheet:liveView.sheets[part.tile.sid].name}));
+  propEdits=[...propEdits.filter(edit=>!ids.has(edit.entity.id)),...saved];
+  propStatus.textContent='Đã đặt vật tại '+(entity.x+1).toFixed(2)+' × '+(entity.y+1).toFixed(2)+' ô.';
+ }
+ const turnProp=B('Đổi hướng ↔',()=>{
+  const source=liveView?.M.ents.find(entity=>entity.id===selectedProp);
+  if(!source||gesture)return;
+  const {parts,problem}=propChange(source,source,false,true);
+  if(problem)propStatus.textContent=problem;
+  else dropProps(parts,source);
+  liveCanvas.focus({preventScroll:true});
+  redrawLive();
+ });
+ turnProp.disabled=true;
  function aimProp(point){
   const [x,y]=liveProjection.unproject(...point),{source,dx,dy,copy}=gesture;
   const snap=value=>snapProps.checked?Math.floor(value)+.5:Math.round(value*100)/100;
   const candidate={...source,x:snap(x+dx)-1,y:snap(y+dy)-1};
   gesture.candidate=candidate;
-  gesture.problem=propPlacement(liveView,candidate,copy?null:source.id);
+  Object.assign(gesture,propChange(source,candidate,copy));
   propStatus.textContent=gesture.problem||'Điểm neo '+(candidate.x+1).toFixed(2)+' × '+(candidate.y+1).toFixed(2)+' ô';
   redrawLive();
  }
@@ -1329,13 +1348,18 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  liveCanvas.onpointerdown=e=>{
   if(!liveProjection||gesture||e.button>1)return;
   const point=livePoint(e),[x,y]=point;
-  const hit=e.button===0&&[...liveProjection.hits].reverse().find(hit=>
-   canArrangeProp(hit.e)&&x>=hit.x&&x<=hit.x+hit.size&&y>=hit.y&&y<=hit.y+hit.size);
+  const hit=e.button===0&&[...liveProjection.hits].reverse().find(hit=>{
+   if(!canArrangeProp(hit.e)||!hit.size)return false;
+   const [left,top,right,bottom]=hit.e.spriteBounds||[0,0,1,1];
+   const u=(x-hit.x)/hit.size,v=(y-hit.y)/hit.size;
+   const imageX=hit.e.spriteFlip&1?1-u:u;
+   return imageX>=left&&imageX<=right&&v>=top&&v<=bottom;
+  });
   const source=e.button===0&&copyProp?liveView.M.ents.find(e=>e.id===selectedProp):hit?.e;
   if(source){
    const [a,b]=liveProjection.unproject(x,y);
    gesture={source,copy:copyProp,point,dx:copyProp?0:source.x+1-a,dy:copyProp?0:source.y+1-b};
-   if(!copyProp){selectedProp=source.id;duplicate.disabled=false;propStatus.textContent=source.name||'Vật dụng';}
+   if(!copyProp){selectedProp=source.id;duplicate.disabled=turnProp.disabled=false;propStatus.textContent=source.name||'Vật dụng';}
    if(copyProp)aimProp(point);
   }else gesture={point,pan:[camera.x,camera.y]};
   liveCanvas.focus({preventScroll:true});
@@ -1349,9 +1373,9 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  };
  liveCanvas.onpointerup=()=>{
   if(!gesture)return;
-  const {candidate,problem,copy}=gesture;
+  const {candidate,problem,copy,parts}=gesture;
   gesture=null;
-  if(candidate&&!problem)dropProp(copy?{...candidate,id:'outline-copy-'+crypto.randomUUID()}:candidate);
+  if(candidate&&!problem)dropProps(parts,candidate,copy);
   redrawLive();
  };
  liveCanvas.onpointercancel=()=>{gesture=null;redrawLive();};
@@ -1371,6 +1395,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   }else if(!e.ctrlKey&&!e.metaKey&&(key==='+'||key==='='))zoomLive(1.25);
   else if(key==='-')zoomLive(1/1.25);
   else if(key==='0')fitLive();
+  else if(key==='r'&&!turnProp.disabled){if(!e.repeat)turnProp.click();}
   else if(key==='g'){
    if(!e.repeat)snapProps.checked=!snapProps.checked;
   }else if(direction){
@@ -1380,9 +1405,9 @@ export function openOutlineEditor(editor,initialTab='shapes'){
     const step=snapProps.checked?1:.1;
     const candidate={...source,x:Math.round((source.x+dx*step)*100)/100,
      y:Math.round((source.y+dy*step)*100)/100};
-    const problem=propPlacement(liveView,candidate,source.id);
+    const {parts,problem}=propChange(source,candidate);
     if(problem)propStatus.textContent=problem;
-    else dropProp(candidate);
+    else dropProps(parts,candidate);
    }else{
     camera.x-=dx*45;camera.y-=dy*45;
    }
@@ -1393,10 +1418,10 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const liveTools=el('div',{class:'row'},el('button',{type:'button',class:'b','aria-label':'Thu nhỏ cảnh ráp',onclick:()=>zoomLive(1/1.25)},'−'),zoomValue,
   el('button',{type:'button',class:'b','aria-label':'Phóng to cảnh ráp',onclick:()=>zoomLive(1.25)},'+'),
   B('Vừa khung',fitLive),
-  duplicate,el('label',{},snapProps,' Bám tâm ô'));
+  duplicate,turnProp,el('label',{},snapProps,' Bám tâm ô'));
  const livePanel=is3D?null:el('section',{class:'outline-live-view','aria-label':'Xem trước cảnh ráp'},
   el('strong',{},'Xem trước cảnh ráp'),liveTools,
-  el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),el('p',{class:'hint'},'Phím tắt khi bấm vào cảnh: +/− thu phóng, 0 vừa khung, mũi tên dịch vật theo trục lưới, Shift + mũi tên dịch khung nhìn, D nhân bản, G bật/tắt bám tâm ô, Esc hủy.'),liveCanvas,propStatus,liveStatus);
+  el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),el('p',{class:'hint'},'Phím tắt khi bấm vào cảnh: +/− thu phóng, 0 vừa khung, mũi tên dịch vật theo trục lưới, Shift + mũi tên dịch khung nhìn, D nhân bản, R đổi hướng, G bật/tắt bám tâm ô, Esc hủy.'),liveCanvas,propStatus,liveStatus);
  let liveTimer,liveKey='',liveRevision=0;
  queueLivePreview=(force=false)=>{
   if(is3D||!ov.isConnected||surface?.finish!==false&&layerControls.some(row=>row.loading))return;
@@ -1413,7 +1438,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
     if(revision!==liveRevision||!ov.isConnected)return;
     gesture=null;liveView=view;
     if(!view.M.ents.some(e=>e.id===selectedProp)){
-     selectedProp=null;duplicate.disabled=true;
+     selectedProp=null;duplicate.disabled=turnProp.disabled=true;
      copyProp=false;duplicate.setAttribute('aria-pressed','false');
     }
     redrawLive();
