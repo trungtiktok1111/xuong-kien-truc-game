@@ -715,7 +715,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   control.element=el('div',{class:'outline-stage'},
    el('strong',{},label),el('label',{},'Gói ZIP',source),scaleLabel,selected,picker,
    el('div',{class:'row'},prev,next,run),el('div',{class:'row'},clear,keep,restore),note);
-  control.initialSource=saved.layers?.[key]?.source||defaultSource;
+  control.initialSource=saved.layers?.[key]?.source||(key==='character'?'builtin:character':defaultSource);
   control.initialAsset=saved.layers?.[key]?(saved.layers[key].assets??[saved.layers[key].asset].filter(Boolean)):(saved.stages?.[key]??active)?true:[];
   return control;
  });
@@ -818,7 +818,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  }
  function refreshSources(control,wanted){
   const groups=[
-   ['Bộ tích hợp',builtins.map(([id,label])=>['builtin:'+id,label])],
+   ['Bộ tích hợp',[...(control.key==='character'?[['character','Nhân vật của Xưởng']]:[]),...builtins].map(([id,label])=>['builtin:'+id,label])],
    ['Kho gói của Xưởng',stockSources.map(pack=>['stock:'+pack.file,pack.name])],
    ['ZIP đã thêm',[...outlineZipFiles].map(([id,file])=>[id,file.name])]
   ];
@@ -872,18 +872,16 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  });
  const materials=(preview=false)=>{
   if(is3D||!dressing.checked)return null;
-  const layers=Object.fromEntries(layerControls.filter(({key})=>key!=='character').map(({key,source,ids,trial})=>[key,{source:source.value,assets:preview&&trial?[trial]:[...ids]}]));
+  const layers=Object.fromEntries(layerControls.map(({key,source,ids,trial})=>[key,{source:source.value,assets:preview&&trial?[trial]:[...ids]}]));
   return {layers,files:new Map(outlineZipFiles),scaleOverrides:Object.fromEntries(scaleOverrides),...surfaceStyle()};
  };
- // The saved-preset snapshot is deliberately separate from materials(): it keeps the
- // character row (never sent to materials(), which feeds the real-map commit path) and
- // drops the ZIP File objects (not meaningfully serializable — a reloaded preset shows
- // "cần nạp lại ZIP" the same way an unsaved per-map selection already does).
- const presetData=()=>({
-  layers:Object.fromEntries(layerControls.map(({key,source,ids})=>[key,{source:source.value,assets:[...ids]}])),
-  floorScale:+floorScale.value,matchJoints:matchJoints.checked,
-  scaleOverrides:Object.fromEntries(scaleOverrides)
- });
+ const presetData=()=>{
+  const layers=Object.fromEntries(layerControls.map(({key,source,ids})=>[key,{source:source.value,assets:[...ids]}]));
+  const sources=new Set(Object.values(layers).map(layer=>layer.source));
+  return {layers,...surfaceStyle(),scaleOverrides:Object.fromEntries(scaleOverrides),
+   zips:[...outlineZipFiles].filter(([id])=>sources.has(id)),
+   wall:{front:+front.value,rear:+rear.value,thickness:+thickness.value,collision:collision.checked}};
+ };
  let presetList=[],openPreset=null;
  const presetSelect=el('select',{'aria-label':'Bộ đã lưu'});
  async function refreshPresetList(selectId){
@@ -898,6 +896,12 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const id=presetSelect.value;if(!id)return;
   const data=await loadOutlinePreset(id);
   if(!data){toast('Không mở được bộ đã lưu, có thể đã bị xoá.');await refreshPresetList();return;}
+  clearTrials();
+  for(const [id,file] of data.zips||[])outlineZipFiles.set(id,file);
+  if(data.wall){
+   front.value=data.wall.front;rear.value=data.wall.rear;thickness.value=data.wall.thickness;
+   collision.checked=data.wall.collision;
+  }
   floorScale.value=String(data.floorScale||1);
   matchJoints.checked=!!data.matchJoints;
   scaleOverrides.clear();
@@ -912,6 +916,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   queueLivePreview(true);
  });
  async function savePreset(asNew){
+  if(layerControls.some(row=>row.loading)){toast('Đợi Xưởng đọc xong các gói rồi lưu bộ chọn.');return;}
   const name=(!asNew&&openPreset)?openPreset.name:await ask('Đặt tên cho bộ chọn này:',openPreset?.name||'');
   if(name==null)return;
   try{
@@ -947,6 +952,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   el('div',{class:'row'},el('label',{},dressing,' Tự phối vật liệu'),assembly,
    el('label',{},'Thêm ZIP ',zipFiles)),
   presetPanel,
+  el('p',{class:'hint'},'Nhân vật được chọn đầu tiên dùng để chơi. Các ảnh chọn tiếp theo là nhân vật phụ trong cảnh.'),
   catalogNote,
   el('div',{class:'row'},el('label',{},'Cỡ viên gạch nền ',floorScale),el('label',{},matchJoints,' Tự khớp mạch')),
   el('div',{class:'outline-stage-controls'},...layerControls.map(row=>row.element)));
@@ -968,19 +974,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    try{
     const view=await editor.liveOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,opts,collision.checked);
     if(revision!==liveRevision||!ov.isConnected)return;
-    let drawn=view;
-    const characterRow=layerControls.find(row=>row.key==='character');
-    const characterId=characterRow?.trial||characterRow?.ids[0];
-    if(characterId){
-     try{
-      const preview=await editor.outlineCharacterPreview(characterRow.source.value,characterId,outlineZipFiles,surfaceStyle());
-      if(preview)drawn={...view,M:{...view.M,ents:[...view.M.ents,
-        {...preview.ent,tile:{...preview.ent.tile,sid:preview.ent.tile.sid+view.sheets.length}}]},
-       sheets:[...view.sheets,...preview.sheets]};
-     }catch{/* reference silhouette is optional; never block the rest of the live preview */}
-    }
-    if(revision!==liveRevision||!ov.isConnected)return;
-    drawOutlineDraft(liveCanvas,drawn);
+    drawOutlineDraft(liveCanvas,view);
     liveCanvas.hidden=false;
     liveStatus.textContent=[view.dressing?.summary,view.dressing?.warnings].filter(Boolean).join(' ');
     if(sequence){

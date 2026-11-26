@@ -1,5 +1,5 @@
 import {referencePlan,farmBarn,cityBuilding,cityBuildings} from './stockScenes.js';
-import {REFERENCE_HEIGHT, packScale} from './outlineAnchors.js';
+import {outlineObjectSize, packScale, scaleOutlineHouse} from './outlineAnchors.js';
 import {mapCollision} from './mapCollision.js';
 import {decoZones,zonesHit} from './zones.js';
 import {unzipSync} from 'fflate';
@@ -407,11 +407,11 @@ export async function outlinePackMaterials(pack,profile,style){
       throw Error('Điểm neo mảnh '+row.path+' cần hai tọa độ pixel.');
     if(row.tileWidth!==undefined&&(!Number.isFinite(row.tileWidth)||row.tileWidth<1))
       throw Error('tileWidth không hợp lệ cho '+row.path+'.');
-    return {pack,path,label:row.name||stem(path),anchor,tileWidth:row.tileWidth,layer,
+    return {pack,path,label:row.name||stem(path),anchor,tileWidth:row.tileWidth,heightMeters:row.heightMeters,layer,
       material:row.shape==='square',flatTop:true};
   };
   if(file&&(!settings||settings.version!==1||
-    ![settings.floors??[],settings.props??[],settings.overlays??[],settings.walls??[]].every(Array.isArray)))
+    ![settings.floors??[],settings.props??[],settings.overlays??[],settings.walls??[],settings.characters??[],settings.doors??[]].every(Array.isArray)))
     throw Error('outline-materials.json trong '+pack.name+' cần version 1 và các danh sách mảnh.');
   const ignoredAssets=[];
   const attempt=async(a,read)=>{
@@ -475,7 +475,7 @@ export async function outlinePackMaterials(pack,profile,style){
     floors=assets.filter(a=>!overlays.includes(a)&&a.layer===0&&!/high|float|stairs|water|river|sea|lake|corner|cliff|transition/i.test(a.label))
       .map(a=>({...a,flatTop:true}));
     props=assets.filter(a=>a.layer===2&&!overlays.includes(a)&&(a.native||
-      /^(?:barrel|crate|chest|chair|bookstand|lamp|statue|ruong|thung|chum|den|table|bench|hay|sack|plant|tree|bush)/i.test(stem(a.path))));
+      /^(?:barrel|crate|chest|chair|bookstand|lamp|statue|ruong|thung|chum|den|table|bench|hay|sack|plant|tree|bush|flower|grass|horse|cow|dog|cat|rabbit|chicken|deer|wolf|sheep|ngua|meo|cay|hoa)/i.test(stem(a.path))));
   }
   const characters=settings?(settings.characters||[]).map(row=>named(row,2)):catalogCharacters(pack);
   const doors=settings?(settings.doors||[]).map(row=>named(row,2)):[];
@@ -510,19 +510,17 @@ export async function outlinePackMaterials(pack,profile,style){
   });
   for(const a of props)await attempt(a,async()=>{
     const art=await sprite(a);
-    const tileWidth=Math.max(a.tileWidth||1,art.w/.95,art.h/1.65);
-    // Scale the collision radius by the same factor as the on-screen size (sc) below, so
-    // a shrunk/grown prop's blocked area still matches what the player actually sees.
-    const radius=Math.max(.22,Math.min(.46,art.w/tileWidth*.55))*result.scale.factor;
+    const {tileWidth,radius,bodyHeight}=outlineObjectSize(art,a.label,'props',result.scale,a.tileWidth,a.heightMeters);
     const piece=addSprite(result,{...a,tileWidth,collision:{shape:'circle',radius}},art);
     result.props.push({sid:piece.sid,id:a.path,label:a.label,source:pack.name,radius,
-      create:(x,y,id)=>{const e=entity(piece,x,y,0,id);return {...e,sc:e.sc*result.scale.factor,outlineAutoProp:true};}});
+      create:(x,y,id)=>({...entity(piece,x,y,0,id),bodyHeight,outlineAutoProp:true})});
   });
   for(const a of characters)await attempt(a,async()=>{
     const art=await sprite(a);
-    const tileWidth=art.h/REFERENCE_HEIGHT.character;
+    const {tileWidth,bodyHeight}=outlineObjectSize(art,a.label,'character',result.scale,null,a.heightMeters);
     const piece=addSprite(result,{...a,tileWidth,collision:null},art);
-    result.characters.push({sid:piece.sid,id:a.path,label:a.label,source:pack.name,create:(x,y,id)=>entity(piece,x,y,0,id)});
+    result.characters.push({sid:piece.sid,id:a.path,label:a.label,source:pack.name,
+      create:(x,y,id)=>({...entity(piece,x,y,0,id),bodyHeight})});
   });
   // Only assemble structural parts when a complete calibrated kit is present.
   const farmFloor=pack.paths.find(path=>/(^|\/)isometric\/planks_e\.png$/.test(path));
@@ -535,12 +533,8 @@ export async function outlinePackMaterials(pack,profile,style){
       if(!parts.every(p=>pack.files[folder+miniatureAsset(pack,p.asset,p.dir).path]))continue;
       const ents=[],assembly={sheets:result.sheets,ents};
       for(const part of parts)ents.push(await miniaturePiece(assembly,[pack],part,cache,folder));
-      // Deliberately NOT scaled by result.scale.factor: each piece's assembled x/y offset
-      // and wall-segment collision are fixed relative to the others, so scaling only `sc`
-      // would open seams or overlaps between pieces. Houses stay at their pack's native
-      // calibration; only standalone props (which have no neighboring pieces to misalign
-      // with) get the scale correction.
-      result.houses.push({w,h,ents,id:`barn-${w}x${h}`,label:`Nhà gỗ ${w} × ${h} ô`,source:pack.name});
+      result.houses.push(scaleOutlineHouse({w,h,ents,id:`barn-${w}x${h}`,label:`Nhà gỗ ${w} × ${h} ô`,source:pack.name},
+        result.scale.via==='manual'?result.scale.factor:1));
     }
   }
   result.wallMaterial=result.sheets[result.walls[0]?.sid]?.name;
@@ -569,13 +563,16 @@ export async function outlineManualImage(pack,path,role,style){
     result.sheets.push({name:pack.name+' · Tường chọn tay '+path,tw:128,margin:0,url:tile.toDataURL()});
     item.sid=0;
   }else{
-    const art=await sprite(a),house=role==='house';
-    const tileWidth=Math.max(art.w/(house?1.6:.95),art.h/(house?2.1:1.65));
-    item.radius=house?.44:Math.max(.22,Math.min(.46,art.w/tileWidth*.55));
-    const piece=addSprite(result,{...a,tileWidth,collision:{shape:'circle',radius:item.radius}},art);
-    item.sid=piece.sid;
-    if(house)Object.assign(item,{w:1,h:1,ents:[entity(piece,.5,.5,0,'house') ]});
-    else item.create=(x,y,id)=>({...entity(piece,x,y,0,id),outlineAutoProp:true});
+    const art=await sprite(a),house=role==='house',character=role==='character';
+    const {tileWidth,radius,bodyHeight}=outlineObjectSize(art,label,role,style?.packScale);
+    const piece=addSprite(result,{...a,tileWidth,collision:character?null:{shape:'circle',radius}},art);
+    const place=(x,y,id)=>({...entity(piece,x,y,0,id),bodyHeight});
+    item.sid=piece.sid;item.radius=radius;
+    if(house){
+      const side=Math.max(1,Math.ceil(2*radius));
+      Object.assign(item,{w:side,h:side,ents:[place(side/2,side/2,'house')]});
+    }else item.create=character?place:(...args)=>({...place(...args),outlineAutoProp:true});
+
   }
   return {item,sheets:result.sheets};
 }

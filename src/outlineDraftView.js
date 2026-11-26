@@ -42,6 +42,11 @@ export function drawOutlineDraft(canvas,{M:map,sheets}){
  const items=[...geo.walls,...builtWallFaces(ents,false),...ents.flatMap(e=>gateWalls(e,false))]
   .map(wall=>({depth:wall.k,wall}));
  const roofs=[];
+ const spawn=ents.find(e=>e.t==='start');
+ if(spawn&&map.cfg.outlineHero){
+  const hero={...map.cfg.outlineHero,tile:map.cfg.hero,x:spawn.x-.5,y:spawn.y-.5,placedProp:true};
+  items.push({depth:spawn.x+spawn.y+1,e:hero});
+ }
  for(const e of ents){
   if(e.t!=='deco'||!e.tile)continue;
   const row={depth:e.tiledLayer===undefined?e.x+e.y+2:tiledDepth(e,w,h,false),e};

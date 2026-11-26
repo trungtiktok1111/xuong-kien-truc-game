@@ -2168,12 +2168,12 @@ export function init2D(root,A){
   function fromVillage(){const v=A.village;return clone({w:v.w,h:v.h,layers:v.layers,blk:v.blk});}
   async function addSheetUrl(url,nm){const g=null;const tw=+(await ask(g?'App tự đoán: ô '+g.tw+' px, khe '+g.m+' px ('+g.cols+'×'+g.rows+' ô). Sai thì sửa số.\n\nKích thước mỗi ô (px)?':'Không đoán được. Kích thước mỗi ô (px)?',g?String(g.tw):'16'));if(!tw)return;const m=+(await ask('Khoảng cách giữa các ô (px)?',g?String(g.m):'0'))||0;const s={name:nm.slice(0,24),url,tw,margin:m};loadSheet(s).then(()=>{sheets.push(s);uniqNames(sheets);curSheet=sheets.length-1;after();draw();toast('Đã thêm tileset');});}
   function sheetUse(){const u=new Array(sheets.length).fill(0);for(const a of M.layers)for(const v of a)if(v){const d=dec(v);if(u[d.sid]!=null)u[d.sid]++;}
-    for(const e of M.ents)if(e.tile&&u[e.tile.sid]!=null)u[e.tile.sid]++;const h=M.cfg&&M.cfg.hero;if(h&&u[h.sid]!=null)u[h.sid]++;return u;}
+    for(const e of M.ents)if(e.tile&&u[e.tile.sid]!=null)u[e.tile.sid]++;const h=M.cfg&&M.cfg.hero;if(h&&u[h.sid]!=null)u[h.sid]++;const original=M.cfg?.beforeOutlineHero?.hero;if(original&&u[original.sid]!=null)u[original.sid]++;return u;}
   function deleteSheets(D){TG.hashes=[];const map=[];let k=0;for(let i=0;i<sheets.length;i++)map.push(D.has(i)?-1:k++);const seen=new WeakSet();
     const fix=v=>{if(!v)return 0;const d=dec(v),n=map[d.sid];if(n==null)return v;return n<0?0:enc(n,d.idx,d.f);};
     const fixA=a=>{if(!a||seen.has(a))return;seen.add(a);for(let i=0;i<a.length;i++)a[i]=fix(a[i]);};
     const fixT=(e,t)=>{if(!e.tile)return;const n=map[e.tile.sid];if(n==null)return;if(n<0)e.tile=e.t==='enemy'?{sid:2,idx:108}:e.t==='npc'?{sid:2,idx:96}:null;else e.tile={sid:n,idx:e.tile.idx};};
-    M.layers.forEach(fixA);M.ents.forEach(fixT);const h=M.cfg&&M.cfg.hero;if(h){const n=map[h.sid];if(n<0)M.cfg.hero={sid:2,idx:88};else if(n!=null)h.sid=n;}
+    M.layers.forEach(fixA);M.ents.forEach(fixT);const h=M.cfg&&M.cfg.hero;if(h){const n=map[h.sid];if(n<0)M.cfg.hero={sid:2,idx:88};else if(n!=null)h.sid=n;}const original=M.cfg?.beforeOutlineHero?.hero;if(original){const n=map[original.sid];if(n<0)M.cfg.beforeOutlineHero.hero={sid:2,idx:88};else if(n!=null)original.sid=n;}
     const fixS=o=>{if(!o)return;if(o.multi&&o.layers){o.layers.forEach(fixA);o.tiles=o.layers[0];}else fixA(o.tiles);if(o.sheet){const n=map[o.sheet.sid];if(n<0)delete o.sheet;else if(n!=null)o.sheet.sid=n;}};
     fixS(stamp);if(clip){clip.layers.forEach(fixA);clip.ents.forEach(fixT);}lib.forEach(fixS);lsSet('thk_stamps',lib);
     undo=[];redo=[];[...D].sort((a,b)=>b-a).forEach(i=>sheets.splice(i,1));curSheet=0;if(!stamp.tiles||!stamp.tiles.length)stamp={w:1,h:1,multi:false,tiles:[enc(0,5)]};
@@ -3110,7 +3110,7 @@ export function init2D(root,A){
     syncCur();
     const first=MAPS[0].cfg||{},lookup=makePaintLookup();
     const maps=MAPS.map((map,i)=>{
-      const cfg=i>0?{...map.cfg,anims:first.anims,heroAnim:first.heroAnim,hero:first.hero}:map.cfg;
+      const cfg=i>0&&!map.cfg.outlineHero?{...map.cfg,anims:first.anims,heroAnim:first.heroAnim,hero:first.hero,outlineHero:first.outlineHero,playerHeight:first.playerHeight,crouchHeight:first.crouchHeight}:map.cfg;
       return sceneForPlay(map,cfg,lookup);
     });
     let gid=lsGet('thk_gid',null);
@@ -3291,7 +3291,7 @@ export function init2D(root,A){
     if(requestedStart<0)throw Error('Hình chưa có ô nào đi được.');
     const c=defCfg();c.view='iso';c.proj=level?'iso':M.cfg.proj||'iso';c.win='goal';
     if(level)c.outlineTemplate=level.id;
-    else if(M.layers[0].some(Boolean)){c.smooth=M.cfg.smooth;c.hero={...M.cfg.hero};c.anims=M.cfg.anims;c.heroAnim=M.cfg.heroAnim;}
+    else if(M.layers[0].some(Boolean)){c.smooth=M.cfg.smooth;c.hero={...M.cfg.hero};c.anims=M.cfg.anims;c.heroAnim=M.cfg.heroAnim;c.outlineHero=M.cfg.outlineHero;c.beforeOutlineHero=M.cfg.beforeOutlineHero;c.playerHeight=M.cfg.playerHeight;c.crouchHeight=M.cfg.crouchHeight;}
     const name=level?.name||'Màn '+(MAPS.length+1)+' · Đường bao';
     const fresh=mkMap(w,h,name,c);
     const place=i=>({x:i%w,y:Math.floor(i/w)});
@@ -3377,6 +3377,14 @@ export function init2D(root,A){
   const outlineStockFiles=new Map();
   const outlineRoles={floor:'floors',overlay:'overlays',wall:'walls',props:'props',house:'houses',character:'characters'};
   async function outlineLayerPack(source,files,style){
+    if(source==='builtin:character'){
+      const sh=sheets[2],idx=88,step=sh.tw+(sh.margin||0);
+      const canvas=Object.assign(document.createElement('canvas'),{width:sh.tw,height:sh.tw});
+      canvas.getContext('2d').drawImage(sh.img,(idx%sh.cols)*step,Math.floor(idx/sh.cols)*step,sh.tw,sh.tw,0,0,sh.tw,sh.tw);
+      const image=new Uint8Array(await (await new Promise(resolve=>canvas.toBlob(resolve))).arrayBuffer());
+      const raw={name:'Nhân vật của Xưởng',paths:['nhan-vat.png'],tsx:[],files:{'nhan-vat.png':image}};
+      return readOutlineCatalog(raw,null,style);
+    }
     if(source.startsWith('builtin:')){
       const profile=kenneyOutlinePacks.find(p=>p[0]===source.slice(8));
       if(profile)return loadBuiltinOutlinePack(profile,style);
@@ -3404,15 +3412,6 @@ export function init2D(root,A){
       image:()=>new Blob([pack.raw.files[a.id]],{type:a.id.endsWith('.png')?'image/png':a.id.endsWith('.webp')?'image/webp':'image/jpeg'})})): [];
     return {items:[...primary,...others],message:pack.skipReason||pack.assetWarning||'',scale:pack.scale};
   }
-  async function outlineCharacterPreview(source,id,files,style){
-    const pack=await outlineLayerPack(source,files,style);
-    const item=pack.characters?.find(a=>a.id===id);
-    if(!item)return null;
-    const fresh=[];
-    const sid=await loadBuiltinSheet(pack.sheets[item.sid],fresh);
-    const ent=item.create(1,1,'outline-character-preview');
-    return {ent:{...ent,tile:{...ent.tile,sid}},sheets:fresh,scale:pack.scale};
-  }
   const outlineHouseThumbs=new WeakMap();
   function outlineHouseThumb(pack,house){
     if(!outlineHouseThumbs.has(house))outlineHouseThumbs.set(house,(async()=>{
@@ -3429,9 +3428,9 @@ export function init2D(root,A){
     return outlineHouseThumbs.get(house);
   }
   async function prepareOutlineLayerDressing(map,target,options,arrivals){
-    const requested=Object.entries(options.layers).filter(([role])=>role!=='character').map(([role,choice])=>
+    const requested=Object.entries(options.layers).map(([role,choice])=>
       [role,choice.source,choice.assets??(choice.asset?[choice.asset]:[])]).filter(([, ,ids])=>ids.length);
-    const stages={},materials=[],warnings=[],preserve=new Set(),wallNames=[];
+    const stages={},materials=[],warnings=[],preserve=new Set(),wallNames=[],characters=[];
     const picks=await Promise.all(requested.map(async ([role,source,ids])=>{
       const items=[],errors=[];
       try{
@@ -3443,7 +3442,7 @@ export function init2D(root,A){
             if(item){items.push({item,sheets:pack.sheets});continue;}
             if(!pack.raw)throw Error(pack.skipReason||'Thiếu ảnh trong '+source+'.');
             const cacheKey=role+'|'+id;
-            if(!pack.manual.has(cacheKey))pack.manual.set(cacheKey,outlineManualImage(pack.raw,id,role,options));
+            if(!pack.manual.has(cacheKey))pack.manual.set(cacheKey,outlineManualImage(pack.raw,id,role,{...style,packScale:pack.scale}));
             items.push(await pack.manual.get(cacheKey));
           }catch(error){errors.push(error.message);}
         }
@@ -3459,7 +3458,10 @@ export function init2D(root,A){
         const ids=new Map(),needed=role==='house'?item.ents.map(e=>e.tile.sid):[item.sid];
         for(const sid of new Set(needed))ids.set(sid,await loadBuiltinSheet(sourceSheets[sid],target));
         const remap=tile=>({...tile,sid:ids.get(tile.sid)});
-        if(role==='house')material.houses.push({...item,ents:item.ents.map(e=>({...e,tile:remap(e.tile)}))});
+        if(role==='character'){
+          const actor=item.create(0,0,'outline-actor');
+          characters.push({...actor,tile:remap(actor.tile)});
+        }else if(role==='house')material.houses.push({...item,ents:item.ents.map(e=>({...e,tile:remap(e.tile)}))});
         else if(role==='props')material.props.push({...item,create:(...args)=>{
           const e=item.create(...args);e.tile=remap(e.tile);return e;
         }});
@@ -3477,8 +3479,31 @@ export function init2D(root,A){
     if(stages.overlay&&!info.overlays)warnings.push('Phủ nền chưa có chỗ phù hợp.');
     if(stages.props&&info.propKinds<materials.reduce((count,part)=>count+part.props.length,0))warnings.push('Một số mẫu vật dụng chưa có vị trí an toàn.');
     if(stages.house&&info.houses<materials.reduce((count,part)=>count+part.houses.length,0))warnings.push('Một số mẫu nhà chưa có chỗ đặt và lối vào an toàn.');
+    if(!preserve.has('character')&&options.layers.character){
+      map.ents=map.ents.filter(e=>!e.outlineCast);
+      if(characters.length){
+        const [hero,...support]=characters,cfg=map.cfg;
+        if(!cfg.outlineHero)cfg.beforeOutlineHero={hero:cfg.hero,heroAnim:cfg.heroAnim,playerHeight:cfg.playerHeight,crouchHeight:cfg.crouchHeight};
+        cfg.hero=hero.tile;cfg.heroAnim=null;
+        cfg.outlineHero={sc:hero.sc,ox:hero.ox,oy:hero.oy};
+        cfg.playerHeight=hero.bodyHeight;cfg.crouchHeight=hero.bodyHeight*.57;
+        const start=map.ents.find(e=>e.t==='start');
+        if(start&&support.length){
+          const walk=linkWalkability(map,automaticPaintZones(map,makePaintLookup(target)));
+          const seats=walk.component(start).filter(p=>Math.hypot(p.x-start.x,p.y-start.y)>=2&&
+            !map.ents.some(e=>['goal','chest','npc','enemy','door'].includes(e.t)&&Math.hypot(p.x-e.x,p.y-e.y)<1.2));
+          support.slice(0,seats.length).forEach((actor,i)=>{
+            const p=seats[i];map.ents.push({...actor,x:p.x-.5,y:p.y-.5,id:'outline-cast-'+i,outlineCast:true});
+          });
+          if(support.length>seats.length)warnings.push('Một số nhân vật phụ chưa có chỗ đặt.');
+        }
+      }else if(map.cfg.beforeOutlineHero){
+        Object.assign(map.cfg,map.cfg.beforeOutlineHero);
+        delete map.cfg.outlineHero;delete map.cfg.beforeOutlineHero;
+      }
+    }
     map.cfg.outlineMaterials={...info,layers:options.layers,floorScale:options.floorScale,matchJoints:options.matchJoints,scaleOverrides:options.scaleOverrides};
-    return {summary:`${info.props} vật dụng · ${info.overlays} ô phủ · ${info.houses} nhà.`,warnings:warnings.join(' ')};
+    return {summary:`${info.props} vật dụng · ${info.overlays} ô phủ · ${info.houses} nhà${characters.length?' · '+characters.length+' nhân vật':''}.`,warnings:warnings.join(' ')};
   }
   async function prepareOutlineDressing(map,target,options,arrivals=[]){
     if(!options)return null;
@@ -3582,5 +3607,5 @@ export function init2D(root,A){
     toast('Đã tạo '+fresh.name+(source?' và nối hai chiều với '+source.name:'.')+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
   }
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
-  return {ready,connectMap,mapConnectionBox,outlineConnectionTargets,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlineCharacterPreview,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  return {ready,connectMap,mapConnectionBox,outlineConnectionTargets,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
 }

@@ -20,6 +20,14 @@ Các bộ phối Kenney đi kèm ứng dụng và có thể dùng ngay khi mất
 
 Dùng `shape: "square"` cho ảnh vật liệu vuông nhìn từ trên xuống. Mặc định ảnh sàn dùng góc isometric 2:1. `anchor` là điểm chân trên ảnh gốc tính bằng pixel. `tileWidth` là bề rộng pixel ứng với một ô bản đồ. Có thể chỉ khai báo sàn hoặc chỉ khai báo đạo cụ và phối với gói khác.
 
+### Tỉ lệ, nhân vật và bộ đã lưu
+
+Đường Bao 2D dùng 1,5 m cho một ô cao. Xưởng ưu tiên chiều cao `heightMeters` khai báo cho mảnh trong `outline-materials.json`. Với ảnh thiếu số đo, Xưởng ước lượng từ cửa, tường, nhân vật hoặc nhóm vật dụng, động vật và cây cối. Cỡ mạch nền, chiều cao và độ dày tường, cùng phần chỉnh tỉ lệ theo gói vẫn có thể chỉnh riêng.
+
+Chọn ảnh trong lớp **Nhân vật**. Ảnh đầu là nhân vật điều khiển khi chơi. Các ảnh chọn thêm là nhân vật phụ đứng trong cảnh. Ảnh PNG nhập riêng là hình tĩnh.
+
+Dùng **Lưu…** hoặc **Lưu bộ mới…**, rồi chọn bộ trong **Bộ đã lưu → Mở**. Xưởng lưu các ZIP đang dùng cùng bộ chọn trong trình duyệt đó. Lưu bộ chọn có thể thực hiện trước khi áp dụng bản đồ.
+
 ## Điểm neo khi đặt mảnh 2D
 
 Chọn một trong chín vị trí dưới mục Điểm neo để đặt mái theo tâm, theo mép hoặc theo góc. Điểm sáng trên mái đi theo con trỏ. Các dấu tựa xanh vẫn thể hiện nơi đỉnh tường hoặc cột đỡ mái. Vật thể khác có một, ba hoặc chín điểm theo kích thước nhìn thấy. Giữ Shift để bám lưới ¼ ô.
