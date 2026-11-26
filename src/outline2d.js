@@ -3,22 +3,24 @@ import {DEFAULT_OUTLINE_WALL_HEIGHT} from './outlineGrid.js';
 const cached=new WeakMap();
 export function outlineWallImage(outline,sheets){
  const names=outline?.wallMaterials||(outline?.wallMaterial?[outline.wallMaterial]:[]);
- return names.map(name=>sheets.find(sheet=>sheet?.name===name)?.img).filter(Boolean);
+ const images=names.map(name=>sheets.find(sheet=>sheet?.name===name)?.img).filter(Boolean);
+ images.modules=(outline?.wallModules||[]).map(module=>({...module,sheetData:sheets.find(sheet=>sheet?.name===module.sheet)})).filter(module=>module.sheetData?.img);
+ return images;
 }
 export function outline2D(data,angle=false,ents=[]){
  if(!data?.loops?.length)return null;
  const variants=cached.get(data)||[];const index=Number(angle);
  if(variants[index])return cutGateOpenings(variants[index],ents,angle);
- const loops=data.loops,edges=loops.flatMap(loop=>loop.map((a,i)=>[a,loop[(i+1)%loop.length]]));
+ const loops=data.loops,edges=loops.flatMap((loop,li)=>loop.map((a,i)=>({a,b:loop[(i+1)%loop.length],loop,li,i})));
  function inside(x,y){
   let yes=false;
-  for(const [a,b] of edges)
+  for(const {a,b} of edges)
    if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])yes=!yes;
   return yes;
  }
  const thickness=data.thickness??WALL_THICKNESS;
  let perimeter=0;
- const walls=edges.flatMap(([a,b],i)=>{
+ const walls=edges.flatMap(({a,b,loop,i})=>{
   const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,near=inside(angle?mx:mx-.24,my-.24);
   /* cắt cạnh dài thành đoạn ngắn: khóa sắp xếp độ sâu theo từng đoạn, không theo điểm giữa cả cạnh (cạnh dài làm tường đè lên người đứng ở đầu cạnh) */
   const len=Math.hypot(b[0]-a[0],b[1]-a[1]);
@@ -26,7 +28,13 @@ export function outline2D(data,angle=false,ents=[]){
   for(let j=0;j<n;j++){
    const p=[a[0]+(b[0]-a[0])*j/n,a[1]+(b[1]-a[1])*j/n],q=[a[0]+(b[0]-a[0])*(j+1)/n,a[1]+(b[1]-a[1])*(j+1)/n];
    const x=(p[0]+q[0])/2,y=(p[1]+q[1])/2;
-   out.push({a:p,b:q,k:angle?y:x+y,near,i,thickness,phase:perimeter+j*len/n});
+   const turn=(at,prev,next)=>{
+    const ax=at[0]-prev[0],ay=at[1]-prev[1],bx=next[0]-at[0],by=next[1]-at[1];
+    return Math.abs(ax*by-ay*bx)>.035*Math.hypot(ax,ay)*Math.hypot(bx,by);
+   };
+   const before=loop[(i+loop.length-1)%loop.length],after=loop[(i+2)%loop.length];
+   out.push({a:p,b:q,k:angle?y:x+y,near,i,thickness,phase:perimeter+j*len/n,
+    joinStart:j===0&&turn(a,before,b),joinEnd:j===n-1&&turn(b,a,after)});
   }
   perimeter+=len;
   return out;
@@ -101,14 +109,60 @@ export function wallSurface(wall,project,unit,geometry){
 }
 
 export function stoneWall(cx,wall,project,unit,w,h,geometry,texture=null){
- if(Array.isArray(texture))texture=texture[Math.min(texture.length-1,Math.floor((wall.phase||0)*texture.length/(geometry?.perimeter||1)))];
+ if(Array.isArray(texture)&&!texture.modules?.length)texture=texture[Math.min(texture.length-1,Math.floor((wall.phase||0)*texture.length/(geometry?.perimeter||1)))];
  const shape=wallSurface(wall,project,unit,geometry);
  if(!shape||shape.high<=0)return;
  const {front,back,high}=shape,[[x,y],[a,b]]=front;
  if(Math.max(x,a,back[0][0],back[1][0])<0||Math.min(x,a,back[0][0],back[1][0])>w||
     Math.max(y,b)<0||Math.min(y,b,back[0][1],back[1][1])-high>h)return;
  cx.lineWidth=.55;
- const textured=texture&&wall.phase!==undefined;
+ const modules=texture?.modules||[];
+ const moduleWall=modules.length>0&&wall.phase!==undefined;
+ const textured=!moduleWall&&texture&&wall.phase!==undefined;
+ if(moduleWall){
+  face(cx,[front[0],front[1],[front[1][0],front[1][1]-high],[front[0][0],front[0][1]-high]],wall.near?'#4c3b2d':'#574938');
+  face(cx,[back[0],back[1],[back[1][0],back[1][1]-high],[back[0][0],back[0][1]-high]],wall.near?'#403326':'#494032');
+  face(cx,[...front,...back.slice().reverse()].map(([px,py])=>[px,py-high]),'#806246');
+  if(wall.joinStart||wall.joinEnd){
+   const r=(wall.thickness??WALL_THICKNESS)*unit*.56;cx.save();cx.fillStyle='#806246';
+   for(const p of [...(wall.joinStart?[wall.a]:[]),...(wall.joinEnd?[wall.b]:[])]){
+    const [x0,y0]=project(p[0],p[1]);cx.beginPath();cx.ellipse(x0,y0-high/2,Math.max(1,r),high/2+r*.35,0,0,Math.PI*2);cx.fill();
+   }
+   cx.restore();
+  }
+  const length=Math.hypot(wall.b[0]-wall.a[0],wall.b[1]-wall.a[1]);
+  const phase=wall.phase||0,end=phase+length;
+  // Treat the selected sprite as a calibrated construction block. Height follows the
+  // wall setting; width follows the same anchor-derived aspect ratio and adjacent
+  // blocks overlap slightly so curves and corners cannot expose gaps.
+  const targetHigh=high/unit,widths=modules.map(module=>{
+   const body=Math.max(.05,module.bodyHeight||1),scale=targetHigh/body;
+   return Math.max(.08,body*(module.aspect||.55)*scale,(wall.thickness??WALL_THICKNESS)*1.1);
+  });
+  const pitch=Math.max(.08,widths.reduce((sum,width)=>sum+width,0)/widths.length*.82);
+  {
+   const first=Math.ceil((phase-pitch*.5)/pitch);
+   for(let n=first;;n++){
+    const center=(n+.5)*pitch;
+    if(center>=end)break;
+    if(center<phase||center>=end)continue;
+    const t=(center-phase)/Math.max(.001,length);
+    if(t<0||t>1)continue;
+    const module=modules[((Math.floor(center/pitch)%modules.length)+modules.length)%modules.length];
+    const blockWidth=widths[((Math.floor(center/pitch)%modules.length)+modules.length)%modules.length];
+    const x=wall.a[0]+(wall.b[0]-wall.a[0])*t,y=wall.a[1]+(wall.b[1]-wall.a[1])*t;
+    const [px,py]=project(x,y),[qx,qy]=project(wall.b[0],wall.b[1]),[ax,ay]=project(wall.a[0],wall.a[1]);
+    const angle=Math.atan2(qy-ay,qx-ax),sheet=module.sheetData,tw=sheet.tw,step=tw+(sheet.margin||0),idx=0;
+    const cols=sheet.cols||1,sx=(idx%cols)*step,sy=Math.floor(idx/cols)*step,bounds=module.bounds||[0,0,1,1];
+    const sw=(bounds[2]-bounds[0])*tw,sh=(bounds[3]-bounds[1])*tw;
+    const dw=blockWidth*unit,dh=targetHigh*unit;
+    cx.save();cx.translate(px,py);cx.rotate(angle);
+    cx.drawImage(sheet.img,sx+bounds[0]*tw,sy+bounds[1]*tw,sw,sh,-dw/2,-dh,dw,dh);
+    cx.restore();
+   }
+  }
+  return;
+ }
  if(textured){
   const span=Math.hypot(wall.a[0]-wall.b[0],wall.a[1]-wall.b[1]);
   const phase=wall.phase%1;
@@ -125,4 +179,12 @@ export function stoneWall(cx,wall,project,unit,w,h,geometry,texture=null){
   face(cx,[[x,y-n],[a,b-n],[a,b-m],[x,y-m]],palette[(i+(wall.i%17===0?1:0))%3],i?'#424d49':'#2e3b3a');
  }
  face(cx,[...front,...back.slice().reverse()].map(([px,py])=>[px,py-high]),textured?'#c8af88':wall.near?'#8d8d76':'#818679');
+ // Close only real corners. This overlaps the two adjoining wall ends and hides
+ // triangular cracks without drawing seams at the short render subdivisions.
+ if(wall.joinStart||wall.joinEnd){
+  const p=wall.joinStart?wall.a:wall.b,[x0,y0]=project(p[0],p[1]);
+  const r=(wall.thickness??WALL_THICKNESS)*unit*.56;
+  const color=moduleWall?'#806246':textured?'#c8af88':wall.near?'#8d8d76':'#818679';
+  cx.save();cx.fillStyle=color;cx.beginPath();cx.ellipse(x0,y0-high/2,Math.max(1,r),high/2+r*.35,0,0,Math.PI*2);cx.fill();cx.restore();
+ }
 }

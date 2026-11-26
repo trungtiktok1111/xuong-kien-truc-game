@@ -723,6 +723,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   color:levelDraft?.color||map.cfg.outline?.color,
   wallMaterial:!levelDraft?map.cfg.outline?.wallMaterial:undefined,
   wallMaterials:!levelDraft?map.cfg.outline?.wallMaterials:undefined,
+  wallModules:!levelDraft?map.cfg.outline?.wallModules:undefined,
   ...(is3D?{gates:copy(gates),floorCollision:collision.checked}:{})});
  async function runAction(action,close){
   if(commitBusy||!readGrid())return;

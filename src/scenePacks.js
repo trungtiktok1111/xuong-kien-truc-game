@@ -559,12 +559,13 @@ export async function outlineManualImage(pack,path,role,style){
     a.material=bitmap.width===bitmap.height&&bitmap.getContext('2d').getImageData(0,0,1,1).data[3]===255;
     item.sid=await groundTile(result,a,role==='floor'?style:null);
   }else if(role==='wall'){
-    const image=await loadImage(a),art=crop(image,[0,0,image.width,image.height]);
-    if(!art)throw Error('Ảnh trống: '+label+'.');
-    const tile=canvas(128,128);
-    tile.getContext('2d').drawImage(art.out,art.bounds[0]*art.side,art.bounds[1]*art.side,art.w,art.h,0,0,128,128);
-    result.sheets.push({name:pack.name+' · Tường chọn tay '+path,tw:128,margin:0,url:tile.toDataURL()});
-    item.sid=0;
+    // A hand-picked prop becomes a real repeated wall module. Keep its full sprite,
+    // ground anchor and calibrated proportions; never flatten it into a wall texture.
+    const art=await sprite(a);
+    const {tileWidth,bodyHeight}=outlineObjectSize(art,label,'props',style?.packScale);
+    const piece=addSprite(result,{...a,tileWidth},art);
+    item.sid=piece.sid;
+    item.module={bodyHeight,aspect:.75*art.w/Math.max(1,art.h),bounds:art.bounds};
   }else{
     const art=await sprite(a),house=role==='house',character=role==='character';
     const {tileWidth,radius,bodyHeight}=outlineObjectSize(art,label,role,style?.packScale);

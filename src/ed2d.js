@@ -3553,7 +3553,7 @@ export function init2D(root,A){
   async function prepareOutlineLayerDressing(map,target,options,arrivals){
     const requested=Object.entries(options.layers).map(([role,choice])=>
       [role,choice.source,choice.assets??(choice.asset?[choice.asset]:[])]).filter(([, ,ids])=>ids.length);
-    const stages={},materials=[],warnings=[],preserve=new Set(),wallNames=[],characters=[];
+    const stages={},materials=[],warnings=[],preserve=new Set(),wallNames=[],wallModules=[],characters=[];
     const picks=await Promise.all(requested.map(async ([role,source,ids])=>{
       const items=[],errors=[];
       try{
@@ -3589,13 +3589,17 @@ export function init2D(root,A){
           const e=item.create(...args);e.tile=remap(e.tile);return e;
         }});
         else material[outlineRoles[role]].push(remap(item));
-        if(role==='wall')wallNames.push(target[ids.get(item.sid)].name);
+        if(role==='wall'){
+          wallNames.push(target[ids.get(item.sid)].name);
+          if(item.module)wallModules.push({...item.module,sheet:target[ids.get(item.sid)].name,label:item.label});
+        }
       }
       materials.push(material);
     }
     if(wallNames.length){
       map.cfg.outline.wallMaterial=wallNames[0];
       map.cfg.outline.wallMaterials=wallNames;
+      map.cfg.outline.wallModules=wallModules;
     }
     const floors=materials.flatMap(part=>part.floors);
     if(map.cfg.outline.surface)map.cfg.outline.surfaceMaterials=[...new Set(floors.map(item=>target[item.sid].name))];
