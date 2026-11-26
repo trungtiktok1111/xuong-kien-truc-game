@@ -622,12 +622,23 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  kenney.addEventListener('change',()=>{dressing.checked=true;});
  const zipFiles=el('input',{type:'file',multiple:'',accept:'.zip','aria-label':'Gói vật liệu ZIP'});
  zipFiles.addEventListener('change',()=>{if(zipFiles.files.length)dressing.checked=true;});
- const materials=()=>!is3D&&dressing.checked?{preset:kenney.value,files:[...zipFiles.files]}:null;
+ const floorScale=el('select',{'aria-label':'Cỡ viên gạch nền'},
+  el('option',{value:'1'},'Gốc'),
+  el('option',{value:'2'},'2×'),
+  el('option',{value:'4'},'4× · 1 viên Dungeon / ô'));
+ floorScale.value=String(map.cfg.outlineMaterials?.floorScale||1);
+ const matchJoints=el('input',{type:'checkbox','aria-label':'Tự khớp mạch',
+  ...(map.cfg.outlineMaterials?.matchJoints?{checked:''}:{})});
+ for(const control of [floorScale,matchJoints])control.addEventListener('change',()=>{dressing.checked=true;});
+ const materials=()=>!is3D&&dressing.checked?{preset:kenney.value,files:[...zipFiles.files],
+  floorScale:+floorScale.value,matchJoints:matchJoints.checked}:null;
  const materialsPanel=is3D?null:el('details',{},el('summary',{},'Tự phối vật liệu Đường Bao'),
   el('div',{class:'row'},el('label',{},dressing,' Tự phối vật liệu'),
    el('label',{},'Bộ vật liệu ',kenney)),
   el('label',{},'Thêm gói ZIP ',zipFiles),
-  el('p',{class:'hint'},'Dungeon dùng sàn, mặt tường đá và đạo cụ từ gói 2.3. Có thể áp dụng ngay, chơi thử hoặc tạo màn mới.'));
+  el('div',{class:'row'},el('label',{},'Cỡ viên gạch nền ',floorScale),
+   el('label',{},matchJoints,' Tự khớp mạch')),
+  el('p',{class:'hint'},'Cỡ viên gạch chỉ đổi hoa văn sàn. Với Dungeon, 4× cho một viên đá trên mỗi ô.'));
  function createDraft(connect=false){
   return runAction(async()=>{
    if(!loops.length)throw Error('Hãy tạo đường bao hoặc chọn một màn mẫu.');
