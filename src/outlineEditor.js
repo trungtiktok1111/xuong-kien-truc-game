@@ -1390,15 +1390,36 @@ export function openOutlineEditor(editor,initialTab='shapes'){
     .flatMap(propFootprint).map(zBounds);
    // Keep the matching tolerance in map units so the result is independent of zoom.
    const tolerance=.025;
-   const matches=(axis,value)=>targets.some(b=>[b[axis],b[axis+2]].some(edge=>Math.abs(edge-value)<=tolerance))||
-    liveProjection.wallEdges.some(([a,b])=>Math.abs(a[axis]-b[axis])<1e-6&&Math.abs(a[axis]-value)<=tolerance);
+   function drawSide(axis,value,start,direction){
+    const along=1-axis;
+    let color='#f02b35',nearest=Infinity;
+    function consider(low,high,matchedColor){
+     const distance=direction>0?low-start:start-high;
+     const extent=direction>0?high-start:start-low;
+     if(extent<=1e-6||distance < -tolerance||distance>=nearest)return;
+     nearest=distance;color=matchedColor;
+    }
+    for(const bounds of targets){
+     if([bounds[axis],bounds[axis+2]].some(edge=>Math.abs(edge-value)<=tolerance))
+      consider(bounds[along],bounds[along+2],'#00b83e');
+    }
+    for(const [a,b] of liveProjection.wallEdges){
+     if(Math.abs(a[axis]-b[axis])<1e-6&&Math.abs(a[axis]-value)<=tolerance)
+      consider(Math.min(a[along],b[along]),Math.max(a[along],b[along]),'#087ee8');
+    }
+    const [x,y]=axis===0?project(value,start):project(start,value);
+    const reach=2*Math.hypot(liveCanvas.width,liveCanvas.height)/Math.sqrt(5);
+    const dx=(axis===0?-2:2)*direction*reach,dy=direction*reach;
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx,y+dy);
+    ctx.lineWidth=2;ctx.strokeStyle=color;ctx.stroke();
+   }
    for(const x of [x0,x1]){
-    ctx.strokeStyle=matches(0,x)?'#35e96b':'#ff4848ee';
-    guide(...project(x,y0),-2,1);
+    drawSide(0,x,y0,-1);
+    drawSide(0,x,y1,1);
    }
    for(const y of [y0,y1]){
-    ctx.strokeStyle=matches(1,y)?'#35e96b':'#ff4848ee';
-    guide(...project(x0,y),2,1);
+    drawSide(1,y,x0,-1);
+    drawSide(1,y,x1,1);
    }
   }
   ctx.restore();
