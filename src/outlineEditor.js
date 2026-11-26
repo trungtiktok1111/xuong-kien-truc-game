@@ -8,7 +8,8 @@ import {play3D} from './play3d.js';
 import {fitGate3D,inOutline} from './outline3d.js';
 import {combineOutline,ellipseLoop,fitShape,outlineShapes,rectangleLoop,cropOutline,moveOutline,corridorLoop,relatedLoops} from './outlineShapes.js';
 import {guideBox,appGuides} from './editorHelp.js';
-import {el,toast,yes} from './util.js';
+import {el,toast,yes,ask} from './util.js';
+import {listOutlinePresets,loadOutlinePreset,saveOutlinePreset,deleteOutlinePreset} from './outlinePresets.js';
 
 export const MAX_MAP_SIDE=600;
 export const OUTLINE_STONE={name:'Đường bao · nền đá',tw:16,margin:0,
@@ -874,6 +875,60 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const layers=Object.fromEntries(layerControls.filter(({key})=>key!=='character').map(({key,source,ids,trial})=>[key,{source:source.value,assets:preview&&trial?[trial]:[...ids]}]));
   return {layers,files:new Map(outlineZipFiles),...surfaceStyle()};
  };
+ // The saved-preset snapshot is deliberately separate from materials(): it keeps the
+ // character row (never sent to materials(), which feeds the real-map commit path) and
+ // drops the ZIP File objects (not meaningfully serializable — a reloaded preset shows
+ // "cần nạp lại ZIP" the same way an unsaved per-map selection already does).
+ const presetData=()=>({
+  layers:Object.fromEntries(layerControls.map(({key,source,ids})=>[key,{source:source.value,assets:[...ids]}])),
+  floorScale:+floorScale.value,matchJoints:matchJoints.checked,
+  scaleOverrides:Object.fromEntries(scaleOverrides)
+ });
+ let presetList=[],openPreset=null;
+ const presetSelect=el('select',{'aria-label':'Bộ đã lưu'});
+ async function refreshPresetList(selectId){
+  const list=await listOutlinePresets();
+  if(!ov.isConnected)return;
+  presetList=list;
+  presetSelect.replaceChildren(el('option',{value:''},presetList.length?'Chọn bộ đã lưu':'Chưa có bộ nào'),
+   ...presetList.map(p=>el('option',{value:p.id},p.name+' · '+new Date(p.savedAt).toLocaleString())));
+  presetSelect.value=selectId&&presetList.some(p=>p.id===selectId)?selectId:'';
+ }
+ const openPresetButton=B('Mở',async()=>{
+  const id=presetSelect.value;if(!id)return;
+  const data=await loadOutlinePreset(id);
+  if(!data){toast('Không mở được bộ đã lưu, có thể đã bị xoá.');await refreshPresetList();return;}
+  floorScale.value=String(data.floorScale||1);
+  matchJoints.checked=!!data.matchJoints;
+  scaleOverrides.clear();
+  for(const [k,v] of Object.entries(data.scaleOverrides||{}))scaleOverrides.set(k,v);
+  for(const control of layerControls){
+   const choice=data.layers?.[control.key];
+   refreshSources(control,choice?.source??control.source.value);
+   void refreshLayer(control,choice?.assets??[]);
+  }
+  dressing.checked=true;
+  openPreset={id,name:presetList.find(p=>p.id===id)?.name||''};
+  queueLivePreview(true);
+ });
+ const savePresetButton=B('Lưu…',async()=>{
+  const name=openPreset?openPreset.name:await ask('Đặt tên cho bộ chọn này:','');
+  if(name==null)return;
+  const saved=await saveOutlinePreset(openPreset?.id??null,name,presetData());
+  openPreset={id:saved.id,name:saved.name};
+  await refreshPresetList(saved.id);
+  toast('Đã lưu bộ chọn “'+saved.name+'”.');
+ });
+ const deletePresetButton=B('Xoá',async()=>{
+  const id=presetSelect.value;if(!id)return;
+  const name=presetList.find(p=>p.id===id)?.name||'';
+  if(!await yes('Xoá bộ đã lưu “'+name+'”? Không thể hoàn tác.'))return;
+  await deleteOutlinePreset(id);
+  if(openPreset?.id===id)openPreset=null;
+  await refreshPresetList();
+ });
+ const presetPanel=el('div',{class:'row'},el('label',{},'Bộ đã lưu ',presetSelect),openPresetButton,savePresetButton,deletePresetButton);
+ void refreshPresetList();
  const assembly=B('Ráp toàn bộ',()=>{
   clearTrials();dressing.checked=true;
   for(const row of layerControls)if(!row.ids.length&&!row.loading){
@@ -885,6 +940,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const materialsPanel=is3D?null:el('details',{open:''},el('summary',{},'Tự phối vật liệu Đường Bao'),
   el('div',{class:'row'},el('label',{},dressing,' Tự phối vật liệu'),assembly,
    el('label',{},'Thêm ZIP ',zipFiles)),
+  presetPanel,
   catalogNote,
   el('div',{class:'row'},el('label',{},'Cỡ viên gạch nền ',floorScale),el('label',{},matchJoints,' Tự khớp mạch')),
   el('div',{class:'outline-stage-controls'},...layerControls.map(row=>row.element)));

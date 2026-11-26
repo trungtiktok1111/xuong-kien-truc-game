@@ -4,7 +4,7 @@
   "description": "Xưởng Kiến Trúc Game",
   "main": "index.js",
   "scripts": {
-    "test": "esbuild tests/*.test.js --bundle --platform=node --format=cjs --outdir=dist/tests --out-extension:.js=.cjs && node --test dist/tests/*.test.cjs",
+    "test": "esbuild tests/*.test.js --bundle --platform=node --format=cjs --loader:.wasm=binary --loader:.zip=binary --outdir=dist/tests --out-extension:.js=.cjs && node --test dist/tests/*.test.cjs",
     "build": "bash build.sh"
   },
   "keywords": [],
