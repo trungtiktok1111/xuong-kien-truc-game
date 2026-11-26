@@ -1,3 +1,4 @@
+import {applyOutlinePropEdits} from './outlinePropPlacement.js';
 import {drawSurfaceTerrain,surfaceTerrainTile} from './surfaceContours.js';
 import {outlineHeight} from './outlineAnchors.js';
 import {surfaceLevelById} from './surfaceLibrary.js';
@@ -3382,7 +3383,9 @@ export function init2D(root,A){
       placeSurfaceMarkers(m,plan,walk);
     }
     const dressing=surfaceDressing(m,await prepareOutlineDressing(m,prepared,materials,arrivals));
-    return {M:m,sheets:prepared,dressing};
+    const placementZones=automaticPaintZones(m,makePaintLookup(prepared));
+    applyOutlinePropEdits({M:m,sheets:prepared,placementZones});
+    return {M:m,sheets:prepared,dressing,placementZones};
   }
   async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[],origin=[0,0],materials=null){
     const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
@@ -3720,7 +3723,9 @@ export function init2D(root,A){
     const draft=await buildOutlineMap(outline,w,h,level,previewSheets,stamps,true,null,origin);
     const dressing=surfaceDressing(draft,await prepareOutlineDressing(draft,previewSheets,materials));
     if(draft.cfg.proj==='angle')await ensureAngle(previewSheets);
-    return {M:draft,sheets:previewSheets,dressing};
+    const placementZones=automaticPaintZones(draft,makePaintLookup(previewSheets));
+    applyOutlinePropEdits({M:draft,sheets:previewSheets,placementZones});
+    return {M:draft,sheets:previewSheets,dressing,placementZones};
   }
   async function replaceWithOutlineMap(outline,w,h,level,stamps=[],origin=[0,0],materials=null){
     const before=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
@@ -3731,6 +3736,7 @@ export function init2D(root,A){
     const collision=linkWalkability(replacement,automaticPaintZones(replacement,makePaintLookup(prepared)));
     if(incoming.some(e=>!collision.free(e.tx+.5,e.ty+.5,.28)))
       throw Error('Có cửa từ màn khác dẫn vào ô bị chặn trong mẫu. Hãy đưa đích cửa về chế độ tự động hoặc tạo bản sao.');
+    applyOutlinePropEdits({M:replacement,sheets:prepared,placementZones:automaticPaintZones(replacement,makePaintLookup(prepared))});
     replacement.name=before.name;
     sheets.push(...prepared.slice(sheets.length));
     pushUndo();M=replacement;selId=null;sel=null;hov=null;
@@ -3747,6 +3753,7 @@ export function init2D(root,A){
       let i=2;while(MAPS.some(m=>m.name===name+' · '+i)||M.name===name+' · '+i)i++;
       fresh.name=name+' · '+i;
     }
+    applyOutlinePropEdits({M:fresh,sheets:prepared,placementZones:automaticPaintZones(fresh,makePaintLookup(prepared))});
     const next=MAPS.length;
     const other=connect?(linkFrom===index?current:MAPS[linkFrom]):null;
     if(connect&&!other)throw Error('Màn đã chọn để nối không còn trong dự án.');

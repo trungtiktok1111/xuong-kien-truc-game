@@ -14,13 +14,14 @@ function tileFrame(value,sheets){
  return {sheet,index,x:index%sheet.cols*step,y:Math.floor(index/sheet.cols)*step,flags:raw&7};
 }
 
-export function drawOutlineDraft(canvas,{M:map,sheets}){
+export function drawOutlineDraft(canvas,{M:map,sheets},camera={zoom:1,x:0,y:0}){
+ const hits=[];
  const cx=canvas.getContext('2d'),{width,height}=canvas;
  const {w,h,ents}=map,geo=outline2D(map.cfg.outline,false,ents);
  if(!geo)return;
  const [x0,y0,x1,y1]=geo.bounds;
- const s=Math.min((width-28)/Math.max(1,x1-x0),(height-28)/Math.max(1,y1-y0+Math.max(geo.front,geo.rear,3)+geo.floorThickness));
- const project=(x,y)=>[width/2+(x-y-(x0+x1)/2)*s,height/2+((x+y)/2-(y0+y1)/2+1.2)*s];
+ const s=camera.zoom*Math.min((width-28)/Math.max(1,x1-x0),(height-28)/Math.max(1,y1-y0+Math.max(geo.front,geo.rear,3)+geo.floorThickness));
+ const project=(x,y)=>[width/2+camera.x+(x-y-(x0+x1)/2)*s,height/2+camera.y+((x+y)/2-(y0+y1)/2+1.2)*s];
  stoneBackdrop(cx,width,height);
  drawFloorSlab(cx,geo,project,s);
  cx.save();clipOutline(cx,geo,project);
@@ -64,12 +65,18 @@ export function drawOutlineDraft(canvas,{M:map,sheets}){
  const texture=outlineWallImage(map.cfg.outline,sheets);
  for(const {wall,e,group,layer} of [...items.sort((a,b)=>a.depth-b.depth),...roofs.sort((a,b)=>a.depth-b.depth)]){
   if(wall){stoneWall(cx,wall,project,s,width,height,geo,texture);continue;}
-  if(e?.placedProp){drawPlacedProp(cx,e,sheets[e.tile.sid],placedPropFrame(e,project,s/.75,'iso'));continue;}
+  if(e?.placedProp){
+   const frame=placedPropFrame(e,project,s/.75,'iso');
+   hits.push({e,x:frame.x,y:frame.y,size:frame.size});
+   drawPlacedProp(cx,e,sheets[e.tile.sid],frame);continue;
+  }
   if(e){
    const frame=tileFrame((e.tile.sid*4096+e.tile.idx)*8+1,sheets);
    if(!frame)continue;
    const {sheet,x,y}=frame,side=(e.sc||3)*s/.75,[px,py]=project(e.x+1,e.y+1);
-   cx.drawImage(sheet.img,x,y,sheet.tw,sheet.tw,px-side/2+(e.ox||0)*side,py-side+(e.oy||0)*side,side,side);
+   const left=px-side/2+(e.ox||0)*side,top=py-side+(e.oy||0)*side;
+   hits.push({e,x:left,y:top,size:side});
+   cx.drawImage(sheet.img,x,y,sheet.tw,sheet.tw,left,top,side,side);
    continue;
   }
   const side=s*.95/.75,[px,py]=project(group.xc,group.yb);
@@ -79,4 +86,8 @@ export function drawOutlineDraft(canvas,{M:map,sheets}){
      px+(i%w-group.xc)*side,py+(Math.floor(i/w)-group.yb)*side,side,side);
   }
  }
+ return {project,hits,unproject:(px,py)=>{
+  const [ox,oy]=project(0,0),dx=(px-ox)/s,dy=(py-oy)/s;
+  return [dy+dx/2,dy-dx/2];
+ }};
 }

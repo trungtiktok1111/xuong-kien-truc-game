@@ -1,3 +1,5 @@
+import {canArrangeProp,propFootprint,propPlacement} from './outlinePropPlacement.js';
+import {zPath} from './zones.js';
 import {drawSurfaceTerrain} from './surfaceContours.js';
 import {surfaceLevels,surfaceLevelById,surfacePieces} from './surfaceLibrary.js';
 import {diamondOutline,newSurface,planSurface,surfaceFromLevel,surfaceTypes,surfaceWater} from './surfaceTerrain.js';
@@ -46,6 +48,7 @@ function persistOutlineZip(id,file){
 export function openOutlineEditor(editor,initialTab='shapes'){
  const is3D=editor.kind==='3d';
  const map=editor.map(),minSide=is3D?16:4,maxSide=is3D?320:MAX_MAP_SIDE;
+ let propEdits=structuredClone(map.cfg.outline?.propEdits||[]);
  const outlineLevels=levelLibrary(editor.builtinOutlineSample());
  let W=map.w,H=map.h,origin=[0,0];
  const copy=loops=>JSON.parse(JSON.stringify(loops));
@@ -294,13 +297,13 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   return ellipseLoop((a[0]+b[0])/2,(a[1]+b[1])/2,rx,ry);
  }
  function select(next){pending=[];placement=null;previewAt=null;selection=null;mode=next;gatePreview=null;draw();}
- function draft(previous=loops){return {loops:copy(previous),w:W,h:H,level:levelDraft,stamps,origin,gates,surface,front:front.value,rear:rear.value,thickness:thickness.value,floorThickness:floorThickness.value,collision:collision.checked};}
+ function draft(previous=loops){return {loops:copy(previous),w:W,h:H,level:levelDraft,stamps,origin,gates,surface,propEdits,front:front.value,rear:rear.value,thickness:thickness.value,floorThickness:floorThickness.value,collision:collision.checked};}
  function record(previous=loops){undo.push(draft(previous));if(undo.length>40)undo.shift();redo.length=0;}
  function travel(from,to){
   if(!from.length)return;
   to.push(draft());const next=from.pop();
   const resized=next.w!==W||next.h!==H||next.origin!==origin;
-  loops=next.loops;stamps=next.stamps;W=next.w;H=next.h;origin=next.origin;gates=next.gates;surface=next.surface??null;levelDraft=next.level;front.value=next.front;rear.value=next.rear;thickness.value=next.thickness;floorThickness.value=next.floorThickness??.35;collision.checked=next.collision;
+  loops=next.loops;propEdits=next.propEdits||[];stamps=next.stamps;W=next.w;H=next.h;origin=next.origin;gates=next.gates;surface=next.surface??null;levelDraft=next.level;front.value=next.front;rear.value=next.rear;thickness.value=next.thickness;floorThickness.value=next.floorThickness??.35;collision.checked=next.collision;
   if(resized)resetGridView();
   picked=-1;select('select');
  }
@@ -623,7 +626,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   patterns);
  function loadLevel(level){
   if(!level||commitBusy)return;
-  record();surface=null;levelDraft=level;loops=copy(level.loops);stamps=[];gates=[];W=level.w;H=level.h;origin=[0,0];
+  record();propEdits=[];surface=null;levelDraft=level;loops=copy(level.loops);stamps=[];gates=[];W=level.w;H=level.h;origin=[0,0];
   front.value=level.sample?.cfg.outline.front??level.height??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=level.sample?.cfg.outline.rear??level.height??DEFAULT_OUTLINE_WALL_HEIGHT;thickness.value=level.sample?.cfg.outline.thickness??WALL_THICKNESS;collision.checked=true;
   resetGridView();picked=-1;select('select');
  }
@@ -671,7 +674,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  }
  function loadOutdoorLevel(level){
   if(commitBusy)return;
-  record();surface={...surfaceFromLevel(level),finish:false};armedSurfacePiece=null;previewAt=null;
+  record();propEdits=[];surface={...surfaceFromLevel(level),finish:false};armedSurfacePiece=null;previewAt=null;
   W=level.w;H=level.h;loops=diamondOutline(W,H);stamps=[];gates=[];origin=[0,0];levelDraft=null;
   front.value=0;rear.value=0;collision.checked=true;picked=-1;
   resetGridView();select('select');
@@ -755,7 +758,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   actionStatus.textContent=message;
   actionStatus.classList.toggle('is-error',isError);
  }
- const outlineData=()=>({loops:surface?diamondOutline(W,H):copy(loops),surface:surface||undefined,front:+front.value,rear:+rear.value,thickness:+thickness.value,floorThickness:slabDepth(),
+ const outlineData=()=>({loops:surface?diamondOutline(W,H):copy(loops),surface:surface||undefined,front:+front.value,rear:+rear.value,thickness:+thickness.value,floorThickness:slabDepth(),propEdits:structuredClone(propEdits),
   areas:((levelDraft?levelDraft.areas:map.cfg.outline?.areas)||[]).map(([n,x,y])=>[n,x-origin[0],y-origin[1]]),
   color:levelDraft?.color||map.cfg.outline?.color,
   wallMaterial:!levelDraft?map.cfg.outline?.wallMaterial:undefined,
@@ -1261,15 +1264,112 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   }),surfaceInfo));
  const surfacePanel=is3D?null:el('section',{class:'outline-link-panel','aria-label':'Mặt đất'},
   el('div',{class:'row'},el('strong',{},'Mặt đất'),surfaceMode),surfaceControls);
- const liveCanvas=el('canvas',{width:900,height:410,role:'img','aria-label':'Cảnh ráp isometric trong Đường Bao'});
+ const liveCanvas=el('canvas',{width:900,height:410,tabindex:0,style:'touch-action:none','aria-label':'Cảnh ráp isometric trong Đường Bao'});
  const liveStatus=el('p',{class:'hint',role:'status'});
+ const camera={zoom:1,x:0,y:0};
+ let liveView=null,liveProjection=null,selectedProp=null,gesture=null,copyProp=false;
+ const snapProps=el('input',{type:'checkbox'});
+ snapProps.checked=true;
+ const propStatus=el('p',{class:'hint',role:'status'});
+ const zoomValue=el('output',{},'100%');
+ const duplicate=B('Nhân bản',()=>{
+  copyProp=!copyProp;
+  duplicate.setAttribute('aria-pressed',String(copyProp));
+  propStatus.textContent=copyProp?'Bấm trên sàn để đặt từng bản sao. Nhấn Esc để dừng.':'';
+ });
+ duplicate.disabled=true;
+ function redrawLive(){
+  if(!liveView)return;
+  liveProjection=drawOutlineDraft(liveCanvas,liveView,camera);
+  zoomValue.textContent=Math.round(camera.zoom*100)+'%';
+  const candidate=gesture?.candidate,entity=candidate||liveView.M.ents.find(e=>e.id===selectedProp);
+  if(!entity||!liveProjection)return;
+  const ctx=liveCanvas.getContext('2d'),{project}=liveProjection;
+  const color=gesture?.problem?'#ff7777':candidate?'#7fffab':'#ffd879';
+  ctx.save();
+  ctx.lineWidth=2;ctx.strokeStyle=color;ctx.fillStyle=color+'48';
+  for(const zone of propFootprint(entity)){
+   zPath(ctx,zone,project);ctx.fill();ctx.stroke();
+  }
+  const [x,y]=project(entity.x+1,entity.y+1);
+  ctx.beginPath();ctx.moveTo(x-8,y);ctx.lineTo(x+8,y);ctx.moveTo(x,y-8);ctx.lineTo(x,y+8);ctx.stroke();
+  ctx.restore();
+ }
+ function zoomLive(factor,pivot=[liveCanvas.width/2,liveCanvas.height/2]){
+  const zoom=Math.max(.5,Math.min(12,camera.zoom*factor)),ratio=zoom/camera.zoom;
+  camera.x=(camera.x+liveCanvas.width/2-pivot[0])*ratio+pivot[0]-liveCanvas.width/2;
+  camera.y=(camera.y+liveCanvas.height/2-pivot[1])*ratio+pivot[1]-liveCanvas.height/2;
+  camera.zoom=zoom;redrawLive();
+ }
+ const livePoint=e=>{
+  const bounds=liveCanvas.getBoundingClientRect();
+  return [(e.clientX-bounds.left)*liveCanvas.width/bounds.width,(e.clientY-bounds.top)*liveCanvas.height/bounds.height];
+ };
+ function dropProp(entity){
+  record();
+  const current=liveView.M.ents.findIndex(e=>e.id===entity.id);
+  if(current<0)liveView.M.ents.push(entity);else liveView.M.ents[current]=entity;
+  const saved={entity:structuredClone(entity),sheet:liveView.sheets[entity.tile.sid].name};
+  propEdits=[...propEdits.filter(edit=>edit.entity.id!==entity.id),saved];
+  propStatus.textContent='Đã đặt '+(entity.name||'vật dụng')+' tại '+(entity.x+1).toFixed(2)+' × '+(entity.y+1).toFixed(2)+' ô.';
+ }
+ function aimProp(point){
+  const [x,y]=liveProjection.unproject(...point),{source,dx,dy,copy}=gesture;
+  const snap=value=>snapProps.checked?Math.floor(value)+.5:Math.round(value*100)/100;
+  const candidate={...source,x:snap(x+dx)-1,y:snap(y+dy)-1};
+  gesture.candidate=candidate;
+  gesture.problem=propPlacement(liveView,candidate,copy?null:source.id);
+  propStatus.textContent=gesture.problem||'Điểm neo '+(candidate.x+1).toFixed(2)+' × '+(candidate.y+1).toFixed(2)+' ô';
+  redrawLive();
+ }
+ liveCanvas.addEventListener('wheel',e=>{
+  if(!liveView)return;
+  e.preventDefault();zoomLive(e.deltaY<0?1.2:1/1.2,livePoint(e));
+ },{passive:false});
+ liveCanvas.onpointerdown=e=>{
+  if(!liveProjection||gesture||e.button>1)return;
+  const point=livePoint(e),[x,y]=point;
+  const hit=e.button===0&&[...liveProjection.hits].reverse().find(hit=>
+   canArrangeProp(hit.e)&&x>=hit.x&&x<=hit.x+hit.size&&y>=hit.y&&y<=hit.y+hit.size);
+  const source=e.button===0&&copyProp?liveView.M.ents.find(e=>e.id===selectedProp):hit?.e;
+  if(source){
+   const [a,b]=liveProjection.unproject(x,y);
+   gesture={source,copy:copyProp,point,dx:copyProp?0:source.x+1-a,dy:copyProp?0:source.y+1-b};
+   if(!copyProp){selectedProp=source.id;duplicate.disabled=false;propStatus.textContent=source.name||'Vật dụng';}
+   if(copyProp)aimProp(point);
+  }else gesture={point,pan:[camera.x,camera.y]};
+  liveCanvas.focus({preventScroll:true});
+  liveCanvas.setPointerCapture(e.pointerId);redrawLive();
+ };
+ liveCanvas.onpointermove=e=>{
+  if(!gesture||!liveProjection)return;
+  const point=livePoint(e),dx=point[0]-gesture.point[0],dy=point[1]-gesture.point[1];
+  if(gesture.pan){camera.x=gesture.pan[0]+dx;camera.y=gesture.pan[1]+dy;redrawLive();}
+  else if(gesture.copy||gesture.candidate||Math.hypot(dx,dy)>3)aimProp(point);
+ };
+ liveCanvas.onpointerup=()=>{
+  if(!gesture)return;
+  const {candidate,problem,copy}=gesture;
+  gesture=null;
+  if(candidate&&!problem)dropProp(copy?{...candidate,id:'outline-copy-'+crypto.randomUUID()}:candidate);
+  redrawLive();
+ };
+ liveCanvas.onpointercancel=()=>{gesture=null;redrawLive();};
+ liveCanvas.onkeydown=e=>{
+  if(e.key==='Escape'&&copyProp){e.stopPropagation();duplicate.click();}
+ };
+ const liveTools=el('div',{class:'row'},el('button',{type:'button',class:'b','aria-label':'Thu nhỏ cảnh ráp',onclick:()=>zoomLive(1/1.25)},'−'),zoomValue,
+  el('button',{type:'button',class:'b','aria-label':'Phóng to cảnh ráp',onclick:()=>zoomLive(1.25)},'+'),
+  B('Vừa khung',()=>{Object.assign(camera,{zoom:1,x:0,y:0});redrawLive();}),
+  duplicate,el('label',{},snapProps,' Bám tâm ô'));
  const livePanel=is3D?null:el('section',{class:'outline-live-view','aria-label':'Xem trước cảnh ráp'},
-  el('strong',{},'Xem trước cảnh ráp'),liveCanvas,liveStatus);
+  el('strong',{},'Xem trước cảnh ráp'),liveTools,
+  el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),liveCanvas,propStatus,liveStatus);
  let liveTimer,liveKey='',liveRevision=0;
  queueLivePreview=(force=false)=>{
   if(is3D||!ov.isConnected||surface?.finish!==false&&layerControls.some(row=>row.loading))return;
   const opts=surface?.finish===false?null:materials(true);
-  const key=JSON.stringify([W,H,loops,origin,stamps,levelDraft?.id,front.value,rear.value,thickness.value,slabDepth(),collision.checked,surface,opts]);
+  const key=JSON.stringify([W,H,loops,origin,stamps,levelDraft?.id,front.value,rear.value,thickness.value,slabDepth(),collision.checked,surface,propEdits,opts]);
   if(!force&&key===liveKey)return;
   liveKey=key;clearTimeout(liveTimer);clearTimeout(sequenceTimer);
   const revision=++liveRevision;
@@ -1279,7 +1379,12 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    try{
     const view=await editor.liveOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,opts,collision.checked);
     if(revision!==liveRevision||!ov.isConnected)return;
-    drawOutlineDraft(liveCanvas,view);
+    gesture=null;liveView=view;
+    if(!view.M.ents.some(e=>e.id===selectedProp)){
+     selectedProp=null;duplicate.disabled=true;
+     copyProp=false;duplicate.setAttribute('aria-pressed','false');
+    }
+    redrawLive();
     liveCanvas.hidden=false;
     liveStatus.textContent=[surface?.finish===false?'Bố cục thô · Bấm Phối vật liệu để chọn tài nguyên.':'',view.dressing?.summary,view.dressing?.warnings].filter(Boolean).join(' ');
     if(sequence){
@@ -1292,7 +1397,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
     }
    }catch(error){
     if(revision!==liveRevision||!ov.isConnected)return;
-    stopSequence();liveCanvas.hidden=true;liveStatus.textContent=error.message;
+    stopSequence();liveStatus.textContent=error.message;
    }
   },160);
  };
