@@ -2,6 +2,14 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này có kèm bộ mảnh Kenney chọn lọc theo giấy phép CC0.
 
+## Mặt đất trong Đường Bao 2D
+
+Chọn **Đường bao → Mặt đất → Phủ kín hình thoi** để phủ đất toàn bộ lưới. Chọn mẫu đồng bằng, thành phố, thôn trang, tông môn hoặc ven biển. Có thể bật hoặc tắt địa hình, công trình, mạng đường và từng loại mặt nước.
+
+Trong **Ráp vùng**, chọn một loại đất, đường, nước hoặc cầu rồi kéo trên lưới. Các vùng được ráp theo thứ tự đặt và có thể hoàn tác. Nước và vách núi chặn bước chân. Đường qua vùng nước trong đất liền được nối bằng cầu. Với cảnh biển, dùng vùng **Cầu** để đặt lối vượt nước tại vị trí mong muốn.
+
+Dùng **Chơi thử bản nháp** để kiểm tra tuyến đi. Dùng **Tạo màn mới từ hình này** để giữ cảnh hầm hiện tại và thêm màn mặt đất riêng.
+
 ## Tự phối vật liệu Đường Bao 2D
 
 Mở **2D → Đường Bao → Tự phối vật liệu Đường Bao**. Chọn gói ZIP và mảnh ráp riêng cho từng lớp **Nền**, **Phủ nền**, **Tường bao**, **Vật dụng** và **Nhà**. Dùng **Thử lần lượt** để xem từng mảnh tương thích ngay trong bản xem trước, hoặc dùng **Trước**, **Sau** và **Bỏ qua**. Dùng **Áp dụng vào bản đồ**, **Chơi thử bản nháp** hoặc **Tạo màn mới từ hình này**. Xưởng chừa hành lang và kiểm tra va chạm khi đặt đạo cụ.

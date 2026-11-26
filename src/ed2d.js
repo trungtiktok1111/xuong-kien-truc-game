@@ -1,3 +1,5 @@
+import {planSurface,surfaceReachable,surfaceKinds,surfaceHash,surfaceProfiles} from './surfaceTerrain.js';
+import {surfaceSheet,surfaceRock,SURFACE_VARIANTS} from './surfaceArt.js';
 import builtinOutlineArchive from '../assets/kenney-outline.zip';
 import {dressOutline,kenneyOutlinePacks} from './outlineDressing.js';
 import {campaignStart,linkWalkability,planMapPair,safeMapEntry} from './mapLinks2d.js';
@@ -3243,6 +3245,82 @@ export function init2D(root,A){
       }
     }
   }
+  let outdoorGround,outdoorStone;
+  async function installSurface(m,target,previous=null){
+    const {w,h}=m,outline=m.cfg.outline,spec=outline.surface;
+    const plan=planSurface(w,h,spec),K=surfaceKinds;
+    const sid=await loadBuiltinSheet(outdoorGround??=surfaceSheet(),target);
+    const former=previous?planSurface(w,h,previous).blocked:null;
+    for(let i=0;i<plan.tiles.length;i++){
+      const x=i%w,y=Math.floor(i/w),kind=plan.tiles[i];
+      const v=Math.floor(surfaceHash(x,y,spec.seed)*SURFACE_VARIANTS);
+      const axis=plan.tiles[i-1]===K.bridge||plan.tiles[i+1]===K.bridge?4:0;
+      m.layers[0][i]=enc(sid,kind*SURFACE_VARIANTS+v,kind===K.bridge?axis:0);
+      m.blk[i]=Number(plan.blocked[i]||!!(former&&m.blk[i]&&!former[i]));
+    }
+    const generated=[];
+    if(plan.trees.length){
+      const rock=await loadBuiltinSheet(outdoorStone??=surfaceRock(),target);
+      const props=await Promise.all([vatPack('thieu-lam').catch(()=>null),vatPack('kenney-nong-trai').catch(()=>null)]);
+      const leaf=new Map();
+      for(const [kind,pack,key] of [['tree',props[0],'tung_chau'],['crop',props[1],'corn']]){
+        const a=pack?.items.find(item=>item.k===key);
+        if(a)leaf.set(kind,{a,sid:await loadBuiltinSheet({name:'Vat-'+pack.id,url:pack.atlas,tw:pack.T,margin:0},target)});
+      }
+      for(const {x,y,kind,shade} of plan.trees){
+        if(m.ents.some(e=>!e.surfaceGenerated&&e.t==='deco'&&Math.hypot(e.x+1-(x+.5),e.y+1-(y+.5))<1.2))continue;
+        const art=leaf.get(kind),tree=kind==='tree';
+        if(!art&&kind!=='rock')continue;
+        generated.push({t:'deco',id:`surface-${kind}-${x}-${y}`,name:kind==='rock'?'Vách đá':tree?'Tùng':'Ruộng ngô',
+          x:x-.5,y:y-.5,placedProp:true,tile:{sid:art?.sid??rock,idx:art?.a.i??0},
+          sc:(kind==='rock'?3.1:(art.a.sc||2.4)*(tree?1.5:.80))*(.84+shade*.29),oy:art?.a.oy||0,
+          walk:!tree,col:tree?[{k:'circle',x:0,y:0,r:.20}]:[],surfaceGenerated:true});
+      }
+    }
+    if(plan.houseLots.length){
+      const farm=kenneyOutlinePacks.find(p=>p[0]==='farm');
+      const kit=await loadBuiltinOutlinePack(farm,{floorScale:1,matchJoints:false});
+      const house=kit.houses?.[0];
+      if(house){
+        const ids=new Map();
+        for(const id of new Set(house.ents.map(e=>e.tile.sid)))ids.set(id,await loadBuiltinSheet(kit.sheets[id],target));
+        for(const {x,y} of plan.houseLots){
+          if(m.ents.some(e=>!e.surfaceGenerated&&e.t==='deco'&&Math.abs(e.x+1-x-1)<2&&Math.abs(e.y+1-y-1)<2))continue;
+          house.ents.forEach((e,i)=>generated.push({...e,x:e.x+x,y:e.y+y,
+            tile:{...e.tile,sid:ids.get(e.tile.sid)},id:`surface-house-${x}-${y}-${i}`,surfaceGenerated:true}));
+        }
+      }
+    }
+    m.ents=m.ents.filter(e=>!e.surfaceGenerated).concat(generated);
+    return plan;
+  }
+  function placeSurfaceMarkers(m,plan,walk){
+    const preferred={x:plan.start[0],y:plan.start[1]};
+    const entry=safeMapEntry(m,walk,preferred);
+    if(!entry)throw Error('Mặt đất cần ít nhất hai ô liền nhau đi được. Hãy thêm một dải đất hoặc đường.');
+    placeMapEntry(m,entry);
+    const [gx,gy]=plan.goal;
+    const obstacle=Uint8Array.from(m.blk);
+    // The generated lots and tree trunks are excluded from the route search, leaving their nearby paths open.
+    for(const {x,y,kind} of plan.trees)if(kind==='tree')obstacle[y*m.w+x]=1;
+    for(const {x,y} of plan.houseLots)for(let dy=0;dy<3;dy++)for(let dx=0;dx<2;dx++)obstacle[(y+dy)*m.w+x+dx]=1;
+    obstacle[entry.y*m.w+entry.x]=0;
+    const route=(m.ents.some(e=>!e.surfaceGenerated&&!e.walk&&e.t==='deco')?
+      walk.component(entry):surfaceReachable(m.w,m.h,obstacle,[entry.x,entry.y]))
+      .filter(p=>p.x!==entry.x||p.y!==entry.y);
+    const goal=route.reduce((best,p)=>!best||Math.abs(p.x-gx)+Math.abs(p.y-gy)<Math.abs(best.x-gx)+Math.abs(best.y-gy)?p:best,null);
+    if(!goal)throw Error('Chưa có đường đi từ điểm xuất phát. Hãy thêm đường hoặc cầu.');
+    const existing=m.ents.find(e=>e.t==='goal');
+    if(existing)Object.assign(existing,goal);
+    else m.ents.push({id:'surface-goal',t:'goal',...goal,name:'Đích',tile:null});
+  }
+  function surfaceDressing(m,details){
+    if(!m.cfg.outline?.surface)return details;
+    const {w,h,blk}=m;
+    const count=blk.reduce((sum,b)=>sum+Number(!b),0);
+    const text=`${(count).toLocaleString('vi-VN')} / ${(w*h).toLocaleString('vi-VN')} ô đi được theo địa hình`;
+    return {summary:[text,details?.summary].filter(Boolean).join(' · '),warnings:details?.warnings};
+  }
   async function buildOutlineEdit(outline,updateCollision,w,h,stamps,origin,materials,prepared){
     validateDimensions(w,h);validateMapOutline(outline,w,h);
     const [ox,oy]=origin;
@@ -3253,6 +3331,9 @@ export function init2D(root,A){
     }else validateResize(w,h);
     const m=origin.some(Boolean)?rebaseOutlineSource(M,w,h,origin,curMap):
       w===M.w&&h===M.h?clone(M):resizedMap(M,w,h);
+    if(outline.surface&&!m.cfg.outline?.surface){
+      m.ents=m.ents.filter(e=>!(e.outlineAutoProp||e.outlineAutoHouse||e.outlineCast)&&(!e.wallId?.startsWith('outline:')||isMapLink(e)));
+    }
     const edgeGates=m.ents.filter(e=>e.wallId?.startsWith('outline:'));
     if(edgeGates.length&&edgeGates.some(e=>!mountGate(e,outlineSupports(outline),{distance:.015})))
       throw Error('Đường bao mới làm lệch cổng. Hãy lắp lại cổng hoặc xóa cổng trước khi sửa đoạn chứa cổng.');
@@ -3263,10 +3344,26 @@ export function init2D(root,A){
       const invalid=m.ents.find(e=>['start','goal','door'].includes(e.t)&&!mask[Math.floor(e.y)*w+Math.floor(e.x)]);
       if(invalid)throw Error('Đường bao làm mất lối tới '+invalid.name+'. Hãy đặt đối tượng vào trong sàn.');
     }
+    if(!outline.surface&&m.cfg.outline?.surface){
+      m.ents=m.ents.filter(e=>!e.surfaceGenerated);
+      const terrain=planSurface(m.w,m.h,m.cfg.outline.surface);
+      for(let i=0;i<m.blk.length;i++){
+        if(terrain.blocked[i])m.blk[i]=0;
+        if(prepared[(m.layers[0][i]-1)>>15]?.name==='Mặt đất · Địa hình và đường')m.layers[0][i]=0;
+      }
+    }
     const fill=outlineFill(m,stamps)||await stoneTile(prepared);
     paintOutline(m,outline,mask,fill,updateCollision,oldMask,stamps,null,prepared);
     const arrivals=fixedIncomingOutlineCells().map(([x,y])=>[x+.5-ox,y+.5-oy]);
-    const dressing=await prepareOutlineDressing(m,prepared,materials,arrivals);
+    if(outline.surface){
+      const plan=await installSurface(m,prepared,M.cfg.outline?.surface);
+      const walk=linkWalkability(m,automaticPaintZones(m,makePaintLookup(prepared)));
+      if(arrivals.some(([x,y])=>!walk.free(x,y,.28)))throw Error('Địa hình mới chặn điểm đến của một cổng nối. Hãy chọn Tạo màn mới hoặc điều chỉnh khu vực đó.');
+      if(m.ents.some(e=>isMapLink(e)&&!walk.free(e.x+.5,e.y+.5,.28)&&!e.wallId))
+        throw Error('Địa hình mới chặn một cổng nối. Hãy tạo màn mới hoặc giữ nền ở vị trí cổng.');
+      placeSurfaceMarkers(m,plan,walk);
+    }
+    const dressing=surfaceDressing(m,await prepareOutlineDressing(m,prepared,materials,arrivals));
     return {M:m,sheets:prepared,dressing};
   }
   async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[],origin=[0,0],materials=null){
@@ -3293,7 +3390,7 @@ export function init2D(root,A){
     const c=defCfg();c.view='iso';c.proj=level?'iso':M.cfg.proj||'iso';c.win='goal';
     if(level)c.outlineTemplate=level.id;
     else if(M.layers[0].some(Boolean)){c.smooth=M.cfg.smooth;c.hero={...M.cfg.hero};c.anims=M.cfg.anims;c.heroAnim=M.cfg.heroAnim;c.outlineHero=M.cfg.outlineHero;c.beforeOutlineHero=M.cfg.beforeOutlineHero;c.playerHeight=M.cfg.playerHeight;c.crouchHeight=M.cfg.crouchHeight;}
-    const name=level?.name||'Màn '+(MAPS.length+1)+' · Đường bao';
+    const name=outline.surface?surfaceProfiles[outline.surface.profile].name:level?.name||'Màn '+(MAPS.length+1)+' · Đường bao';
     const fresh=mkMap(w,h,name,c);
     const place=i=>({x:i%w,y:Math.floor(i/w)});
     if(sourcePreset&&origin.some(Boolean))sourcePreset=rebaseOutlineSource(sourcePreset,w,h,origin);
@@ -3302,7 +3399,7 @@ export function init2D(root,A){
       fresh.ents.push(...sourcePreset.ents.filter(e=>e.t==='deco'&&(e.wallId?.startsWith('outline:')?
         mountGate(e,outlineSupports(outline),{distance:.015}):mask[index([Math.floor(e.x),Math.floor(e.y)])])));
     }
-    const source=sourcePreset||(level||!useSource?null:origin.some(Boolean)?rebaseOutlineSource(M,w,h,origin):M);
+    const source=sourcePreset||(level||outline.surface||!useSource?null:origin.some(Boolean)?rebaseOutlineSource(M,w,h,origin):M);
     let fill=outlineFill(source,stamps);
     if(level?.theme&&!sourcePreset){
       const style=builtinOutlineSample();
@@ -3321,6 +3418,11 @@ export function init2D(root,A){
       fill=enc(await loadBuiltinSheet({name:'Đường bao · '+level.name,tw:16,margin:0,url:tile.toDataURL()},target),0);
     }
     paintOutline(fresh,outline,mask,fill||await stoneTile(target),true,null,stamps,source,target);
+    if(outline.surface){
+      const plan=await installSurface(fresh,target);
+      placeSurfaceMarkers(fresh,plan,linkWalkability(fresh,automaticPaintZones(fresh,makePaintLookup(target))));
+      return fresh;
+    }
     const walk=linkWalkability(sceneForPlay(fresh,c,makePaintLookup(target)));
     const start=safeMapEntry(fresh,walk,place(requestedStart));
     if(!start)throw Error('Cần ít nhất hai ô sàn liền nhau, đủ rộng để nhân vật đi qua. Hãy mở rộng sàn hoặc hành lang.');
@@ -3569,7 +3671,7 @@ export function init2D(root,A){
   async function previewOutlineMap(outline,w,h,level,stamps=[],origin=[0,0],materials=null){
     const previewSheets=sheets.slice();
     const draft=await buildOutlineMap(outline,w,h,level,previewSheets,stamps,true,null,origin);
-    const dressing=await prepareOutlineDressing(draft,previewSheets,materials);
+    const dressing=surfaceDressing(draft,await prepareOutlineDressing(draft,previewSheets,materials));
     if(draft.cfg.proj==='angle')await ensureAngle(previewSheets);
     return {M:draft,sheets:previewSheets,dressing};
   }
@@ -3591,7 +3693,7 @@ export function init2D(root,A){
   async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true,connect=false,materials=null,linkFrom=curMap){
     const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
     const fresh=await buildOutlineMap(outline,w,h,level,prepared,stamps,useSource,null,origin);
-    const dressing=await prepareOutlineDressing(fresh,prepared,materials);
+    const dressing=surfaceDressing(fresh,await prepareOutlineDressing(fresh,prepared,materials));
     if(M!==current||curMap!==index||revision!==buildRevision)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
     if(MAPS.some(m=>m.name===fresh.name)||M.name===fresh.name){
       const name=fresh.name;

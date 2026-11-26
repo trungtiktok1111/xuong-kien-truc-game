@@ -1,3 +1,4 @@
+import {planSurface,surfaceKinds as ground} from './surfaceTerrain.js';
 import {rasterOutline} from './mapCollision.js';
 import {decoZones,zonesHit} from './zones.js';
 import {portalAnchor,isMapLink} from './wall2d.js';
@@ -21,6 +22,8 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
   const {w,h,ents,blk}=map,mask=rasterOutline(map.cfg.outline.loops,w,h),n=w*h;
   if(!stages&&!materials.some(m=>m.floors.length))throw Error('Các gói đã chọn thiếu mảnh sàn phù hợp với Đường Bao.');
   // Distance from the nearest wall distinguishes corridors from wide rooms.
+  const surface=map.cfg.outline.surface?planSurface(w,h,map.cfg.outline.surface).tiles:null;
+  const dry=i=>!surface||surface[i]===ground.plain||surface[i]===ground.meadow||surface[i]===ground.plaza;
   const distance=new Int16Array(n).fill(-1),queue=new Int32Array(n);
   let tail=0;
   const around=(i,fn)=>{
@@ -54,6 +57,7 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
   let floorCell=0;
   const floorCells=mask.reduce((sum,cell)=>sum+cell,0);
   if(core&&stage('floor'))for(let i=0;i<n;i++){
+    if(!dry(i))continue;
     let zone=owners[i];
     if(zone===-1&&distance[i]===3)around(i,j=>{if(owners[j]>=0)zone=owners[j];});
     if(!mask[i]){
@@ -86,7 +90,7 @@ export function dressOutline(map,materials,value,placementZones=[],arrivals=[],s
         const x=i%w,y=Math.floor(i/w),roomId=owners[i];
         if(x>=w-1||y>=h-1||roomId<0||(used.get(roomId)||0)>=perRoom||(x+y+stage('overlay'))%3)continue;
         const cells=[i,i+1,i+w,i+w+1];
-        if(cells.some(j=>owners[j]!==roomId||map.layers[1][j]))continue;
+        if(cells.some(j=>!dry(j)||blk[j]||owners[j]!==roomId||map.layers[1][j]))continue;
         const overlay=mixSelected?overlays[placed%overlays.length]:choose(overlays,'overlay');
         for(const j of cells){
           const tile=value(overlay.sid);

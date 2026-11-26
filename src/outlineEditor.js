@@ -1,3 +1,4 @@
+import {diamondOutline,newSurface,planSurface,surfaceProfiles,surfaceTypes,surfaceWater} from './surfaceTerrain.js';
 import {drawOutlineDraft} from './outlineDraftView.js';
 import {WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS} from './wall2d.js';
 import {DEFAULT_OUTLINE_WALL_HEIGHT,fitDraftGrid} from './outlineGrid.js';
@@ -28,6 +29,9 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  let W=map.w,H=map.h,origin=[0,0];
  const copy=loops=>JSON.parse(JSON.stringify(loops));
  const original=copy(map.cfg.outline?.loops||[]);
+ let surface=is3D?null:structuredClone(map.cfg.outline?.surface||null);
+ let drawnSurface=null;
+ const surfaceColors=surfaceTypes.map(t=>t[2]);
  let queueLivePreview=()=>{};
  let loops=copy(original),stamps=[],pending=[],mode='select',picked=-1,drag=null;
  const undo=[],redo=[];
@@ -75,13 +79,14 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    gridNote.textContent='Nhập số nguyên từ '+minSide+' đến '+maxSide+' cho mỗi chiều.';return false;
   }
   if(w===W&&h===H){gridNote.textContent='';return true;}
-  if(!validOutline(loops,w,h)){
+  if(!surface&&!validOutline(loops,w,h)){
    gridNote.textContent='Khung mới cắt qua đường bao. Hãy dời hình vào trong hoặc chọn số ô lớn hơn.';return false;
   }
-  record();W=w;H=h;resetGridView();picked=-1;select('select');return true;
+  record();W=w;H=h;if(surface)loops=diamondOutline(W,H);resetGridView();picked=-1;select('select');return true;
  }
  function resetGridView(){gridWidth.value=W;gridHeight.value=H;gridNote.textContent='';fitGrid();previewAt=null;}
  function fitBuiltGrid(){
+  if(surface){fitGrid();draw();return;}
   if(!loops.length){fitGrid();draw();gridNote.textContent='Dựng đường bao trước để tự thu lưới.';return;}
   const {bounds,keepOrigin}=editor.outlineGridBounds(levelDraft);
   const fitted=fitDraftGrid(loops,stamps,origin,W,H,bounds,keepOrigin);
@@ -137,6 +142,23 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   c.beginPath();
   for(const loop of loops){points(loop);c.closePath();}
   c.fillStyle=levelDraft?.color||map.cfg.outline?.color||'#607c75';c.fill('evenodd');
+  if(surface){
+   if(!drawnSurface||drawnSurface.spec!==surface||drawnSurface.w!==W||drawnSurface.h!==H)
+    drawnSurface={spec:surface,w:W,h:H,plan:planSurface(W,H,surface)};
+   const {tiles}=drawnSurface.plan;
+   const x0=Math.max(0,Math.floor(-ox/s)),x1=Math.min(W,Math.ceil((760-ox)/s));
+   const y0=Math.max(0,Math.floor(-oy/s)),y1=Math.min(H,Math.ceil((465-oy)/s));
+   for(let y=y0;y<y1;y++)for(let x=x0;x<x1;){
+    const kind=tiles[y*W+x],from=x++;
+    while(x<x1&&tiles[y*W+x]===kind)x++;
+    c.fillStyle=surfaceColors[kind];
+    c.fillRect(xp(from),yp(y),(x-from)*s+.2,s+.2);
+   }
+   if(drag?.surface&&pending.length===2){
+    const [[x,y],[u,v]]=pending;
+    c.strokeStyle='#ffe3a0';c.lineWidth=2;c.strokeRect(xp(Math.min(x,u)),yp(Math.min(y,v)),Math.abs(u-x)*s,Math.abs(v-y)*s);
+   }
+  }
   for(let i=0;i<loops.length;i++){
    c.beginPath();points(loops[i]);c.closePath();c.strokeStyle=i===picked?'#f5c86e':'#b7d3c5';c.lineWidth=i===picked?2:1;c.stroke();
    if(i===picked)for(const [x,y] of loops[i]){c.fillStyle='#ffda91';c.fillRect(xp(x)-1.5,yp(y)-1.5,3,3);}
@@ -194,7 +216,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    c.moveTo(xp(x),yp(0));c.lineTo(xp(x),yp(H));c.moveTo(xp(0),yp(y));c.lineTo(xp(W),yp(y));c.stroke();c.restore();
   }
   const op=operation.selectedOptions[0].textContent;
-  status.textContent=placement?(placement.name+' · '+angleValue()+'° · '+
+  status.textContent=surface?'Mặt đất · Nước và vách đá chặn đi. Đường qua sông, kênh, suối, hồ hoặc ao được ráp cầu.':placement?(placement.name+' · '+angleValue()+'° · '+
    (preview.length?'Bấm để đặt. Q/E xoay 15°. Esc để thoát.':'Hình vượt lưới. Hãy chọn cỡ khác, đổi góc hoặc mở rộng lưới.')) :
    mode==='scan'?(is3D?'Quét phần mặt bằng để sao chép.':'Quét để lấy đường bao và các lớp ô hình, rồi bấm Sao chép hoặc Ctrl+C.'):
    mode==='gate'?'Bấm cạnh thẳng đủ dài để lắp cổng. Chọn màn đích nếu muốn nối cảnh.':
@@ -212,6 +234,17 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   for(const [name,button] of modeButtons)button.setAttribute('aria-pressed',String(name===mode));
   if(undoButton)undoButton.disabled=!undo.length;
   if(redoButton)redoButton.disabled=!redo.length;
+  if(surfacePanel){
+   surfaceControls.hidden=!surface;
+   toolbar.hidden=!!surface;editShape.hidden=!!surface;
+   surfaceMode.textContent=surface?'Dùng đường bao hầm / tự vẽ':'Phủ kín hình thoi';
+   if(surface){
+    surfaceProfile.value=surface.profile;
+    for(const [key,check] of surfaceFlags)check.checked=!!surface[key];
+    for(const [key,check] of surfaceWaters)check.checked=surface.water.includes(key);
+    surfaceInfo.textContent=surface.patches.length+' vùng tự ráp · Kéo trên lưới để đặt vùng.';
+   }
+  }
   queueLivePreview();
  }
  function dragLoop(a,b){
@@ -222,13 +255,13 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   return ellipseLoop((a[0]+b[0])/2,(a[1]+b[1])/2,rx,ry);
  }
  function select(next){pending=[];placement=null;previewAt=null;selection=null;mode=next;gatePreview=null;draw();}
- function draft(previous=loops){return {loops:copy(previous),w:W,h:H,level:levelDraft,stamps,origin,gates,front:front.value,rear:rear.value,thickness:thickness.value,collision:collision.checked};}
+ function draft(previous=loops){return {loops:copy(previous),w:W,h:H,level:levelDraft,stamps,origin,gates,surface,front:front.value,rear:rear.value,thickness:thickness.value,collision:collision.checked};}
  function record(previous=loops){undo.push(draft(previous));if(undo.length>40)undo.shift();redo.length=0;}
  function travel(from,to){
   if(!from.length)return;
   to.push(draft());const next=from.pop();
   const resized=next.w!==W||next.h!==H||next.origin!==origin;
-  loops=next.loops;stamps=next.stamps;W=next.w;H=next.h;origin=next.origin;gates=next.gates;levelDraft=next.level;front.value=next.front;rear.value=next.rear;thickness.value=next.thickness;collision.checked=next.collision;
+  loops=next.loops;stamps=next.stamps;W=next.w;H=next.h;origin=next.origin;gates=next.gates;surface=next.surface??null;levelDraft=next.level;front.value=next.front;rear.value=next.rear;thickness.value=next.thickness;collision.checked=next.collision;
   if(resized)resetGridView();
   picked=-1;select('select');
  }
@@ -354,6 +387,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   if(e.button!=null&&e.button!==0)return;
   box.focus({preventScroll:true});
   const p=point(e);
+  if(surface){drag={start:p,surface:true};pending=[p,p];canvas.setPointerCapture?.(e.pointerId);draw();return;}
   if(placement){commitPlacement(p);return;}
   if(mode==='polygon'){pending.push(p);draw();return;}
   if(mode==='scan'){drag={start:p,scan:true};selection=[p,p];}
@@ -378,6 +412,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    const next=screen(e);ox+=next[0]-pan[0];oy+=next[1]-pan[1];pan=next;boundView();draw();return;
   }
   const p=point(e);
+  if(drag?.surface){pending=[drag.start,p];draw();return;}
   if(placement){previewAt=p;draw();return;}
   if(!drag){draw();return;}
   if(drag.scan){selection=[drag.start,p];draw();return;}
@@ -395,6 +430,14 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   if(pan){pan=null;return;}
   const p=point(e),d=drag;drag=null;
   if(!d)return;
+  if(d.surface){
+   pending=[];
+   const [x,y]=d.start,[u,v]=p;
+   const a=Math.min(W-1,Math.floor(Math.min(x,u))),b=Math.min(H-1,Math.floor(Math.min(y,v)));
+   const bounds=[a,b,Math.max(a+1,Math.ceil(Math.max(x,u))),Math.max(b+1,Math.ceil(Math.max(y,v)))];
+   if(surface.patches.length>=128){toast('Đã có 128 vùng. Hãy bỏ vùng cuối hoặc dùng mẫu nền khác.');draw();return;}
+   record();surface={...surface,patches:[...surface.patches,{kind:surfaceBrush.value,bounds}]};draw();return;
+  }
   if(d.scan){selection=[d.start,p];draw();return;}
   if(d.index){
    if(JSON.stringify(d.old)!==JSON.stringify(loops))record(d.old);
@@ -472,7 +515,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  undoButton=B('Hoàn tác',()=>travel(undo,redo));redoButton=B('Làm lại',()=>travel(redo,undo));
  const setup=el('div',{class:'row outline-setup'},el('label',{},'Cách đặt ',operation),el('label',{},snap,' Bám 1 ô'),
   undoButton,redoButton,B('Khôi phục lúc mở',()=>{
-   record();loops=copy(original);stamps=[];gates=structuredClone(map.cfg.outline?.gates||[]);W=map.w;H=map.h;origin=[0,0];levelDraft=null;
+   record();loops=copy(original);surface=is3D?null:structuredClone(map.cfg.outline?.surface||null);stamps=[];gates=structuredClone(map.cfg.outline?.gates||[]);W=map.w;H=map.h;origin=[0,0];levelDraft=null;
    front.value=map.cfg.outline?.front??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=map.cfg.outline?.rear??DEFAULT_OUTLINE_WALL_HEIGHT;thickness.value=map.cfg.outline?.thickness??WALL_THICKNESS;collision.checked=map.cfg.outline?.floorCollision!==false;
    resetGridView();picked=-1;select('select');
   }));
@@ -532,7 +575,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   patterns);
  function loadLevel(level){
   if(!level||commitBusy)return;
-  record();levelDraft=level;loops=copy(level.loops);stamps=[];gates=[];W=level.w;H=level.h;origin=[0,0];
+  record();surface=null;levelDraft=level;loops=copy(level.loops);stamps=[];gates=[];W=level.w;H=level.h;origin=[0,0];
   front.value=level.sample?.cfg.outline.front??level.height??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=level.sample?.cfg.outline.rear??level.height??DEFAULT_OUTLINE_WALL_HEIGHT;thickness.value=level.sample?.cfg.outline.thickness??WALL_THICKNESS;collision.checked=true;
   resetGridView();picked=-1;select('select');
  }
@@ -594,7 +637,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   actionStatus.textContent=message;
   actionStatus.classList.toggle('is-error',isError);
  }
- const outlineData=()=>({loops:copy(loops),front:+front.value,rear:+rear.value,thickness:+thickness.value,
+ const outlineData=()=>({loops:surface?diamondOutline(W,H):copy(loops),surface:surface||undefined,front:+front.value,rear:+rear.value,thickness:+thickness.value,
   areas:((levelDraft?levelDraft.areas:map.cfg.outline?.areas)||[]).map(([n,x,y])=>[n,x-origin[0],y-origin[1]]),
   color:levelDraft?.color||map.cfg.outline?.color,
   wallMaterial:!levelDraft?map.cfg.outline?.wallMaterial:undefined,
@@ -956,6 +999,48 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   catalogNote,
   el('div',{class:'row'},el('label',{},'Cỡ viên gạch nền ',floorScale),el('label',{},matchJoints,' Tự khớp mạch')),
   el('div',{class:'outline-stage-controls'},...layerControls.map(row=>row.element)));
+ const surfaceProfile=el('select',{'aria-label':'Mẫu mặt đất'},...Object.entries(surfaceProfiles)
+  .map(([key,item])=>el('option',{value:key},item.name)));
+ const surfaceBrush=el('select',{'aria-label':'Loại vùng cần ráp'},...surfaceTypes
+  .map(([key,label])=>el('option',{value:key},label)));
+ function changeSurface(change){if(!surface)return;record();surface={...surface,...change};draw();}
+ const surfaceMode=B('Phủ kín hình thoi',()=>{
+  record();
+  if(surface){
+   surface=null;loops=map.cfg.outline?.surface?[]:copy(original);
+   front.value=map.cfg.outline?.surface?DEFAULT_OUTLINE_WALL_HEIGHT:map.cfg.outline?.front??DEFAULT_OUTLINE_WALL_HEIGHT;
+   rear.value=map.cfg.outline?.surface?DEFAULT_OUTLINE_WALL_HEIGHT:map.cfg.outline?.rear??DEFAULT_OUTLINE_WALL_HEIGHT;
+  }else{
+   surface=newSurface(surfaceProfile.value);loops=diamondOutline(W,H);stamps=[];levelDraft=null;
+   front.value=0;rear.value=0;collision.checked=true;
+  }
+  select('select');
+ });
+ surfaceProfile.onchange=()=>{
+  const next=newSurface(surfaceProfile.value);
+  changeSurface({...next,seed:surface.seed,patches:surface.patches});
+ };
+ const surfaceFlags=[['land','Địa hình'],['roads','Mạng đường'],['buildings','Công trình mẫu']].map(([key,label])=>{
+  const input=el('input',{type:'checkbox','aria-label':label});
+  input.onchange=()=>changeSurface({[key]:input.checked});
+  return [key,input,label];
+ });
+ const surfaceWaters=surfaceWater.map(key=>{
+  const label=surfaceTypes.find(t=>t[0]===key)[1];
+  const input=el('input',{type:'checkbox','aria-label':label});
+  input.onchange=()=>changeSurface({water:surfaceWaters.filter(([,box])=>box.checked).map(([id])=>id)});
+  return [key,input,label];
+ });
+ const surfaceInfo=el('span',{class:'hint',role:'status'});
+ const surfaceControls=el('div',{class:'surface-controls'},
+  el('div',{class:'row'},el('label',{},'Mẫu ',surfaceProfile),B('Đổi thế đất',()=>changeSurface({seed:surface.seed+1}))),
+  el('div',{class:'row'},...surfaceFlags.map(([,input,label])=>el('label',{},input,' '+label))),
+  el('div',{class:'row'},...surfaceWaters.map(([,input,label])=>el('label',{},input,' '+label))),
+  el('div',{class:'row'},el('label',{},'Ráp vùng ',surfaceBrush),B('Bỏ vùng cuối',()=>{
+   if(surface.patches.length)changeSurface({patches:surface.patches.slice(0,-1)});
+  }),surfaceInfo));
+ const surfacePanel=is3D?null:el('section',{class:'outline-link-panel','aria-label':'Mặt đất'},
+  el('div',{class:'row'},el('strong',{},'Mặt đất'),surfaceMode),surfaceControls);
  const liveCanvas=el('canvas',{width:900,height:410,role:'img','aria-label':'Cảnh ráp isometric trong Đường Bao'});
  const liveStatus=el('p',{class:'hint',role:'status'});
  const livePanel=is3D?null:el('section',{class:'outline-live-view','aria-label':'Xem trước cảnh ráp'},
@@ -964,7 +1049,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  queueLivePreview=(force=false)=>{
   if(is3D||!ov.isConnected||layerControls.some(row=>row.loading))return;
   const opts=materials(true);
-  const key=JSON.stringify([W,H,loops,origin,stamps,levelDraft?.id,front.value,rear.value,thickness.value,collision.checked,opts]);
+  const key=JSON.stringify([W,H,loops,origin,stamps,levelDraft?.id,front.value,rear.value,thickness.value,collision.checked,surface,opts]);
   if(!force&&key===liveKey)return;
   liveKey=key;clearTimeout(liveTimer);clearTimeout(sequenceTimer);
   const revision=++liveRevision;
@@ -1013,7 +1098,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  tryLabel=B('Chơi thử bản nháp',playDraft);
  clearButton=B('Bỏ lớp đường bao',async()=>{if(!map.cfg.outline||!await yes('Bỏ tường bao, mép cong và những cổng gắn vào tường bao của màn hiện tại?'))return;if(editor.clearOutline()!==false)closeOutline();});
  buttons.append(applyButton,createLabel,tryLabel,clearButton,B('Đóng',closeOutline));
- box.append(el('h2',{},(is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ')),linkPanel,guideBox('outline',appGuides.outline),setup,toolbar,
+ box.append(el('h2',{},(is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ')),linkPanel,guideBox('outline',appGuides.outline),surfacePanel,setup,toolbar,
   el('div',{class:'outline-layout'},el('div',{},gridSetup,gridNote,viewTools,el('div',{class:'outline-canvas-wrap',style:'position:relative'},canvas,aim),status),library),
   livePanel,materialsPanel,editShape,el('details',{},el('summary',{},'Chiều cao tường và vùng chặn'),footer),buttons,actionStatus);
  ov.append(box);document.body.append(ov);
