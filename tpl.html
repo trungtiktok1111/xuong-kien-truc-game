@@ -197,6 +197,27 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
  .outline-canvas-wrap{grid-column:1;grid-row:1/span 12;align-self:start}
  .outline-canvas-wrap canvas{max-height:calc(100vh - 28px)}
 }
+/* Outline editing uses the full desktop viewport. */
+.outline-workspace-header{display:none}
+.outline-plan-page,.outline-settings-page{display:contents}
+@media(min-width:901px) and (pointer:fine){
+ .outline-overlay{padding:0!important;place-items:stretch!important;overflow:hidden!important}
+ .outline-workspace{width:100%;height:100%;border:0;border-radius:0;padding:8px 12px;box-sizing:border-box;display:flex;flex-direction:column;min-height:0}
+ .outline-workspace-header{display:flex;flex:none;margin-bottom:6px}
+ .outline-workspace-header h2{margin:0 auto 0 0;font-size:1.12rem}
+ .outline-plan-page,.outline-settings-page,.outline-live-view{display:none}
+ .outline-workspace[data-page=plan] .outline-plan-page{display:flex;flex-direction:column;flex:1;min-height:0}
+ .outline-workspace[data-page=settings] .outline-settings-page{display:block;flex:1;min-height:0;overflow:auto}
+ .outline-workspace[data-page=preview] .outline-live-view{display:flex;flex-direction:column;flex:1;min-height:0;margin:0}
+ .outline-layout{flex:1;min-height:0;margin:0;align-items:stretch;grid-template-columns:minmax(0,1fr) clamp(220px,17vw,340px)}
+ .outline-drawing-area{min-height:0;min-width:0;display:flex;flex-direction:column}
+ .outline-canvas-wrap{flex:1;min-height:0}
+ .outline-canvas-wrap canvas{position:absolute;inset:0;width:100%!important;height:100%!important;box-sizing:border-box}
+ .outline-library{overflow:auto}
+ .outline-patterns,.outline-levels{max-height:none}
+ .outline-live-view canvas{flex:1;min-height:0;height:0}
+ .outline-actions{flex:none}
+}
 .pack-results,.installed-packs{margin:8px 0;padding:8px;border:1px solid #34485a;border-radius:8px;overflow-wrap:anywhere}
 .pack-result{padding:6px 0;border-top:1px solid #34485a}
 .pack-result[data-result="ok"] summary,.pack-result[data-result="existing"] summary{color:#9fe0b0}

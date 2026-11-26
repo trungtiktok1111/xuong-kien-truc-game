@@ -74,8 +74,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const canvas=el('canvas',{width:'760',height:'465',style:'display:block;width:100%;height:auto;background:#141d24;border:1px solid #50606a;touch-action:none'});
  const c=canvas.getContext('2d'),status=el('p',{class:'hint'}),toolbar=el('div',{class:'row outline-tools'}),footer=el('div',{class:'row',style:'margin-top:10px'});
  let s,ox,oy,pan=null;
- const fitScale=()=>Math.min(720/W,425/H);
- function fitGrid(){s=fitScale();ox=(760-W*s)/2;oy=(465-H*s)/2;}
+ const fitScale=()=>Math.min((canvas.width-40)/W,(canvas.height-40)/H);
+ function fitGrid(){s=fitScale();ox=(canvas.width-W*s)/2;oy=(canvas.height-H*s)/2;}
  fitGrid();
  const xp=x=>ox+x*s,yp=y=>oy+y*s,round=v=>Math.round(v*100)/100;
  const B=(t,f)=>el('button',{class:'b',type:'button',onclick:f},t);
@@ -130,15 +130,15 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   gridNote.textContent='Lưới vừa phần đã dựng · '+W+' × '+H+' ô'+(keepOrigin?' · Giữ gốc tọa độ của cảnh.':'');
  }
  const readGrid=()=>resizeDraft(+gridWidth.value,+gridHeight.value);
- function zoom(factor,x=380,y=232.5){
+ function zoom(factor,x=canvas.width/2,y=canvas.height/2){
   const next=Math.max(fitScale(),Math.min(Math.max(64,fitScale()),s*factor));
   if(next===fitScale()){fitGrid();return;}
   ox=x-(x-ox)*next/s;oy=y-(y-oy)*next/s;s=next;boundView();
  }
  function boundView(){
-  ox=Math.max(24-W*s,Math.min(736,ox));oy=Math.max(24-H*s,Math.min(441,oy));
+  ox=Math.max(24-W*s,Math.min(canvas.width-24,ox));oy=Math.max(24-H*s,Math.min(canvas.height-24,oy));
  }
- const screen=e=>{const r=canvas.getBoundingClientRect();return [760*(e.clientX-r.left)/r.width,465*(e.clientY-r.top)/r.height];};
+ const screen=e=>{const r=canvas.getBoundingClientRect();return [canvas.width*(e.clientX-r.left)/r.width,canvas.height*(e.clientY-r.top)/r.height];};
  const width=el('input',{type:'number',min:'1',max:'32',step:'.5',value:'3','aria-label':'Bề rộng hành lang',style:'width:65px'});
  const corridorWidth=el('label',{},'Rộng ',width,' ô');
  const modeButtons=new Map();
@@ -146,13 +146,13 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const point=e=>{const [a,b]=screen(e),x=(a-ox)/s,y=(b-oy)/s;return snap.checked||e.shiftKey?clamp(Math.round(x),Math.round(y)):clamp(x,y);};
  const points=loop=>{c.moveTo(xp(loop[0][0]),yp(loop[0][1]));for(const p of loop.slice(1))c.lineTo(xp(p[0]),yp(p[1]));};
  function draw(){
-  c.clearRect(0,0,760,465);c.fillStyle='#17212b';c.fillRect(0,0,760,465);
+  c.clearRect(0,0,canvas.width,canvas.height);c.fillStyle='#17212b';c.fillRect(0,0,canvas.width,canvas.height);
   c.strokeStyle='#364956';c.lineWidth=1;c.beginPath();
   const stride=Math.max(1,Math.ceil(10/s));
-  for(let x=Math.max(0,Math.floor(-ox/s/stride)*stride);x<=Math.min(W,(760-ox)/s);x+=stride){
+  for(let x=Math.max(0,Math.floor(-ox/s/stride)*stride);x<=Math.min(W,(canvas.width-ox)/s);x+=stride){
    c.moveTo(xp(x),yp(0));c.lineTo(xp(x),yp(H));
   }
-  for(let y=Math.max(0,Math.floor(-oy/s/stride)*stride);y<=Math.min(H,(465-oy)/s);y+=stride){
+  for(let y=Math.max(0,Math.floor(-oy/s/stride)*stride);y<=Math.min(H,(canvas.height-oy)/s);y+=stride){
    c.moveTo(xp(0),yp(y));c.lineTo(xp(W),yp(y));
   }
   c.stroke();c.strokeRect(ox,oy,W*s,H*s);
@@ -903,6 +903,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   control.urls.clear();
  }
  function closeOutline(){
+  layoutObserver.disconnect();
   stopSequence();for(const row of layerControls)releaseGallery(row);
   ov.remove();
  }
@@ -1250,7 +1251,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const surfaceFinish=B('Chọn lớp vật liệu',()=>{
   if(surface.finish===false)changeSurface({finish:true});
   materialsPanel.open=true;
-  materialsPanel.scrollIntoView({block:'nearest'});
+  if(wideOutline.matches)switchWorkspace('settings');
+  else materialsPanel.scrollIntoView({block:'nearest'});
  });
  const surfaceInfo=el('span',{class:'hint',role:'status'});
  const surfaceControls=el('div',{class:'surface-controls'},
@@ -1267,7 +1269,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const liveCanvas=el('canvas',{width:900,height:410,tabindex:0,style:'touch-action:none','aria-label':'Cảnh ráp isometric trong Đường Bao'});
  const liveStatus=el('p',{class:'hint',role:'status'});
  const camera={zoom:1,x:0,y:0};
- let liveView=null,liveProjection=null,selectedProp=null,gesture=null;
+ let liveView=null,liveProjection=null,selectedProp=null,gesture=null,guidePointer=null;
  const snapProps=el('input',{type:'checkbox'});
  snapProps.checked=true;
  const propStatus=el('p',{class:'hint',role:'status'});
@@ -1377,10 +1379,10 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    ctx.beginPath();ctx.moveTo(x-dx,y-dy);ctx.lineTo(x+dx,y+dy);ctx.stroke();
   }
   const center=project(liveView.M.w/2,liveView.M.h/2);
-  ctx.save();ctx.strokeStyle='#ae934d99';ctx.setLineDash([5,5]);
-  for(const [dx,dy] of [[1,0],[0,1],[2,1],[2,-1]])guide(...center,dx,dy);
+  ctx.save();ctx.strokeStyle='#ffda43cc';ctx.setLineDash([5,5]);
+  for(const [dx,dy] of [[1,0],[0,1],[2,1],[2,-1]])guide(...(guidePointer||center),dx,dy);
   if(gesture?.parts){
-   ctx.strokeStyle='#52b8daaa';
+   ctx.strokeStyle='#ff4848ee';
    const bounds=gesture.parts.flatMap(propFootprint).map(zBounds);
    const [x0,y0,x1,y1]=[Math.min(...bounds.map(b=>b[0])),Math.min(...bounds.map(b=>b[1])),
     Math.max(...bounds.map(b=>b[2])),Math.max(...bounds.map(b=>b[3]))];
@@ -1468,9 +1470,15 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   liveCanvas.setPointerCapture(e.pointerId);redrawLive();
  };
  liveCanvas.ondblclick=e=>{if(!duplicate.disabled){e.preventDefault();openCopy();}};
+ let hoverFrame=0;
+ liveCanvas.onpointerleave=()=>{guidePointer=null;if(!gesture)redrawLive();};
  liveCanvas.onpointermove=e=>{
-  if(!gesture||!liveProjection)return;
-  const point=livePoint(e),dx=point[0]-gesture.point[0],dy=point[1]-gesture.point[1];
+  guidePointer=livePoint(e);
+  if(!gesture||!liveProjection){
+   if(!hoverFrame)hoverFrame=requestAnimationFrame(()=>{hoverFrame=0;if(ov.isConnected)redrawLive();});
+   return;
+  }
+  const point=guidePointer,dx=point[0]-gesture.point[0],dy=point[1]-gesture.point[1];
   if(gesture.pan){camera.x=gesture.pan[0]+dx;camera.y=gesture.pan[1]+dy;redrawLive();}
   else if(gesture.candidate||Math.hypot(dx,dy)>3)aimProp(point);
  };
@@ -1582,10 +1590,40 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  tryLabel=B('Chơi thử bản nháp',playDraft);
  clearButton=B('Bỏ lớp đường bao',async()=>{if(!map.cfg.outline||!await yes('Bỏ tường bao, mép cong và những cổng gắn vào tường bao của màn hiện tại?'))return;if(editor.clearOutline()!==false)closeOutline();});
  buttons.append(applyButton,createLabel,tryLabel,clearButton,B('Đóng',closeOutline));
- box.append(el('h2',{},(is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ')),linkPanel,guideBox('outline',appGuides.outline),surfacePanel,setup,toolbar,
-  el('div',{class:'outline-layout'},el('div',{},gridSetup,gridNote,viewTools,el('div',{class:'outline-canvas-wrap',style:'position:relative'},canvas,aim),status),library),
-  livePanel,materialsPanel,editShape,el('details',{open:''},el('summary',{},'Kích thước sàn, tường và vùng chặn'),footer),buttons,actionStatus);
+ const wideOutline=matchMedia('(min-width:901px) and (pointer:fine)');
+ const workspaceTabs=new Map();
+ function switchWorkspace(page){
+  box.dataset.page=page;
+  for(const [name,button] of workspaceTabs)button.setAttribute('aria-pressed',String(name===page));
+  if(page==='preview')queueLivePreview();
+ }
+ for(const [page,label] of [['plan','Mặt bằng'],...(!is3D?[['preview','Cảnh ráp']]:[]),['settings','Thiết lập']]){
+  workspaceTabs.set(page,B(label,()=>switchWorkspace(page)));
+ }
+ const title=is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ';
+ const header=el('div',{class:'outline-workspace-header row'},el('h2',{},title),...workspaceTabs.values(),B('Đóng',closeOutline));
+ const drawingWrap=el('div',{class:'outline-canvas-wrap',style:'position:relative'},canvas,aim);
+ const drawingArea=el('div',{class:'outline-drawing-area'},gridSetup,gridNote,viewTools,drawingWrap,status);
+ const plan=el('section',{class:'outline-plan-page'},surfacePanel,setup,toolbar,
+  el('div',{class:'outline-layout'},drawingArea,library));
+ const settings=el('section',{class:'outline-settings-page'},linkPanel,guideBox('outline',appGuides.outline),
+  materialsPanel,el('details',{open:''},el('summary',{},'Kích thước sàn, tường và vùng chặn'),footer));
+ library.append(editShape);
+ box.append(header,plan,livePanel,settings,buttons,actionStatus);
+ switchWorkspace('plan');
  ov.append(box);document.body.append(ov);
+ const layoutObserver=new ResizeObserver(()=>{
+  const redraw=(target,fallback,onResize)=>{
+   const width=wideOutline.matches?target.clientWidth:fallback[0];
+   const height=wideOutline.matches?target.clientHeight:fallback[1];
+   if(width<64||height<64||(target.width===width&&target.height===height))return;
+   target.width=width;target.height=height;onResize();
+  };
+  redraw(canvas,[760,465],()=>{fitGrid();draw();});
+  if(livePanel)redraw(liveCanvas,[900,410],redrawLive);
+ });
+ layoutObserver.observe(canvas);
+ if(livePanel)layoutObserver.observe(liveCanvas);
  if(!is3D){
  void (async()=>{
   await restoreOutlineZipLibrary();
