@@ -1355,16 +1355,48 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   redrawLive();
  };
  liveCanvas.onpointercancel=()=>{gesture=null;redrawLive();};
+ const fitLive=()=>{Object.assign(camera,{zoom:1,x:0,y:0});redrawLive();};
+ const arrows={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
  liveCanvas.onkeydown=e=>{
-  if(e.key==='Escape'&&copyProp){e.stopPropagation();duplicate.click();}
+  if(!liveView||e.isComposing)return;
+  const key=e.key.toLowerCase(),direction=arrows[e.key];
+  if(key==='escape'&&(copyProp||gesture)){
+   gesture=null;
+   if(copyProp)duplicate.click();
+   propStatus.textContent='';redrawLive();
+  }else if(gesture)return;
+  else if((e.ctrlKey||e.metaKey)&&key!=='d')return;
+  else if(key==='d'&&!duplicate.disabled){
+   if(!e.repeat)duplicate.click();
+  }else if(!e.ctrlKey&&!e.metaKey&&(key==='+'||key==='='))zoomLive(1.25);
+  else if(key==='-')zoomLive(1/1.25);
+  else if(key==='0')fitLive();
+  else if(key==='g'){
+   if(!e.repeat)snapProps.checked=!snapProps.checked;
+  }else if(direction){
+   const [dx,dy]=direction;
+   const source=liveView.M.ents.find(entity=>entity.id===selectedProp);
+   if(source&&!e.shiftKey){
+    const step=snapProps.checked?1:.1;
+    const candidate={...source,x:Math.round((source.x+dx*step)*100)/100,
+     y:Math.round((source.y+dy*step)*100)/100};
+    const problem=propPlacement(liveView,candidate,source.id);
+    if(problem)propStatus.textContent=problem;
+    else dropProp(candidate);
+   }else{
+    camera.x-=dx*45;camera.y-=dy*45;
+   }
+   redrawLive();
+  }else return;
+  e.preventDefault();e.stopPropagation();
  };
  const liveTools=el('div',{class:'row'},el('button',{type:'button',class:'b','aria-label':'Thu nhỏ cảnh ráp',onclick:()=>zoomLive(1/1.25)},'−'),zoomValue,
   el('button',{type:'button',class:'b','aria-label':'Phóng to cảnh ráp',onclick:()=>zoomLive(1.25)},'+'),
-  B('Vừa khung',()=>{Object.assign(camera,{zoom:1,x:0,y:0});redrawLive();}),
+  B('Vừa khung',fitLive),
   duplicate,el('label',{},snapProps,' Bám tâm ô'));
  const livePanel=is3D?null:el('section',{class:'outline-live-view','aria-label':'Xem trước cảnh ráp'},
   el('strong',{},'Xem trước cảnh ráp'),liveTools,
-  el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),liveCanvas,propStatus,liveStatus);
+  el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),el('p',{class:'hint'},'Phím tắt khi bấm vào cảnh: +/− thu phóng, 0 vừa khung, mũi tên dịch vật theo trục lưới, Shift + mũi tên dịch khung nhìn, D nhân bản, G bật/tắt bám tâm ô, Esc hủy.'),liveCanvas,propStatus,liveStatus);
  let liveTimer,liveKey='',liveRevision=0;
  queueLivePreview=(force=false)=>{
   if(is3D||!ov.isConnected||surface?.finish!==false&&layerControls.some(row=>row.loading))return;
