@@ -806,6 +806,10 @@ export function init2D(root,A){
   window.__kb2d=e=>{const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(!M||!cv.offsetParent)return;
     if(desktop()&&document.activeElement!==cv)return;
     const k=(e.key||'').toLowerCase(),m=e.ctrlKey||e.metaKey;
+    if(desktop()&&!m&&!e.altKey){
+      if(k==='j'){if(!e.repeat)sidebarButton.click();e.preventDefault();return;}
+      if(k==='['||k===']'){zoomBy(k===']'?1.25:1/1.25);updateDesktop();e.preventDefault();return;}
+    }
     if(tool==='inventory'&&inventoryShortcut(k,e)){e.preventDefault();return;}
     if(desktop()&&!m&&!e.altKey){
       if(activeTransform()){
@@ -814,7 +818,7 @@ export function init2D(root,A){
         if(action!==null){if(action!=='turn'||!e.repeat)transformProp(action);e.preventDefault();return;}
       }
       if(e.code==='Space'){spacePan=true;e.preventDefault();return;}
-      const shortcuts={b:'draw',v:'select',e:'erase',i:'pick',o:'obj',r:'rect',u:'fill'};
+      const shortcuts={b:'draw',v:'select',e:'erase',i:'pick',q:'inventory',o:'obj',r:'rect',u:'fill'};
       if(k==='k'){if(!e.repeat)toggleCollisionPreview();e.preventDefault();return;}
       if(shortcuts[k]){useTool(shortcuts[k]);e.preventDefault();return;}
       if(/^[1-5]$/.test(k)){useLayer(Number(k)-1);e.preventDefault();return;}
@@ -924,19 +928,19 @@ export function init2D(root,A){
     rail.append(b);return [id,b];
   });
   rail.append(el('button',{type:'button',title:'Vừa khung (F)',onclick:()=>{fit();cv.focus();}},el('kbd',{},'F'),'Vừa khung'));
-  const inventoryButton=el('button',{type:'button',title:'Chọn vật đã đặt','aria-pressed':'false',onclick:()=>useTool('inventory')},
-    plankIcon(),'Chọn vật');
+  const inventoryButton=el('button',{type:'button',title:'Chọn vật đã đặt (Q)','aria-keyshortcuts':'Q','aria-pressed':'false',onclick:()=>useTool('inventory')},
+    el('kbd',{},'Q'),'Chọn vật');
   rail.append(inventoryButton);
-  const zoomButton=(label,factor)=>el('button',{type:'button','aria-label':label,onclick:()=>{
+  const zoomButton=(label,key,factor)=>el('button',{type:'button',title:label+' ('+key+')','aria-label':label,'aria-keyshortcuts':key,onclick:()=>{
     zoomBy(factor);updateDesktop();cv.focus({preventScroll:true});
-  }},factor>1?'+':'−');
-  const sidebarButton=el('button',{type:'button','aria-controls':'pn2','aria-expanded':'true',onclick:()=>{
+  }},el('kbd',{},key),factor>1?'+':'−');
+  const sidebarButton=el('button',{type:'button','aria-controls':'pn2','aria-expanded':'true','aria-keyshortcuts':'J',title:'Thu hoặc mở bảng phải (J)',onclick:()=>{
     const wide=root.classList.toggle('assembly-wide');
-    sidebarButton.textContent=wide?'Mở bảng phải':'Thu bảng phải';
+    sidebarButton.replaceChildren(el('kbd',{},'J'),wide?'Mở bảng phải':'Thu bảng phải');
     sidebarButton.setAttribute('aria-expanded',String(!wide));
-    dirty=true;
-  }},'Thu bảng phải');
-  rail.append(zoomButton('Thu nhỏ',1/1.25),zoomButton('Phóng to',1.25),sidebarButton);
+    dirty=true;cv.focus({preventScroll:true});
+  }},el('kbd',{},'J'),'Thu bảng phải');
+  rail.append(zoomButton('Thu nhỏ','[',1/1.25),zoomButton('Phóng to',']',1.25),sidebarButton);
   const layerPicker=el('select',{'aria-label':'Lớp đang sửa',onchange:e=>useLayer(Number(e.target.value))},
     layerNames.map((label,index)=>el('option',{value:index},(index+1)+' · '+label)));
   const statusText=el('span',{}),statusHint=el('span',{class:'desktop-status-hint'},'Space + kéo · Cuộn để zoom · Chuột phải');
@@ -1785,15 +1789,6 @@ export function init2D(root,A){
     return guide?[guide]:[];
   }
   let inventoryGroup='',inventoryId='',inventoryMoving=false,inventoryItem=null,inventoryQuery='',inventoryPage=0;
-
-  function plankIcon(){
-    const c=el('canvas',{width:25,height:15,'aria-hidden':'true'});
-    const g=c.getContext('2d');
-    g.fillStyle='#9a6339';g.fillRect(1,3,23,11);
-    g.fillStyle='#d9a66a';g.fillRect(1,2,23,9);
-    g.fillStyle='#a86f41';g.fillRect(1,5,23,1);g.fillRect(1,8,23,1);
-    return c;
-  }
 
   const inventoryLayers=[['all','Tất cả'],['floor','Nền'],['overlay','Phủ nền'],['prop','Vật dụng'],
     ['house','Nhà'],['roof','Mái / cửa'],['wall','Tường'],['actors','Đối tượng']];
