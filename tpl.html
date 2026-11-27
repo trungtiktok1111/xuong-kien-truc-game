@@ -199,16 +199,20 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
 }
 /* Outline editing uses the full desktop viewport. */
 .outline-workspace-header{display:none}
-.outline-plan-page,.outline-settings-page{display:contents}
+.outline-plan-page,.outline-settings-page,.outline-preview-page,.outline-preview-materials{display:contents}
 @media(min-width:901px) and (pointer:fine){
  .outline-overlay{padding:0!important;place-items:stretch!important;overflow:hidden!important}
  .outline-workspace{width:100%;height:100%;border:0;border-radius:0;padding:8px 12px;box-sizing:border-box;display:flex;flex-direction:column;min-height:0}
  .outline-workspace-header{display:flex;flex:none;margin-bottom:6px}
  .outline-workspace-header h2{margin:0 auto 0 0;font-size:1.12rem}
- .outline-plan-page,.outline-settings-page,.outline-live-view{display:none}
+ .outline-plan-page,.outline-settings-page,.outline-preview-page{display:none}
  .outline-workspace[data-page=plan] .outline-plan-page{display:flex;flex-direction:column;flex:1;min-height:0}
  .outline-workspace[data-page=settings] .outline-settings-page{display:block;flex:1;min-height:0;overflow:auto}
- .outline-workspace[data-page=preview] .outline-live-view{display:flex;flex-direction:column;flex:1;min-height:0;margin:0}
+ .outline-workspace[data-page=preview] .outline-preview-page{display:grid;flex:1;min-height:0;grid-template-columns:minmax(0,1fr) clamp(260px,25vw,390px);gap:10px}
+ .outline-preview-page .outline-live-view{display:flex;flex-direction:column;min-height:0;min-width:0;margin:0}
+ .outline-preview-materials{display:block;min-width:0;min-height:0;overflow:auto;border:1px solid #435667;border-radius:8px;padding:8px;background:#17232d}
+ .outline-preview-materials .outline-stage-controls{grid-template-columns:minmax(0,1fr)}
+ .outline-preview-materials :is(select,input[type=file]){max-width:100%}
  .outline-layout{flex:1;min-height:0;margin:0;align-items:stretch;grid-template-columns:minmax(0,1fr) clamp(220px,17vw,340px)}
  .outline-drawing-area{min-height:0;min-width:0;display:flex;flex-direction:column}
  .outline-canvas-wrap{flex:1;min-height:0}

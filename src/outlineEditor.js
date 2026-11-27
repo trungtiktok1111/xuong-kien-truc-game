@@ -1372,7 +1372,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const surfaceFinish=B('Chọn lớp vật liệu',()=>{
   if(surface.finish===false)changeSurface({finish:true});
   materialsPanel.open=true;
-  if(wideOutline.matches)switchWorkspace('settings');
+  if(wideOutline.matches)switchWorkspace('preview');
   else materialsPanel.scrollIntoView({block:'nearest'});
  });
  const surfaceInfo=el('span',{class:'hint',role:'status'});
@@ -1389,7 +1389,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   el('div',{class:'row'},el('strong',{},'Mặt đất'),surfaceMode),surfaceControls);
  const liveCanvas=el('canvas',{width:900,height:410,tabindex:0,style:'touch-action:none','aria-label':'Cảnh ráp isometric trong Đường Bao'});
  const liveStatus=el('p',{class:'hint',role:'status'});
- const camera={zoom:1,x:0,y:0};
+ const camera={zoom:1,x:0,y:0,mapFrame:true};
  let liveView=null,liveProjection=null,selectedProp=null,gesture=null,guidePointer=null;
  const snapProps=el('input',{type:'checkbox'});
  snapProps.checked=true;
@@ -1768,9 +1768,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const plan=el('section',{class:'outline-plan-page'},surfacePanel,setup,toolbar,
   el('div',{class:'outline-layout'},drawingArea,library));
  const settings=el('section',{class:'outline-settings-page'},linkPanel,guideBox('outline',appGuides.outline),
-  materialsPanel,el('details',{open:''},el('summary',{},'Kích thước sàn, tường và vùng chặn'),footer));
+  el('details',{open:''},el('summary',{},'Kích thước sàn, tường và vùng chặn'),footer));
  library.append(editShape);
- box.append(header,plan,livePanel,settings,buttons,actionStatus);
+ const preview=livePanel?el('section',{class:'outline-preview-page'},livePanel,
+  el('aside',{class:'outline-preview-materials','aria-label':'Vật liệu cảnh ráp'},materialsPanel)):null;
+ box.append(header,plan,preview,settings,buttons,actionStatus);
  switchWorkspace('plan');
  ov.append(box);document.body.append(ov);
  const layoutObserver=new ResizeObserver(()=>{

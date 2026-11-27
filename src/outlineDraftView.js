@@ -19,15 +19,28 @@ export function drawOutlineDraft(canvas,{M:map,sheets},camera={zoom:1,x:0,y:0}){
  const cx=canvas.getContext('2d'),{width,height}=canvas;
  const {w,h,ents}=map,geo=outline2D(map.cfg.outline,false,ents);
  if(!geo)return;
- const [x0,y0,x1,y1]=geo.bounds;
+ const [x0,y0,x1,y1]=camera.mapFrame?[-h,0,w,(w+h)/2]:geo.bounds;
  const s=camera.zoom*Math.min((width-28)/Math.max(1,x1-x0),(height-28)/Math.max(1,y1-y0+Math.max(geo.front,geo.rear,3)+geo.floorThickness));
  const project=(x,y)=>[width/2+camera.x+(x-y-(x0+x1)/2)*s,height/2+camera.y+((x+y)/2-(y0+y1)/2+1.2)*s];
+ function drawMapFrame(){
+  if(!camera.mapFrame)return;
+  const corners=[[0,0],[w,0],[w,h],[0,h]];
+  cx.save();cx.beginPath();
+  corners.forEach(([x,y],index)=>{
+   const [px,py]=project(x,y);
+   if(index===0)cx.moveTo(px,py);else cx.lineTo(px,py);
+  });
+  cx.closePath();
+  cx.strokeStyle='#102031';cx.lineWidth=3.5;cx.stroke();
+  cx.strokeStyle='#9ed9f2';cx.lineWidth=1.5;cx.stroke();
+  cx.restore();
+ }
  stoneBackdrop(cx,width,height);
  drawFloorSlab(cx,geo,project,s);
  cx.save();clipOutline(cx,geo,project);
  const {surface,surfaceMaterials}=map.cfg.outline;
  if(surface)drawSurfaceTerrain(cx,w,h,surface,project,{sheets,materials:surfaceMaterials});
- if(surface?.finish===false){cx.restore();return;}
+ if(surface?.finish===false){cx.restore();drawMapFrame();return;}
  for(const layer of [0,1])for(let i=0;i<w*h;i++){
   const value=map.layers[layer][i];
   if(!value)continue;
@@ -86,6 +99,7 @@ export function drawOutlineDraft(canvas,{M:map,sheets},camera={zoom:1,x:0,y:0}){
      px+(i%w-group.xc)*side,py+(Math.floor(i/w)-group.yb)*side,side,side);
   }
  }
+ drawMapFrame();
  const wallEdges=walls.flatMap(wall=>{
   const shape=wallSurface(wall,(x,y)=>[x,y],1,geo);
   return shape?.high>0?[shape.front,shape.back]:[];
