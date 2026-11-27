@@ -98,10 +98,6 @@ export function decoZones(ents=[]){
       continue;
     }
     const name=[e.name,e.assetSource,e.assetSheet].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[đĐ]/g,'d');
-    if(e.artBase?.length===4&&/(?:stair|stone.?step|\bsteps?\b|\bbac[ _-]*(?:thang|them|da)|\bda[ _-]*bac|\bcau[ _-]*thang)/i.test(name)){
-      addPoly(e.artBase.map(([u,v])=>fromSprite(e,u,v)));
-      continue;
-    }
     const rock=rockFootprint(e,name);
     if(rock){addPoly(rock);continue;}
 
@@ -110,6 +106,10 @@ export function decoZones(ents=[]){
       const [dx,dy]=foot?fromSprite(e,foot.u,foot.v):[0,0];
       const radius=Math.max(.018,Math.min(.13,(e.sc||1)*(foot?foot.width/.75:.022)*.55));
       out.push({id:id+'trunk',k:'ell',x:X+dx-radius,y:Y+dy-radius,w:radius*2,h:radius*2,rot:0,deco:e.id});
+      continue;
+    }
+    if(e.artBase?.length===4&&(e.solidBase&&!e.housePart&&!e.gateAssembly&&!e.door&&!e.wallId&&!e.zp&&!e.zps&&!e.col?.some(part=>part.k==='seg'||part.k==='poly')||/(?:chestclosed|woodencrate|\bruong\b|stair|stone.?step|\bsteps?\b|\bbac[ _-]*(?:thang|them|da)|\bda[ _-]*bac|\bcau[ _-]*thang)/i.test(name))){
+      addPoly(e.artBase.map(([u,v])=>fromSprite(e,u,v)));
       continue;
     }
     const detachedRoof=e.tile&&!e.housePart&&/(?:^|[^a-z])(?:roof|mai)[ _-]?[nesw]?(?=$|[^a-z])/i.test(name);

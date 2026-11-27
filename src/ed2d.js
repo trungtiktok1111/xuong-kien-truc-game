@@ -252,7 +252,7 @@ export function init2D(root,A){
     if(active){
       const [px,py]=g2s(e.x+1,e.y+1);
       cx.strokeStyle=issue?'#ff7979':'#ffdb74';cx.lineWidth=1.6;
-      for(const zone of decoZones([displayed])){
+      for(const zone of decoZones([withAssetSource(displayed,M.cfg)])){
         zPath(cx,zone,g2s);
         if(zone.k==='line'){cx.lineWidth=Math.max(2,zone.th*CELL*view.z);cx.globalAlpha=.65;}
         cx.stroke();cx.lineWidth=1.6;cx.globalAlpha=1;
@@ -1032,7 +1032,7 @@ export function init2D(root,A){
     const assetSource=e.assetSource||(sheet===sheets[tile.sid]?constructionTile(tile.sid,tile.idx,0).source:sheet.name);
     const art=sheet.img&&!sheet.iso?tileContact(sheet,tile.idx,e.spriteFlip||0,source):null;
     const projection=cfg?.view==='iso'?(cfg.proj==='angle'?'angle':'iso'):'top';
-    return {...e,assetSource,assetSheet:sheet.name,contactProjection:projection,artContact:art?.contact,trunkContact:art?.trunk,artBase:art?.base,
+    return {...e,assetSource,assetSheet:sheet.name,contactProjection:projection,artContact:art?.contact,trunkContact:art?.trunk,artBase:art?.base,solidBase:art?.solidBase,
       spriteBounds:e.spriteBounds||art?.bounds};
   }
   function structuralPieces(map){
@@ -1465,7 +1465,7 @@ export function init2D(root,A){
       const prop=propTemplate(value,act);
       resizeProp(prop,size/100);
       for(let i=0;i<turns;i++)turnProp(prop);
-      propCache={value,size,proj,prop,asset,turns,layer:act};
+      propCache={value,size,proj,prop:withAssetSource(prop,M.cfg),asset,turns,layer:act};
     }
     const prop=propCache.prop,choice=propAnchorIds.get(value)??4;
     const available=anchorChoices(prop,propDisplayFrame({...prop,x:0,y:0})).some(a=>a.id===choice);
@@ -1750,7 +1750,7 @@ export function init2D(root,A){
     const guide=guideFor('2d',tab==='tools'?tool:tab);
     return guide?[guide]:[];
   }
-  let inventoryGroup='',inventoryId='',inventoryMoving=false,inventoryItem=null,inventoryQuery='';
+  let inventoryGroup='',inventoryId='',inventoryMoving=false,inventoryItem=null,inventoryQuery='',inventoryPage=0;
 
   function plankIcon(){
     const c=el('canvas',{width:25,height:15,'aria-hidden':'true'});
@@ -1979,25 +1979,35 @@ export function init2D(root,A){
   }
   function drawInventory(){
     const groups=M?inventoryGroups():[],group=groups.find(g=>g.key===inventoryGroup);
-    inventoryItem=group?.items.find(item=>item.id===inventoryId)||(group?.items.length===1?group.items[0]:null);
+    inventoryItem=group?.items.find(item=>item.id===inventoryId)||null;
     const title=el('h3',{},'Vật phẩm trong màn');
     body.append(title);
     if(!groups.length){body.append(el('p',{class:'hint'},'Màn này chưa có vật phẩm.'));return;}
     const gallery=el('div',{class:'build-materials'});
+    const paging=el('div',{class:'row build-pages'});
     const query=el('input',{class:'num inventory-select',type:'search',placeholder:'Tìm vật đã đặt…','aria-label':'Tìm vật đã đặt',
-      value:inventoryQuery,oninput:()=>{inventoryQuery=query.value;showGroups();}});
-    function showGroups(){
+      value:inventoryQuery,oninput:()=>{inventoryQuery=query.value;inventoryPage=0;showItems();}});
+    function showItems(){
       const term=normSearch(inventoryQuery);
-      const visible=groups.filter(g=>normSearch(g.label).includes(term));
-      gallery.replaceChildren(...visible.map(g=>inventoryCard(g.items[0],g.label+' · '+g.items.length,g.key===inventoryGroup,()=>{
-        inventoryGroup=g.key;inventoryId=g.items[0].id;inventoryMoving=false;draw();dirty=true;
-        if(inventoryItem)centerInventory(inventoryItem);
-        cv.focus({preventScroll:true});
-      })));
-      if(!visible.length)gallery.textContent='Không tìm thấy vật phẩm.';
+      const visible=groups.filter(g=>normSearch(g.label).includes(term)).flatMap(g=>g.items);
+      const perPage=48;
+      inventoryPage=Math.min(inventoryPage,Math.max(0,Math.ceil(visible.length/perPage)-1));
+      const start=inventoryPage*perPage;
+      gallery.replaceChildren(...visible.slice(start,start+perPage).map(item=>{
+        const label=entityName(item.e)+' · '+xy(inventoryPoint(item.e));
+        return inventoryCard(item,label,item.id===inventoryId,()=>{
+          inventoryGroup=inventoryKey(item.e);inventoryId=item.id;inventoryMoving=false;draw();dirty=true;
+          centerInventory(item);cv.focus({preventScroll:true});
+        });
+      }));
+      paging.replaceChildren();
+      if(!visible.length){gallery.textContent='Không tìm thấy vật phẩm.';return;}
+      if(start>0)paging.append(btn('Trước',()=>{inventoryPage--;showItems();}));
+      paging.append(el('span',{class:'hint'},(start+1)+'–'+Math.min(start+perPage,visible.length)+' / '+visible.length+' vật'));
+      if(start+perPage<visible.length)paging.append(btn('Sau',()=>{inventoryPage++;showItems();}));
     }
-    body.append(query,gallery);
-    showGroups();
+    body.append(query,gallery,paging);
+    showItems();
     if(!group)return;
     const items=group.items;
     if(items[0].e.roofDirection){
@@ -2009,11 +2019,7 @@ export function init2D(root,A){
         if(Number.isFinite(input.valueAsNumber))bulkBoardThickness(items,input.valueAsNumber);
       }},el('label',{},'Độ dày (ô) ',input),el('button',{type:'submit',class:'b'},'Áp dụng cho '+items.length+' tấm')));
     }
-    const label=(item,index)=>entityName(item.e)+' #'+(index+1)+' · '+xy(inventoryPoint(item.e));
-    body.append(el('p',{class:'hint'},group.label+' · '+items.length+' vật đã đặt'),
-      el('div',{class:'build-materials'},...items.map((item,index)=>inventoryCard(item,label(item,index),item.id===inventoryItem?.id,()=>{
-        inventoryId=item.id;inventoryMoving=false;draw();dirty=true;centerInventory(item);cv.focus({preventScroll:true});
-      }))));
+    if(inventoryItem)body.append(el('p',{class:'hint'},entityName(inventoryItem.e)+' · '+xy(inventoryPoint(inventoryItem.e))));
     if(!inventoryItem)return;
     const item=inventoryItem,[x,y]=inventoryPoint(item.e);
     const coordinate=(axis,value)=>el('input',{class:'num',type:'number',step:'any',required:'',value:+value.toFixed(3),'aria-label':'Tọa độ '+axis});
@@ -3091,7 +3097,7 @@ export function init2D(root,A){
     const key=idx*8+f;
     if(cache.has(key))return cache.get(key);
     const tw=sheet.tw;
-    let contact=null,bounds=null,rectangular=false,trunk=null,base=null;
+    let contact=null,bounds=null,rectangular=false,trunk=null,base=null,solidBase=false;
     try{
       const ctx=el('canvas',{width:tw,height:tw}).getContext('2d',{willReadFrequently:true});
       drawTile(ctx,enc(source.indexOf(sheet),idx,f),0,0,tw,source);
@@ -3113,7 +3119,19 @@ export function init2D(root,A){
         const a=[(left+.5)/tw,(leftY+.5)/tw],b=[(right-.5)/tw,(rightY+.5)/tw];
         const f=[(frontLeft+frontRight+1)/(2*tw),(bottom-.5)/tw];
         const rear=[a[0]+b[0]-f[0],a[1]+b[1]-f[1]];
-        if(f[1]>Math.max(a[1],b[1])+1/tw)base=[a,f,b,rear];
+        if(f[1]>Math.max(a[1],b[1])+1/tw){
+          base=[a,f,b,rear];
+          const followsEdge=(edge,end)=>{
+            const span=Math.abs(end[0]-edge[0])*tw;
+            if(span<(right-left)*.18)return false;
+            return [.25,.5,.75].every(t=>{
+              const x=Math.floor((edge[0]+(end[0]-edge[0])*t)*tw);
+              const y=(edge[1]+(end[1]-edge[1])*t)*tw-.5;
+              return Math.abs(footRows[x]-y)<=Math.max(2,(right-left)*.025);
+            });
+          };
+          solidBase=followsEdge(a,f)&&followsEdge(b,f);
+        }
       }
       if(bounds&&bottom-top>(right-left)*1.15){
         // The lit trunk stays warm near the base. Exclude dark or translucent shadow pixels.
@@ -3137,7 +3155,7 @@ export function init2D(root,A){
       }
 
     }catch{}
-    const info={contact,bounds,rectangular,trunk,base};cache.set(key,info);return info;
+    const info={contact,bounds,rectangular,trunk,base,solidBase};cache.set(key,info);return info;
   }
   function makePaintLookup(source=sheets){
     const profiles=new Map();
