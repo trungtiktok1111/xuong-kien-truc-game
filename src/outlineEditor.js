@@ -96,7 +96,7 @@ export function joinOutlineSample(loops,w,h,level,axis,width){
  return {loops:cropOutline(joined,[0,0],[W,H]),w:W,h:H,added,start,dest,width};
 }
 
-export function openOutlineEditor(editor,initialTab='shapes'){
+export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan'){
  const is3D=editor.kind==='3d';
  const map=editor.map(),minSide=is3D?16:4,maxSide=is3D?320:MAX_MAP_SIDE;
  let propEdits=structuredClone(map.cfg.outline?.propEdits||[]);
@@ -2047,6 +2047,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const workspaceTabs=new Map();
  function switchWorkspace(page){
   box.dataset.page=page;
+  workspaceTitle.textContent=is3D?'Đường Bao 3D · mặt bằng XZ':page==='preview'?'Ráp Cảnh 2D':'Đường bao bản đồ';
   (page==='preview'?previewHelp:settings).append(outlineDimensions);
   for(const [name,button] of workspaceTabs)button.setAttribute('aria-pressed',String(name===page));
   if(page==='preview')queueLivePreview();
@@ -2055,8 +2056,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  for(const [page,label] of [['plan','Mặt bằng'],...(!is3D?[['preview','Cảnh ráp']]:[]),['settings','Thiết lập']]){
   workspaceTabs.set(page,B(label,()=>switchWorkspace(page)));
  }
- const title=is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ';
- const header=el('div',{class:'outline-workspace-header row'},el('h2',{},title),...workspaceTabs.values(),is3D?null:sidebarToggle,B('Đóng',closeOutline));
+ const workspaceTitle=el('h2');
+ const header=el('div',{class:'outline-workspace-header row'},workspaceTitle,...workspaceTabs.values(),is3D?null:sidebarToggle,B('Đóng',closeOutline));
  const drawingWrap=el('div',{class:'outline-canvas-wrap',style:'position:relative'},canvas,aim);
  const drawingArea=el('div',{class:'outline-drawing-area'},gridSetup,gridNote,viewTools,drawingWrap,status);
  const plan=el('section',{class:'outline-plan-page'},surfacePanel,setup,toolbar,
@@ -2068,8 +2069,9 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   el('aside',{id:'outline-preview-sidebar',class:'outline-preview-materials','aria-label':'Bảng công cụ cảnh ráp'},
    el('div',{class:'row outline-preview-tabs'},...previewTabs.values()),liveStatus,...previewPanes.map(([, ,panel])=>panel))):null;
  box.append(header,plan,preview,settings,buttons,actionStatus);
- switchWorkspace('plan');
  ov.append(box);document.body.append(ov);
+ switchWorkspace(is3D?'plan':initialPage);
+ if(initialPage==='preview'&&!wideOutline.matches)preview?.scrollIntoView({block:'start'});
  const layoutObserver=new ResizeObserver(()=>{
   const redraw=(target,fallback,onResize)=>{
    const width=wideOutline.matches?target.clientWidth:fallback[0];

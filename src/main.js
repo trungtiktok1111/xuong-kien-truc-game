@@ -38,12 +38,17 @@ $('#playbtn').onclick=()=>{
 const gd=k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData();
 $('#chkbtn').onclick=()=>openCheck({kind:cur,getData:gd});
 $('#relbtn').onclick=()=>openRelease({kind:cur,sheets:()=>e2.sheets(),exportMapPNG:e2.exportPNG,getData:k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData()});
-async function openPlan(tab){
+async function openPlan(tab,page='plan'){
   const editor=cur==='3d'?e3:e2;
   if(!editor||document.querySelector('.outline-overlay'))return;
   await editor.ready;
-  if(editor===(cur==='3d'?e3:e2)&&editor.map()&&!document.querySelector('.outline-overlay'))openOutlineEditor(editor,tab);
+  if(editor===(cur==='3d'?e3:e2)&&editor.map()&&!document.querySelector('.outline-overlay'))openOutlineEditor(editor,tab,page);
 }
+$('#assemble2dbtn').onclick=()=>{
+  if(document.querySelector('.outline-overlay'))return;
+  if(cur!=='2d')go('2d');
+  return openPlan('shapes','preview');
+};
 $('#outlinebtn').onclick=()=>openPlan('shapes');
 $('#levelbtn').onclick=()=>openPlan('levels');
 $('#zipscenebtn').onclick=async()=>{go('2d');await e2.ready;e2.showStockScenes();};
@@ -53,7 +58,7 @@ $('#helpbtn').onclick=shortcutHelp;
 const searchButton=el('button',{type:'button',class:'tabbtn',title:'Tìm nhanh · Ctrl+K',onclick:openQuickSearch},'⌕ Tìm nhanh');
 $('#bar h1').after(searchButton);
 const searchItems=[
- ['Dựng cảnh 2D','bản đồ nền vật phẩm','#bar [data-v="2d"]'],
+ ['Ráp Cảnh 2D','dựng cảnh bản đồ nền vật phẩm','#assemble2dbtn'],
  ['Dựng cảnh 3D','mô hình không gian','#bar [data-v="3d"]'],
  ['Đường Bao','mặt bằng cảnh ráp vật liệu mảnh ghép quản lý ZIP','#outlinebtn'],
  ['Màn mẫu','bố cục mẫu địa hình hầm ngục','#levelbtn'],
