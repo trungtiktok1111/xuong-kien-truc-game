@@ -78,7 +78,7 @@ export function decoZones(ents=[]){
   for(const e of ents){
     if(e.gateAssembly)out.push(...gateZones(e));
     if(e.t!=='deco'||e.sceneLayer===0||e.sceneLayer===1||
-      e.wallLine||e.housePart?.roof||((e.roofDirection||e.roofSurface)&&!e.groundedRoof)||e.door?.st==='mo')continue;
+      e.wallLine||(!e.groundedRoof&&(e.housePart?.roof||e.roofDirection||e.roofSurface))||e.door?.st==='mo')continue;
     const X=e.x+1,Y=e.y+1,id='dz'+e.id;
     const addPoly=(points,index=0)=>out.push({id:id+'p'+index,k:'poly',
       pts:points.map(([x,y])=>[X+x,Y+y]),th:0,closed:true,deco:e.id});
@@ -90,8 +90,8 @@ export function decoZones(ents=[]){
     const rock=rockFootprint(e);
     if(rock){addPoly(rock);continue;}
     if(e.flat&&e.sceneLayer!==2&&e.sceneLayer!==3)continue;
-    const name=String(e.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    if(/palm|coconut|cay[ _-]*dua/i.test(name)){
+    const name=(e.name+' '+(e.assetSource||'')).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(/palm|coconut|\bdua\b/i.test(name)){
       const radius=Math.max(.025,(e.sc||1)*.022);
       out.push({id:id+'trunk',k:'ell',x:X-radius,y:Y-radius,w:radius*2,h:radius*2,rot:0,deco:e.id});
       continue;

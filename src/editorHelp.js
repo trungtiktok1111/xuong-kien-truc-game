@@ -13,7 +13,7 @@ const guide2D={
     'Chọn lớp và ô hình trước.','Kéo từ góc đầu đến góc đối diện rồi nhả chuột.'],
   fill:['Đổ · U','Thay nhóm ô liền nhau có cùng hình bằng ô hình đang cầm.',
     'Chọn lớp và ô hình mới.','Bấm một ô trong vùng muốn thay. Kiểm kết quả rồi dùng Ctrl+Z nếu vùng đổ rộng hơn dự kiến.'],
-  zone:['Va chạm · K','Xem và chỉnh vùng chặn ngay trên bản đồ.',
+  zone:['Sửa vùng chặn thủ công','Xem và chỉnh vùng chặn ngay trên bản đồ.',
     'Muốn thêm vùng chặn, chọn hình bên dưới.','Kéo để đặt khung hoặc bấm từng đỉnh đa giác rồi nhấn Enter.'],
   pan:['Kéo bản đồ','Di chuyển khung nhìn để xem khu khác.',
     'Giữ chuột trái và kéo khi đang chọn Kéo. Trên máy tính, Space + kéo dùng được khi đang cầm công cụ khác.'],
