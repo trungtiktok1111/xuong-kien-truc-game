@@ -38,17 +38,19 @@ $('#playbtn').onclick=()=>{
 const gd=k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData();
 $('#chkbtn').onclick=()=>openCheck({kind:cur,getData:gd});
 $('#relbtn').onclick=()=>openRelease({kind:cur,sheets:()=>e2.sheets(),exportMapPNG:e2.exportPNG,getData:k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData()});
-async function openPlan(tab,page='plan'){
+async function openPlan(tab,page='plan',pane){
   const editor=cur==='3d'?e3:e2;
   if(!editor||document.querySelector('.outline-overlay'))return;
   await editor.ready;
-  if(editor===(cur==='3d'?e3:e2)&&editor.map()&&!document.querySelector('.outline-overlay'))openOutlineEditor(editor,tab,page);
+  if(editor===(cur==='3d'?e3:e2)&&editor.map()&&!document.querySelector('.outline-overlay'))openOutlineEditor(editor,tab,page,pane);
 }
-$('#assemble2dbtn').onclick=()=>{
+$('#assemble2dbtn').onclick=async()=>{
   if(document.querySelector('.outline-overlay'))return;
   if(cur!=='2d')go('2d');
-  return openPlan('shapes','preview');
+  await e2.ready;
+  if(cur==='2d'&&e2.map())e2.showAssembly();
 };
+e2.openMaterials=()=>openPlan('shapes','preview','materials');
 $('#outlinebtn').onclick=()=>openPlan('shapes');
 $('#levelbtn').onclick=()=>openPlan('levels');
 $('#zipscenebtn').onclick=async()=>{go('2d');await e2.ready;e2.showStockScenes();};
@@ -156,5 +158,5 @@ document.addEventListener('keydown',e=>{
   }
 });
 go('2d');
-e2.ready.then(()=>{window.dispatchEvent(new Event('xuong:ready'));if(cur==='2d')go('2d');},error=>{console.error(error);window.dispatchEvent(new Event('xuong:startup-error'));});
+e2.ready.then(()=>{window.dispatchEvent(new Event('xuong:ready'));if(cur==='2d'){go('2d');e2.showAssembly();}},error=>{console.error(error);window.dispatchEvent(new Event('xuong:startup-error'));});
 }

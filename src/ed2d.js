@@ -1,5 +1,6 @@
+import {drawAssemblyGuides} from './assemblyGuides.js';
 import {stonePavingSheets} from './stonePaving.js';
-import {applyOutlinePropEdits} from './outlinePropPlacement.js';
+import {applyOutlinePropEdits,arrangementLayer,canArrangeProp,propGroup,transformPropGroup} from './outlinePropPlacement.js';
 import {drawSurfaceTerrain,surfaceTerrainTile} from './surfaceContours.js';
 import {outlineHeight} from './outlineAnchors.js';
 import {surfaceLevelById} from './surfaceLibrary.js';
@@ -303,6 +304,7 @@ export function init2D(root,A){
   }
   // ===== render =====
   function render(){if(!M)return;const w=cv.clientWidth,h=cv.clientHeight,dp=Math.min(devicePixelRatio||1,2);
+    if(!w||!h)return;
     if(cv.width!==Math.round(w*dp)||cv.height!==Math.round(h*dp)){cv.width=Math.round(w*dp);cv.height=Math.round(h*dp);dirty=true;}
     if(!dirty)return;dirty=false;updateDesktop();
     cx.setTransform(dp,0,0,dp,0,0);cx.fillStyle='#10161d';cx.fillRect(0,0,w,h);cx.imageSmoothingEnabled=false;
@@ -339,7 +341,7 @@ export function init2D(root,A){
       if(hit.e.id&&hit.e.id===selId||r<0||l>w||b<0||t>h)continue;
       drawMapName(entityName(hit.e),hit.r);
     }
-    if(tool==='inventory')drawInventoryFocus();
+    if(tool==='inventory')drawInventoryFocus(w,h);
     if(tool==='erase')drawEraseAim();
     else if(!target&&hov&&lastPt&&tool!=='wall'&&tool!=='inventory')drawHoveredName();
     renderGate=null;
@@ -556,7 +558,11 @@ export function init2D(root,A){
     if(P.size===2){drag=null;const [a,b]=[...P.values()];gest={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};return;}
     if(spacePan||e.button===1||e.button===2||tool==='pan'||e.buttons===4){drag={pan:true,x:p.x,y:p.y,vx:view.x,vy:view.y};return;}
     const c=cellAt(p.x,p.y);hov=c;lastPt={...p,snap:e.shiftKey,free:e.altKey};
-    if(tool==='inventory'){drag={inventory:true,p};return;}
+    if(tool==='inventory'){
+      const item=inventoryMoving?null:inventoryHit(p);
+      drag=item?{inventory:true,p,item}:{inventory:true,p,pan:!inventoryMoving,vx:view.x,vy:view.y};
+      return;
+    }
     if(tool==='wall'){drag={wallPointer:true,p:lastPt,start:wallAim(lastPt)};dirty=true;return;}
     if(act!==4&&['draw','rect','fill'].includes(tool)&&!hasBrush()){
       chooseTab('tools');toast('Chọn vật liệu hoặc vật thể trong khung Dựng cảnh trước khi đặt.');return;
@@ -595,7 +601,14 @@ export function init2D(root,A){
     const c=cellAt(p.x,p.y);if(!hov||hov.x!==c.x||hov.y!==c.y){hov=c;dirty=true;}
     if(tool==='zone'&&!(drag&&drag.pan)){zMoveE(p,e);return;}
     if(!drag)return;
-    if(drag.wallPointer||drag.inventory)return;
+    if(drag.inventory){
+      const dx=p.x-drag.p.x,dy=p.y-drag.p.y;
+      if(Math.hypot(dx,dy)>=5)drag.moved=true;
+      if(drag.moved&&drag.pan){view.x=drag.vx+dx;view.y=drag.vy+dy;dirty=true;}
+      if(drag.moved&&drag.item)dirty=true;
+      return;
+    }
+    if(drag.wallPointer)return;
     if(drag.pan){view.x=drag.vx+p.x-drag.x;view.y=drag.vy+p.y-drag.y;dirty=true;return;}
     if(drag.rect){drag.rect.x1=c.x;drag.rect.y1=c.y;dirty=true;return;}
     if(drag.ent){const q=selEnt(),nx=c.x-(drag.dx||0),ny=c.y-(drag.dy||0);if(q&&drag.precise){const g=s2g(p.x,p.y),x=g.x-drag.dx,y=g.y-drag.dy;if(inb(x+1,y+1)){
@@ -617,8 +630,14 @@ export function init2D(root,A){
   });
   const end=e=>{P.delete(e.pointerId);if(P.size<2)gest=null;if(zd){zUp();dirty=true;return;}if(!drag)return;
     if(drag.inventory){
-      const start=drag.p,p=pos(e);drag=null;
-      if(e.type==='pointerup'&&Math.hypot(p.x-start.x,p.y-start.y)<7)inventoryClick(p);
+      const gesture=drag,p=pos(e);drag=null;dirty=true;
+      if(e.type!=='pointerup')return;
+      if(!gesture.moved){inventoryClick(p);return;}
+      if(!gesture.item)return;
+      const item=gesture.item;
+      selectInventory(item);
+      const [x,y]=inventoryDragPoint(gesture,p);
+      moveInventory(item,x,y,e.altKey&&inventoryCanCopy(item));
       return;
     }
     if(drag.wallPointer){
@@ -639,6 +658,9 @@ export function init2D(root,A){
       after();ui.obj();
     }
     if(drag.rect){if(tool==='rect'){pushUndo();rectFill(drag.rect);if(acceptStructure())after();}else{sel=drag.rect;ui.sel();}}drag=null;dirty=true;};
+  cv.addEventListener('dblclick',()=>{
+    if(tool==='inventory'&&inventoryItem&&inventoryCanCopy(inventoryItem))startInventoryAction('copy');
+  });
   cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);cv.addEventListener('pointerleave',e=>{if(e.pointerType!=='touch'&&!drag?.wallPointer){hov=null;dirty=true;}});
   cv.addEventListener('contextmenu',e=>{
     e.preventDefault();if(!M||!desktop())return;
@@ -828,9 +850,9 @@ export function init2D(root,A){
   const ANS={};const pn=$('#pn2'),ui={};const body=el('div',{class:'pbody'});const tabs=el('div',{class:'ptabs'});pn.append(tabs,body);
   const TABS=[['tools','Dựng cảnh'],['inventory','Vật phẩm'],['obj','Đối tượng'],['sheet','Bảng ghép ô'],['res','Quản lý gói ảnh'],['mau','🏠 Mẫu 2D'],['maps','🗺 Màn & cửa'],['lib','📚 Thư viện'],['logic','⚙ Logic'],['anim','🎞 Hoạt ảnh'],['layers','🗂 Lớp'],['file','💾 Tệp']];let tab='tools';
   const SIMPLE_TABS=['tools','inventory','obj','file'];
-  const primaryTabs=[['tools','Dựng cảnh'],['obj','Đối tượng']];
+  const primaryTabs=[['inventory','Vật đã đặt'],['tools','Dựng cảnh'],['obj','Đối tượng']];
   const extraTabs=[
-    ['Bản đồ',[['inventory','Vật phẩm trong màn'],['maps','Màn & cửa'],['layers','Lớp'],['zone','Sửa vùng chặn thủ công']]],
+    ['Bản đồ',[['maps','Màn & cửa'],['layers','Lớp'],['zone','Sửa vùng chặn thủ công']]],
     ['Tài nguyên',[['res','Quản lý gói ảnh'],['sheet','Bảng ghép ô'],['mau','Mẫu 2D'],['lib','Thư viện']]],
     ['Game',[['logic','Logic'],['anim','Hoạt ảnh']]],
     ['Dữ liệu',[['file','Tệp']]]
@@ -901,9 +923,19 @@ export function init2D(root,A){
     rail.append(b);return [id,b];
   });
   rail.append(el('button',{type:'button',title:'Vừa khung (F)',onclick:()=>{fit();cv.focus();}},el('kbd',{},'F'),'Vừa khung'));
-  const inventoryButton=el('button',{type:'button',title:'Vật phẩm trong màn','aria-pressed':'false',onclick:()=>useTool('inventory')},
-    plankIcon(),'Vật phẩm');
+  const inventoryButton=el('button',{type:'button',title:'Chọn vật đã đặt','aria-pressed':'false',onclick:()=>useTool('inventory')},
+    plankIcon(),'Chọn vật');
   rail.append(inventoryButton);
+  const zoomButton=(label,factor)=>el('button',{type:'button','aria-label':label,onclick:()=>{
+    zoomBy(factor);updateDesktop();cv.focus({preventScroll:true});
+  }},factor>1?'+':'−');
+  const sidebarButton=el('button',{type:'button','aria-controls':'pn2','aria-expanded':'true',onclick:()=>{
+    const wide=root.classList.toggle('assembly-wide');
+    sidebarButton.textContent=wide?'Mở bảng phải':'Thu bảng phải';
+    sidebarButton.setAttribute('aria-expanded',String(!wide));
+    dirty=true;
+  }},'Thu bảng phải');
+  rail.append(zoomButton('Thu nhỏ',1/1.25),zoomButton('Phóng to',1.25),sidebarButton);
   const layerPicker=el('select',{'aria-label':'Lớp đang sửa',onchange:e=>useLayer(Number(e.target.value))},
     layerNames.map((label,index)=>el('option',{value:index},(index+1)+' · '+label)));
   const statusText=el('span',{}),statusHint=el('span',{class:'desktop-status-hint'},'Space + kéo · Cuộn để zoom · Chuột phải');
@@ -921,7 +953,7 @@ export function init2D(root,A){
   function useTool(id){
     if(id!=='erase'){eraseActors=false;eraseSelected=null;}
     pickAndDraw=false;tool=id;fillArm=false;wallChain=null;if(id==='wall'){act=2;tab='tools';}if(id!=='zone'){zpend=null;zsel=null;}
-    if(id==='inventory'){tab='inventory';sel=null;selId=null;inventoryMoving=false;}
+    if(id==='inventory'){tab='inventory';sel=null;selId=null;inventoryMoving=false;if(root.classList.contains('assembly-wide'))sidebarButton.click();}
     else if(id==='obj')tab='obj';
     else if(desktop()||id==='zone'||id==='erase'||tab==='obj'||tab==='inventory')tab='tools';
     renderTabs();draw();dirty=true;cv.focus({preventScroll:true});
@@ -1667,7 +1699,7 @@ export function init2D(root,A){
       }));
       panel.append(propSizeField(propSizes.get(current)||100,n=>{propSizes.set(current,n);refreshAnchorPicker();dirty=true;}),
         el('div',{class:'row'},el('button',{class:'b',type:'button','data-prop-turn':'','aria-pressed':String(propTurns.has(current)),
-          onclick:()=>{transformProp('turn');cv.focus({preventScroll:true});}},'Đổi hướng · T')),
+          onclick:()=>{transformProp('turn');cv.focus({preventScroll:true});}},'Đổi hướng · R')),
         anchorMode(prop)==='gate'?null:anchorPicker(prop,current),
         anchorMode(prop)==='gate'?null:el('label',{class:'row'},el('input',{
           type:'checkbox',...(snapPieces?{checked:''}:{}),onchange:e=>{snapPieces=e.target.checked;dirty=true;}
@@ -1761,6 +1793,13 @@ export function init2D(root,A){
     return c;
   }
 
+  const inventoryLayers=[['all','Tất cả'],['floor','Nền'],['overlay','Phủ nền'],['prop','Vật dụng'],
+    ['house','Nhà'],['roof','Mái / cửa'],['wall','Tường'],['actors','Đối tượng']];
+  let inventoryLayer='all',inventorySnap=false,inventoryLightDrag=true;
+  function inventoryLayerOf(e){
+    return e.wallLine?'wall':e.t==='deco'?arrangementLayer({...e,sceneLayer:e.sceneLayer??sceneEntityLayer(e)}):'actors';
+  }
+  const inInventoryLayer=e=>inventoryLayer==='all'||inventoryLayerOf(e)===inventoryLayer;
   function inventoryKey(e){
     if(e.wallLine)return 'wall';
     return [e.t,sceneEntityLayer(e),e.roofDirection?'board':'',e.tile?.sid??'',e.tile?.idx??''].join(':');
@@ -1768,6 +1807,7 @@ export function init2D(root,A){
   function inventoryGroups(){
     const groups=new Map();
     const add=(e,cell)=>{
+      if(!inInventoryLayer(e))return;
       const key=inventoryKey(e);
       if(!groups.has(key))groups.set(key,{key,label:entityName(e),items:[]});
       groups.get(key).items.push({id:e.id,e,cell});
@@ -1849,9 +1889,31 @@ export function init2D(root,A){
     view.x+=(cv.clientWidth-Math.min(...xs)-Math.max(...xs))/2;
     view.y+=(cv.clientHeight-Math.min(...ys)-Math.max(...ys))/2;
   }
-  function drawInventoryFocus(){
-    if(!inventoryItem)return;
-    const points=inventoryOutline(inventoryItem);
+  function drawInventoryFocus(width,height){
+    const gesture=drag?.inventory&&drag.moved&&drag.item&&lastPt?drag:null;
+    const item=gesture?.item||inventoryItem;
+    const parts=item?propGroup(M.ents,item.e):[];
+    const offset=gesture?inventoryDragPoint(gesture,lastPt).map((v,i)=>v-inventoryPoint(item.e)[i]):[0,0];
+    const candidates=canArrangeProp(item?.e||{})?parts.map(part=>({...part,x:part.x+offset[0],y:part.y+offset[1]})):null;
+    if(gesture&&!inventoryLightDrag&&candidates){
+      for(const piece of candidates)if(piece.tile&&piece.placedProp)drawIndependentProp(piece,true);
+    }
+    if(ISOQ()&&lastPt&&hov&&!drag?.pan){
+      const geo=candidates?outline2D(M.cfg.outline,ANGQ(),M.ents):null;
+      const walls=candidates?[...(geo?.walls||[]),...builtWallFaces(M.ents,ANGQ())]:[];
+      const wallEdges=walls.flatMap(wall=>{
+        const shape=wallSurface(wall,(x,y)=>[x,y],1,geo);
+        return shape?.high>0?[shape.front,shape.back]:[];
+      });
+      drawAssemblyGuides(cx,{width,height,project:g2s,pointer:[lastPt.x,lastPt.y],
+        parts:candidates,entities:M.ents,wallEdges});
+    }
+    if(!item)return;
+    const points=parts.length>1?convexOutline(parts.flatMap(e=>inventoryOutline({e}))):inventoryOutline(item);
+    if(gesture){
+      const [x,y]=inventoryDragPoint(gesture,lastPt),from=g2s(...inventoryPoint(item.e)),to=g2s(x,y);
+      for(const p of points){p[0]+=to[0]-from[0];p[1]+=to[1]-from[1];}
+    }
     cx.save();cx.beginPath();cx.moveTo(...points[0]);for(const point of points.slice(1))cx.lineTo(...point);cx.closePath();
     cx.lineWidth=5;cx.strokeStyle='#13212d';cx.stroke();cx.lineWidth=2;cx.strokeStyle='#78f2d6';cx.stroke();
     cx.restore();
@@ -1860,10 +1922,23 @@ export function init2D(root,A){
     if(inventoryMoving&&inventoryItem){
       const raw=s2g(p.x,p.y);
       const wallHit=inventoryItem.e.wallId?visibleWallAt(p):null;
-      const point=wallHit?.point||[raw.x,raw.y];
+      const point=wallHit?.point||(inventorySnap&&inventoryItem.e.placedProp?[Math.floor(raw.x)+.5,Math.floor(raw.y)+.5]:[raw.x,raw.y]);
       moveInventory(inventoryItem,...point,inventoryMoving==='copy');
       return;
     }
+    const item=inventoryHit(p);
+    if(item)selectInventory(item);
+  }
+  function selectInventory(item){
+    inventoryGroup=inventoryKey(item.e);inventoryId=item.id;inventoryQuery='';draw();dirty=true;
+  }
+  function inventoryDragPoint(gesture,p){
+    const start=s2g(gesture.p.x,gesture.p.y),end=s2g(p.x,p.y);
+    const [x,y]=inventoryPoint(gesture.item.e);
+    const at=[x+end.x-start.x,y+end.y-start.y];
+    return inventorySnap&&gesture.item.e.placedProp?at.map(v=>Math.floor(v)+.5):at;
+  }
+  function inventoryHit(p){
     const items=inventoryGroups().flatMap(group=>group.items);
     const ids=new Map(items.map(item=>[item.id,item]));
     let chosen;
@@ -1872,10 +1947,9 @@ export function init2D(root,A){
       if(!item||p.x<r[0]||p.y<r[1]||p.x>r[2]||p.y>r[3])continue;
       if(outlineContains(inventoryOutline(item),p)){chosen=item;break;}
     }
-    const item=chosen||ids.get(wallAtScreen(p)?.id)||
+    return chosen||ids.get(wallAtScreen(p)?.id)||
       [3,2].map(layer=>legacyPropAt(p,layer)).filter(Boolean)
         .map(tile=>items.find(item=>item.cell?.layer===tile.layer&&item.cell.index===tile.i)).find(Boolean);
-    if(item){inventoryGroup=inventoryKey(item.e);inventoryId=item.id;inventoryQuery='';draw();dirty=true;}
   }
   function commitInventory(next){
     const issue=structureError(M,next);
@@ -1892,17 +1966,24 @@ export function init2D(root,A){
   function moveInventory(item,x,y,copy=false){
     if(!Number.isFinite(x)||!Number.isFinite(y)||!inb(x,y)){toast('Chọn tọa độ trong bản đồ.');return;}
     const {e,cell}=item;
-    const position=(value,limit)=>e.placedProp?Math.min(limit-.001,Math.round(value*1000)/1000)-1:Math.floor(value);
-    const nx=position(x,M.w),ny=position(y,M.h);
+    const precise=e.placedProp||canArrangeProp(e)&&!cell;
+    const anchor=e.placedProp?1:0;
+    const position=value=>precise?Math.round(value*1000)/1000-anchor:Math.floor(value);
+    const nx=position(x),ny=position(y);
     if(e.x===nx&&e.y===ny){inventoryMoving=false;draw();dirty=true;return;}
     const next=clone(M);
     let id=item.id;
-    if(cell&&!e.placedProp){
+    const group=propGroup(M.ents,e);
+    if(group.length>1){
+      const parts=transformPropGroup(group,e,{x:nx,y:ny});
+      if(!replaceInventoryGroup(next,parts,copy))return;
+      if(copy)id=parts.find((_,i)=>group[i].id===e.id).id;
+    }else if(cell&&!e.placedProp){
       const tiles=next.layers[cell.layer],index=ny*M.w+nx;
       if(tiles[index]){toast('Ô đích đã có một mảnh cùng lớp.');return;}
       if(!copy)tiles[cell.index]=0;tiles[index]=cell.value;id='paint:'+cell.layer+':'+index;
     }else{
-      const piece=copy?{...clone(e),id:newId()}:readInventoryPiece(next,item);
+      const piece=copy?{...structuredClone(e),id:newId()}:readInventoryPiece(next,item);
       if(copy){delete piece.legacyIndex;next.ents.push(piece);id=piece.id;}
       if(e.wallLine&&M.ents.some(q=>q.wallId===e.id)){
         toast('Tuyến tường đang gắn cổng. Hãy tháo cổng trước khi di chuyển.');return;
@@ -1919,8 +2000,27 @@ export function init2D(root,A){
     if(!commitInventory(next))return;
     inventoryId=id;inventoryMoving=false;draw();
   }
+  function replaceInventoryGroup(next,parts,copy){
+    if(parts.some(part=>!inb(...inventoryPoint(part)))){
+      toast('Các phần của vật phải nằm trong bản đồ.');return false;
+    }
+    if(copy){
+      const arrangementGroup=newId();
+      for(const part of parts){part.id=newId();part.arrangementGroup=arrangementGroup;}
+      next.ents.push(...parts);
+    }else{
+      const replacements=new Map(parts.map(part=>[part.id,part]));
+      next.ents=next.ents.map(part=>replacements.get(part.id)||part);
+    }
+    return true;
+  }
   function removeInventory(item){
-    if(item.cell){
+    const group=propGroup(M.ents,item.e);
+    if(group.length>1){
+      const ids=new Set(group.map(part=>part.id)),next=clone(M);
+      next.ents=next.ents.filter(part=>!ids.has(part.id));
+      if(!commitInventory(next))return;
+    }else if(item.cell){
       const next=clone(M);
       next.layers[item.cell.layer][item.cell.index]=0;
       if(!commitInventory(next))return;
@@ -1936,13 +2036,18 @@ export function init2D(root,A){
       draw();
     }
   }
-  function inventoryCanCopy({e}){return e.t==='deco'&&!e.wallLine&&!e.wallId&&!e.gateAssembly&&!e.housePart;}
+  function inventoryCanCopy({e}){return canArrangeProp(e)||e.t==='deco'&&!e.wallLine&&!e.wallId&&!e.gateAssembly&&!e.housePart;}
   function startInventoryAction(mode){
     inventoryMoving=inventoryMoving===mode?false:mode;
     draw();dirty=true;cv.focus({preventScroll:true});
   }
   function inventoryShortcut(key,event){
     if(event.ctrlKey||event.metaKey||event.altKey)return false;
+    if(key==='+'||key==='='||key==='-'||key==='−'){
+      zoomBy(key==='+'||key==='='?1.25:1/1.25);updateDesktop();return true;
+    }
+    if(key==='0'){fit();return true;}
+    if(key==='g'){if(!event.repeat){inventorySnap=!inventorySnap;draw();}return true;}
     if(key==='escape'&&(inventoryMoving||inventoryId)){
       if(!inventoryMoving)inventoryGroup=inventoryId='';
       inventoryMoving=false;draw();dirty=true;return true;
@@ -1953,7 +2058,15 @@ export function init2D(root,A){
     if(key==='d'){if(!event.repeat&&inventoryCanCopy(item))startInventoryAction('copy');return true;}
     if(key==='m'){if(!event.repeat)startInventoryAction('move');return true;}
     if(key==='enter'){if(!event.repeat)body.querySelector('.inventory-controls input')?.focus();return true;}
-    if(key==='t'&&item.e.placedProp&&inventoryCanCopy(item)){
+    const group=propGroup(M.ents,item.e);
+    if(key==='r'&&group.length>1){
+      if(!event.repeat){
+        const next=clone(M),parts=transformPropGroup(group,item.e,item.e,true);
+        if(replaceInventoryGroup(next,parts,false)&&commitInventory(next))draw();
+      }
+      return true;
+    }
+    if((key==='r'||key==='t')&&item.e.placedProp&&inventoryCanCopy(item)){
       if(!event.repeat){
         const next=clone(M),piece=readInventoryPiece(next,item);
         piece.propProjection??=ANGQ()?'angle':ISOQ()?'iso':'top';
@@ -1963,9 +2076,11 @@ export function init2D(root,A){
       return true;
     }
     const delta={arrowleft:[-1,0],arrowright:[1,0],arrowup:[0,-1],arrowdown:[0,1]}[key];
-    if(!delta||event.shiftKey)return false;
+    if(!delta)return false;
+    if(event.shiftKey){view.x-=delta[0]*45;view.y-=delta[1]*45;dirty=true;return true;}
     const [x,y]=inventoryPoint(item.e);
-    moveInventory(item,x+delta[0],y+delta[1]);
+    const step=item.e.placedProp||canArrangeProp(item.e)&&!item.cell ? .01 : 1;
+    moveInventory(item,x+delta[0]*step,y+delta[1]*step);
     return true;
   }
   function inventoryCard(item,label,selected,action){
@@ -1981,7 +2096,17 @@ export function init2D(root,A){
     const groups=M?inventoryGroups():[],group=groups.find(g=>g.key===inventoryGroup);
     inventoryItem=group?.items.find(item=>item.id===inventoryId)||null;
     const title=el('h3',{},'Vật phẩm trong màn');
-    body.append(title);
+    const layer=el('select',{class:'num','aria-label':'Lớp vật đã đặt',
+      onchange:()=>{inventoryLayer=layer.value;inventoryPage=0;inventoryId=inventoryGroup='';inventoryMoving=false;draw();dirty=true;cv.focus({preventScroll:true});}},
+      ...inventoryLayers.map(([value,label])=>el('option',{value},label)));
+    layer.value=inventoryLayer;
+    const snap=el('input',{type:'checkbox',onchange:()=>{inventorySnap=snap.checked;cv.focus({preventScroll:true});}});
+    snap.checked=inventorySnap;
+    const lightDrag=el('input',{type:'checkbox',onchange:()=>{inventoryLightDrag=lightDrag.checked;cv.focus({preventScroll:true});}});
+    lightDrag.checked=inventoryLightDrag;
+    body.append(title,el('div',{class:'row inventory-controls'},el('label',{},'Lớp ',layer),
+      btn('Hoàn tác',doUndo),btn('Làm lại',doRedo),el('label',{},snap,' Bám tâm ô'),el('label',{},lightDrag,' Kéo nhẹ'),
+      btn('Phối vật liệu',()=>api.openMaterials?.())));
     if(!groups.length){body.append(el('p',{class:'hint'},'Màn này chưa có vật phẩm.'));return;}
     const gallery=el('div',{class:'build-materials'});
     const paging=el('div',{class:'row build-pages'});
@@ -2030,17 +2155,25 @@ export function init2D(root,A){
     el('div',{class:'row inventory-controls'},
       btn('Di chuyển · M',()=>startInventoryAction('move'),inventoryMoving==='move'?'on':''),
       inventoryCanCopy(item)?btn('Nhân bản · D',()=>startInventoryAction('copy'),inventoryMoving==='copy'?'on':''):null,
-      item.e.placedProp&&inventoryCanCopy(item)?btn('Đổi hướng · T',()=>{inventoryShortcut('t',{});cv.focus({preventScroll:true});}):null,
+      (item.e.placedProp||propGroup(M.ents,item.e).length>1)&&inventoryCanCopy(item)?btn('Đổi hướng · R',()=>{inventoryShortcut('r',{});cv.focus({preventScroll:true});}):null,
       btn('Đưa vào giữa khung',()=>{centerInventory(item);dirty=true;cv.focus({preventScroll:true});}),
       item.e.t==='start'?null:btn('Xóa · Delete',()=>{removeInventory(item);cv.focus({preventScroll:true});})),
     el('p',{class:'hint',role:'status'},inventoryMoving==='copy'?'Bấm bản đồ để đặt bản sao. Esc hủy.':
-      inventoryMoving?'Bấm bản đồ để đặt điểm neo mới. Esc hủy.':'← ↑ → ↓ dịch theo ô · Enter sửa tọa độ · Ctrl+Z hoàn tác.'));
+      inventoryMoving?'Bấm bản đồ để đặt điểm neo mới. Esc hủy.':'Kéo vật để dời · Mũi tên dịch vật tự do 0,01 ô hoặc dịch vật theo lưới 1 ô · Shift + mũi tên dịch khung.'));
 
   }
   function draw(){updateDesktop();[...tabs.querySelectorAll('button[data-t]')].forEach(b=>b.classList.toggle('on',b.dataset.t===tab));body.innerHTML='';
     body.append(...drawGuides());
     if(tab==='inventory'){drawInventory();return;}
     if(tab==='tools'){
+      if(tool==='select'||tool==='paste'){
+        const selection=selRect();
+        body.append(el('div',{class:'row'},
+          selection?btn('Sao chép · Ctrl+C',()=>copyArea(false)):null,
+          selection?btn('Cắt · Ctrl+X',()=>copyArea(true)):null,
+          clip?btn('Dán · Ctrl+V',()=>useTool('paste')):null,
+          selection?btn('Bỏ chọn',()=>{sel=null;dirty=true;draw();}):null));
+      }
       const building=(brushTools.includes(tool)||tool==='wall')&&act<4;
       if(building)body.append(buildPalette());
       if(tool==='erase')body.append(erasePanel());
@@ -2164,7 +2297,7 @@ export function init2D(root,A){
             el('div',{class:'row'},el('span',{class:'lbl'},'Hành vi'),(()=>{const s=el('select',{class:'num'},AIL.map(([v,n])=>el('option',{value:v},n)));s.value=e.ai;s.onchange=()=>{e.ai=s.value;after();};return s;})())]:[]),
           ...(e.t==='deco'&&e.door?[el('div',{class:'row'},el('span',{class:'lbl'},'Trạng thái cửa'),(()=>{const sl=el('select',{class:'num'},el('option',{value:'dong'},'Đóng (chặn lối)'),el('option',{value:'mo'},'Mở (đi qua được)'));sl.value=e.door.st;sl.onchange=()=>{const v=e.door.v[sl.value];e.door.st=sl.value;e.tile=v.tile;if(v.col&&v.col.length)e.col=v.col;else delete e.col;after();draw();};return sl;})()),el('div',{class:'row'},el('label',{style:'font-size:13px'},(()=>{const c=el('input',{type:'checkbox'});c.checked=!!e.door.auto;c.onchange=()=>{e.door.auto=c.checked?1:0;after();};return c;})(),' Tự đóng lại khi nhân vật đi xa')),el('div',{class:'hint'},'Khi chơi: cửa tự mở khi lại gần, phím E đóng/mở. Vùng chặn riêng từng trạng thái.')]:[]),
           ...(e.t==='deco'?[propSizeField(sizePercent(e),n=>{if(n!==sizePercent(e))editPlacedProp(e,n);}),
-            e.placedProp?el('div',{class:'row'},btn('Đổi hướng · T',()=>{editPlacedProp(e,'turn');cv.focus({preventScroll:true});}),
+            e.placedProp?el('div',{class:'row'},btn('Đổi hướng · R',()=>{editPlacedProp(e,'turn');cv.focus({preventScroll:true});}),
               !e.wallId&&e.col?.length===2&&e.tile&&gateKind(enc(e.tile.sid,e.tile.idx))==='stone'?
                 btn('Lắp cổng cũ lên tường',()=>editPlacedProp(e,next=>{next.gateAssembly=true;next.wallGateBrush=true;next.walk=false;})):null):null,
             e.gateAssembly?el('p',{class:'hint'},e.wallId?'Cổng gắn vào tường. Xóa cổng sẽ khép lại lỗ mở.':'Cổng kiểu cũ có hai đoạn tường ngắn. Có thể lắp lại vào tuyến tường.'):
@@ -3874,5 +4007,6 @@ export function init2D(root,A){
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
     .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
-  return {ready,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  const api={ready,showAssembly(){useTool('inventory');},connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  return api;
 }

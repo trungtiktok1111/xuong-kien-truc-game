@@ -1,3 +1,4 @@
+import {drawAssemblyGuides} from './assemblyGuides.js';
 import {arrangementLayer,canArrangeProp,propFootprint,propPlacement,propGroup,transformPropGroup} from './outlinePropPlacement.js';
 import {decoZones,zPath,zBounds} from './zones.js';
 import {drawSurfaceTerrain} from './surfaceContours.js';
@@ -96,7 +97,7 @@ export function joinOutlineSample(loops,w,h,level,axis,width){
  return {loops:cropOutline(joined,[0,0],[W,H]),w:W,h:H,added,start,dest,width};
 }
 
-export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan'){
+export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan',initialPane='objects'){
  const is3D=editor.kind==='3d';
  const map=editor.map(),minSide=is3D?16:4,maxSide=is3D?320:MAX_MAP_SIDE;
  let propEdits=structuredClone(map.cfg.outline?.propEdits||[]);
@@ -1731,56 +1732,9 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
    }
    ctx.restore();
   }
-  function guide(x,y,dx,dy){
-   const reach=2*Math.hypot(liveCanvas.width,liveCanvas.height),length=Math.hypot(dx,dy)||1;
-   dx=dx*reach/length;dy=dy*reach/length;
-   ctx.beginPath();ctx.moveTo(x-dx,y-dy);ctx.lineTo(x+dx,y+dy);ctx.stroke();
-  }
-  const center=project(liveView.M.w/2,liveView.M.h/2);
-  ctx.save();ctx.strokeStyle='#ffda43cc';ctx.setLineDash([5,5]);
-  for(const [dx,dy] of [[1,0],[0,1],[2,1],[2,-1]])guide(...(guidePointer||center),dx,dy);
-  if(gesture?.parts){
-   const bounds=gesture.parts.flatMap(propFootprint).map(zBounds);
-   const [x0,y0,x1,y1]=[Math.min(...bounds.map(b=>b[0])),Math.min(...bounds.map(b=>b[1])),
-    Math.max(...bounds.map(b=>b[2])),Math.max(...bounds.map(b=>b[3]))];
-   const movingIds=new Set(gesture.parts.map(part=>part.id));
-   const targets=liveView.M.ents.filter(other=>canArrangeProp(other)&&!movingIds.has(other.id))
-    .flatMap(propFootprint).map(zBounds);
-   // Keep the matching tolerance in map units so the result is independent of zoom.
-   const tolerance=.025;
-   function drawSide(axis,value,start,direction){
-    const along=1-axis;
-    let color='#f02b35',nearest=Infinity;
-    function consider(low,high,matchedColor){
-     const distance=direction>0?low-start:start-high;
-     const extent=direction>0?high-start:start-low;
-     if(extent<=1e-6||distance < -tolerance||distance>=nearest)return;
-     nearest=distance;color=matchedColor;
-    }
-    for(const bounds of targets){
-     if([bounds[axis],bounds[axis+2]].some(edge=>Math.abs(edge-value)<=tolerance))
-      consider(bounds[along],bounds[along+2],'#00b83e');
-    }
-    for(const [a,b] of liveProjection.wallEdges){
-     if(Math.abs(a[axis]-b[axis])<1e-6&&Math.abs(a[axis]-value)<=tolerance)
-      consider(Math.min(a[along],b[along]),Math.max(a[along],b[along]),'#087ee8');
-    }
-    const [x,y]=axis===0?project(value,start):project(start,value);
-    const reach=2*Math.hypot(liveCanvas.width,liveCanvas.height)/Math.sqrt(5);
-    const dx=(axis===0?-2:2)*direction*reach,dy=direction*reach;
-    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx,y+dy);
-    ctx.lineWidth=2;ctx.strokeStyle=color;ctx.stroke();
-   }
-   for(const x of [x0,x1]){
-    drawSide(0,x,y0,-1);
-    drawSide(0,x,y1,1);
-   }
-   for(const y of [y0,y1]){
-    drawSide(1,y,x0,-1);
-    drawSide(1,y,x1,1);
-   }
-  }
-  ctx.restore();
+  drawAssemblyGuides(ctx,{width:liveCanvas.width,height:liveCanvas.height,project,
+   pointer:guidePointer||project(liveView.M.w/2,liveView.M.h/2),parts:gesture?.parts,
+   entities:liveView.M.ents,wallEdges:liveProjection.wallEdges});
   if(!entity)return;
   const color=gesture?.problem?'#ff7777':candidate?'#7fffab':'#ffd879';
   ctx.save();
@@ -1969,7 +1923,7 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
    previewTabs.get(name).setAttribute('aria-pressed',String(name===key));
   }
  }
- setPreviewPane('objects');
+ setPreviewPane(initialPane);
  const sidebarToggle=B('Thu gọn bảng phải',()=>setPreviewSidebar(sidebarToggle.getAttribute('aria-expanded')!=='true'));
  sidebarToggle.classList.add('outline-sidebar-toggle');
  function setPreviewSidebar(open){
@@ -2047,13 +2001,13 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
  const workspaceTabs=new Map();
  function switchWorkspace(page){
   box.dataset.page=page;
-  workspaceTitle.textContent=is3D?'Đường Bao 3D · mặt bằng XZ':page==='preview'?'Ráp Cảnh 2D':'Đường bao bản đồ';
+  workspaceTitle.textContent=is3D?'Đường Bao 3D · mặt bằng XZ':page==='preview'?'Đường bao · Xem bản nháp':'Đường bao bản đồ';
   (page==='preview'?previewHelp:settings).append(outlineDimensions);
   for(const [name,button] of workspaceTabs)button.setAttribute('aria-pressed',String(name===page));
   if(page==='preview')queueLivePreview();
   else if(wideOutline.matches){clearTimeout(liveTimer);liveRevision++;liveKey='';stopSequence();}
  }
- for(const [page,label] of [['plan','Mặt bằng'],...(!is3D?[['preview','Cảnh ráp']]:[]),['settings','Thiết lập']]){
+ for(const [page,label] of [['plan','Mặt bằng'],...(!is3D?[['preview','Xem bản nháp']]:[]),['settings','Thiết lập']]){
   workspaceTabs.set(page,B(label,()=>switchWorkspace(page)));
  }
  const workspaceTitle=el('h2');
