@@ -1,5 +1,7 @@
 import {mapCollision} from './mapCollision.js';
-import {decoZones,zBounds,zonesHit} from './zones.js';
+import {decoZones,zBounds,zPts} from './zones.js';
+import {corridorLoop} from './outlineShapes.js';
+import clipping from 'polygon-clipping';
 
 export function canArrangeProp(entity){
  return entity.t==='deco'&&entity.tile&&entity.id!=null&&!entity.wallId&&!entity.wallLine&&
@@ -52,6 +54,23 @@ export function propFootprint(entity){
  return [{k:'ell',x:entity.x+.85,y:entity.y+.85,w:.3,h:.3}];
 }
 
+function zoneRings(zone){
+ if(zone.k!=='line')return [zPts(zone)];
+ const points=zone.pts||[];
+ return points.slice(0,zone.closed?points.length:-1).map((point,i)=>
+  corridorLoop(point,points[(i+1)%points.length],(zone.th||.6)/2));
+}
+
+export function footprintsOverlap(a,b){
+ const [l,t,r,d]=zBounds(a),[x,y,w,h]=zBounds(b);
+ if(r<=x+1e-8||w<=l+1e-8||d<=y+1e-8||h<=t+1e-8)return false;
+ return zoneRings(a).some(left=>left.length>=3&&zoneRings(b).some(right=>
+  right.length>=3&&clipping.intersection([left],[right]).some(poly=>{
+   const ring=poly[0];
+   return Math.abs(ring.slice(1).reduce((sum,[x,y],i)=>sum+ring[i][0]*y-ring[i][1]*x,0))>1e-8;
+  })));
+}
+
 export function propPlacement(view,entity,ignore){
  const {M:map,placementZones}=view;
  const outline=map.cfg.outline;
@@ -73,7 +92,7 @@ export function propPlacement(view,entity,ignore){
   const radius=zone.k==='ell'&&zone.w===zone.h?zone.w/2:Math.hypot(right-left,bottom-top)/2;
   if(!ground.free(x,y,radius))
    return 'Chân vật phải nằm trọn trên sàn đi được.';
-  if(zonesHit(blockers,x,y,radius))return 'Vùng chân vật đang chồng lên vật khác hoặc lối ra vào.';
+  if(blockers.some(blocker=>footprintsOverlap(zone,blocker)))return 'Vùng chân vật đang chồng lên vật khác hoặc lối ra vào.';
  }
  return '';
 }
