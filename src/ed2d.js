@@ -59,7 +59,7 @@ export function init2D(root,A){
   const cv=$('#cv2'),cx=cv.getContext('2d');
   const aimTitle=el('strong'),aimHint=el('div');
   const aimHud=el('div',{class:'map-aim',hidden:''},aimTitle,aimHint);
-  root.append(aimHud);
+  cv.after(aimHud);
   {const H2={draw:'<b>Đặt mảnh</b>: chạm/kéo = đặt mảnh đã chọn · Kéo 2 ngón = phóng/thu và di chuyển · Chuột giữa hoặc Space+kéo = di chuyển bản đồ',erase:'<b>Xóa</b>: kéo = xóa ô ở lớp đang vẽ',fill:'<b>Đổ</b>: bấm = đổ đầy vùng cùng loại',rect:'<b>Hình CN</b>: kéo = tô cả hình chữ nhật',pick:'<b>Hút</b>: bấm ô trên bản đồ để lấy làm cọ',select:'<b>Chọn vùng</b>: kéo khung → Sao chép / Cắt / Lấy làm stamp',paste:'<b>Dán</b>: bấm để dán vùng đã sao chép',zone:'<b>Vùng chặn</b>: kéo vẽ vùng nhân vật không đi qua được',obj:'<b>Đối tượng/Vật thể</b>: chọn vật thể ở danh sách, bấm lên bản đồ để đặt · bấm vật đã đặt để sửa/xóa · kéo để di chuyển',pan:'<b>Kéo</b>: kéo để di chuyển bản đồ'};
   const hb=document.createElement('div');hb.className='legacy-map-help';hb.style.cssText='position:absolute;left:10px;top:10px;z-index:5;pointer-events:none;background:rgba(15,22,30,.78);color:#cfe;font:12px/1.5 system-ui;padding:6px 10px;border-radius:8px;max-width:430px';
   const host=document.getElementById('v2d');host.style.position='relative';host.append(hb);let lt='';
@@ -946,8 +946,8 @@ export function init2D(root,A){
   ui.obj=()=>{if(tab==='obj'||tab==='maps'||tab==='inventory')draw();};ui.tools=()=>{if(tab==='tools')draw();};ui.layers=()=>{if(tab==='layers'||tab==='tools')draw();};ui.sel=()=>{if(tab==='tools')draw();};
   function btn(label,fn,cls=''){return el('button',{class:'b '+cls,onclick:fn},label);}
   const brushTools=['draw','rect','fill'];
-  const buildSources=new Map(),buildPages=new Map(),buildPageSize=24;
-  let allBuildImages=false;
+  const buildSources=new Map(),buildPages=new Map(),buildPageSize=48;
+  let allBuildImages=true;
   let buildQuery='',buildOptionsOpen=false,sheetOptionsOpen=false;
   const daXoayParts=['Cổng vòm','Cột đá','Rương'];
   function brushAsset(value){
@@ -1026,8 +1026,13 @@ export function init2D(root,A){
     }
     return ruleContext.context;
   }
+  function withAssetSource(e){
+    const tile=e.tile;
+    if(e.t!=='deco'||e.assetSource||!sheets[tile?.sid])return e;
+    return {...e,assetSource:constructionTile(tile.sid,tile.idx,0).source};
+  }
   function structuralPieces(map){
-    const pieces=[...map.ents],layer=map.layers[3];
+    const pieces=map.ents.map(withAssetSource),layer=map.layers[3];
     for(let i=0;i<layer.length;i++){
       if(!layer[i])continue;
       const roof=legacyRoof(layer[i],i,map.w);
@@ -1667,9 +1672,8 @@ export function init2D(root,A){
     }
     const ids=visibleBuildSheets(scope),groups=new Map();
     for(const id of ids){const cards=materialCards(scope,id);if(cards.length)groups.set(id,cards);}
-    const suggested=[...groups.keys()].find(id=>/^Đá Xoáy/.test(sheets[id].name))??groups.keys().next().value;
-    let source=buildSources.get(scope)??(allBuildImages?'all':suggested)??'all',page=buildPages.get(scope)||0;
-    if(source!=='all'&&!groups.has(source))source=allBuildImages?'all':suggested??'all';
+    let source=buildSources.get(scope)??'all',page=buildPages.get(scope)||0;
+    if(source!=='all'&&!groups.has(source))source='all';
     const results=el('div',{class:'build-results'});
     const packs=customPackRecords().filter(({id,vat})=>(allBuildImages||layer!==0)&&vat.items?.some(item=>
       allBuildImages||(item.role==='Mái/cửa'?3:item.role==='Phủ nền'?1:2)===layer)&&!groups.has(sheets.findIndex(s=>s.name==='Vat-'+id)));
@@ -3074,7 +3078,7 @@ export function init2D(root,A){
     return automaticPaintZones(M,makePaintLookup(),groups);
   }
   function sceneForPlay(map,cfg,lookup){
-    const layers=map.layers.map(layer=>layer.slice()),ents=structuredClone(map.ents);
+    const layers=map.layers.map(layer=>layer.slice()),ents=structuredClone(map.ents.map(withAssetSource));
     for(let i=0;i<layers[3].length;i++){
       if(!layers[3][i])continue;
       const roof=legacyRoof(layers[3][i],i,map.w);

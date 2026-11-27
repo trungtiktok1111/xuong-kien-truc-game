@@ -63,12 +63,13 @@ export function zPath(ctx,z,T){
   const P=zPts(z);ctx.beginPath();P.forEach((p,i)=>{const q=T(p[0],p[1]);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});if(z.k!=='line'||z.closed)ctx.closePath();}
 
 // vùng chặn tự suy ra từ chân (nền) của từng vật cảnh: e.zb=[dx,dy,w,h] so với góc trước (x+1,y+1)
-function rockFootprint(entity){
-  if(!/^surface-rock-/.test(entity.id||'')&&!/^(?:Vách đá|Vách núi đá)$/i.test(entity.name||'')&&entity.groundContact!=='rock')return null;
+function rockFootprint(entity,name){
+  if(!/^surface-rock-/.test(entity.id||'')&&!/(?:vach (?:nui )?da)/i.test(name)&&entity.groundContact!=='rock')return null;
   // Ground-contact polygon in the 96 px rock frame, relative to its 49,87 anchor.
   const scale=(entity.sc||3.1)/(.75*96);
+  const [ax,ay]=entity.surfaceGenerated?[49,87]:[96*(.5-(entity.ox||0)),96*(1-(entity.oy||0))];
   return [[6,83],[47,65],[92,82],[59,96],[22,95]].map(([x,y])=>{
-    const dx=x-49,dy=y-87;
+    const dx=x-ax,dy=y-ay;
     return [(dy+dx/2)*scale,(dy-dx/2)*scale];
   });
 }
@@ -87,13 +88,20 @@ export function decoZones(ents=[]){
       addPoly([[-half,-half],[half,-half],[half,half],[-half,half]]);
       continue;
     }
-    const rock=rockFootprint(e);
+    const name=[e.name,e.assetSource].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const rock=rockFootprint(e,name);
     if(rock){addPoly(rock);continue;}
-    if(e.flat&&e.sceneLayer!==2&&e.sceneLayer!==3)continue;
-    const name=(e.name+' '+(e.assetSource||'')).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+
     if(/palm|coconut|\bdua\b/i.test(name)){
       const radius=Math.max(.025,(e.sc||1)*.022);
       out.push({id:id+'trunk',k:'ell',x:X-radius,y:Y-radius,w:radius*2,h:radius*2,rot:0,deco:e.id});
+      continue;
+    }
+    if(e.flat&&e.sceneLayer!==2&&e.sceneLayer!==3){
+      if(e.tile&&/(?:^|[^a-z])(?:roof|mai)(?=$|[^a-z])/i.test(name)){
+        const half=(e.sc||.95)*.42;
+        addPoly([[-half,-half],[half,-half],[half,half],[-half,half]]);
+      }
       continue;
     }
     const pad=e.surfaceGenerated&&e.id?.startsWith('surface-tree-')&&Number.isFinite(e.sc)?e.sc*80/(336*1.5):0;
