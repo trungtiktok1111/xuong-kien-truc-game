@@ -28,12 +28,12 @@ export const roofThickness=e=>Number.isFinite(e.roofThickness)?Math.max(.02,Math
 
 // Source atlas contact points, measured at the center of the base on the ground.
 const surfaceContacts={tree:[171/336,209/336],crop:[147/296,262/296],rock:[49/96,87/96]};
+export const surfaceSpriteContact=e=>e.surfaceGenerated?surfaceContacts[e.id?.split('-')[1]]:undefined;
 
 // A placed prop uses the same frame, scale and ground anchor in the preview and the game.
 export function placedPropFrame(e,project,unit,projection){
   const [x,y]=project(e.x+1,e.y+1),size=e.sc*unit;
-  const kind=e.surfaceGenerated?e.id?.split('-')[1]:null;
-  const contact=surfaceContacts[kind];
+  const contact=surfaceSpriteContact(e);
   const frame={anchor:[x,y],worldSize:e.sc,x:x-size/2+(e.ox||0)*size,y:y-size+(e.oy||0)*size-(projection==='top'?0:(e.roofBase||0)*unit*.75),size};
   if(contact){
     frame.x=x-contact[0]*size;

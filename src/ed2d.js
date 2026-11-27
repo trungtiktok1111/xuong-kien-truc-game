@@ -1,3 +1,4 @@
+import {cropContactFrame} from './cropContact.js';
 import {drawAssemblyGuides} from './assemblyGuides.js';
 import {stonePavingSheets} from './stonePaving.js';
 import {applyOutlinePropEdits,arrangementLayer,canArrangeProp,propFootprint,propPlacement,propGroup,transformPropGroup} from './outlinePropPlacement.js';
@@ -1063,8 +1064,9 @@ export function init2D(root,A){
     if(e.t!=='deco'||!sheet||e.wallLine||e.wallId||e.housePart||e.gateAssembly||e.sceneLayer===0||e.sceneLayer===1)return e;
     const assetSource=e.assetSource||(sheet===sheets[tile.sid]?constructionTile(tile.sid,tile.idx,0).source:sheet.name);
     const art=sheet.img&&!sheet.iso?tileContact(sheet,tile.idx,e.spriteFlip||0,source):null;
+    const cropContacts=art&&cropContactFrame(sheet.name,tile.idx,assetSource,tileContact(sheet,tile.idx,0,source).alphaBounds);
     const projection=cfg?.view==='iso'?(cfg.proj==='angle'?'angle':'iso'):'top';
-    return {...e,assetSource,assetSheet:sheet.name,contactProjection:projection,artContact:art?.contact,trunkContact:art?.trunk,artBase:art?.base,solidBase:art?.solidBase,
+    return {...e,assetSource,assetSheet:sheet.name,contactProjection:projection,cropContacts:cropContacts||e.cropContacts,artContact:art?.contact,trunkContact:art?.trunk,artBase:art?.base,solidBase:art?.solidBase,
       spriteBounds:e.spriteBounds||art?.bounds};
   }
   function structuralPieces(map){
@@ -1910,7 +1912,7 @@ export function init2D(root,A){
         parts:arrange?candidates:null,entities:M.ents,wallEdges});
     }
     if(!item)return;
-    const feet=(candidates||parts).flatMap(propFootprint);
+    const feet=(candidates||parts).flatMap(e=>propFootprint(withAssetSource(e,M.cfg)));
     const [l,t,r,b]=inventoryFootBounds(feet);
     const [x,y]=g2s((l+r)/2,(t+b)/2);
     cx.save();
@@ -2051,7 +2053,7 @@ export function init2D(root,A){
     draw();dirty=true;cv.focus({preventScroll:true});
   }
   function openInventoryCopy(item){
-    const source=item.e,originals=propGroup(M.ents,source),map=M;
+    const source=item.e,originals=propGroup(M.ents,source).map(e=>withAssetSource(e,M.cfg)),map=M;
     const dialog=el('dialog',{class:'scene-copy-dialog',style:'background:#192834;color:#fff;border:1px solid #567180;border-radius:10px;padding:18px'});
     const count=el('input',{type:'number',min:1,max:1000,value:1,required:''});
     const gap=el('input',{type:'number',min:0,max:600,step:.01,value:1,required:''});
@@ -2237,7 +2239,7 @@ export function init2D(root,A){
     }
     if(inventoryItem){
       const e=inventoryItem.e;
-      const [l,t,r,b]=inventoryFootBounds(propGroup(M.ents,e).flatMap(propFootprint));
+      const [l,t,r,b]=inventoryFootBounds(propGroup(M.ents,e).flatMap(part=>propFootprint(withAssetSource(part,M.cfg))));
       body.append(el('p',{class:'hint'},entityName(e)+' · Chân '+coord.format(r-l)+' × '+coord.format(b-t)+
         ' ô · Tâm đáy '+xy([(l+r)/2,(t+b)/2])));
     }
@@ -3333,17 +3335,21 @@ export function init2D(root,A){
     const key=idx*8+f;
     if(cache.has(key))return cache.get(key);
     const tw=sheet.tw;
-    let contact=null,bounds=null,rectangular=false,trunk=null,base=null,solidBase=false;
+    let contact=null,bounds=null,rectangular=false,trunk=null,base=null,solidBase=false,alphaBounds=null;
     try{
       const ctx=el('canvas',{width:tw,height:tw}).getContext('2d',{willReadFrequently:true});
       drawTile(ctx,enc(source.indexOf(sheet),idx,f),0,0,tw,source);
       const rgba=ctx.getImageData(0,0,tw,tw).data;
       contact=estimateContact(rgba,tw,0);
       let left=tw,top=tw,right=0,bottom=0,opaque=0;
+      let alphaLeft=tw,alphaTop=tw,alphaRight=0,alphaBottom=0;
       const footRows=new Int32Array(tw).fill(-1);
-      for(let y=0;y<tw;y++)for(let x=0;x<tw;x++)if(rgba[(y*tw+x)*4+3]>=112){
-        footRows[x]=y;left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x+1);bottom=Math.max(bottom,y+1);opaque++;
+      for(let y=0;y<tw;y++)for(let x=0;x<tw;x++){
+        const a=rgba[(y*tw+x)*4+3];
+        if(a>16){alphaLeft=Math.min(alphaLeft,x);alphaTop=Math.min(alphaTop,y);alphaRight=Math.max(alphaRight,x+1);alphaBottom=Math.max(alphaBottom,y+1);}
+        if(a>=112){footRows[x]=y;left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x+1);bottom=Math.max(bottom,y+1);opaque++;}
       }
+      if(alphaRight>alphaLeft)alphaBounds=[alphaLeft/tw,alphaTop/tw,alphaRight/tw,alphaBottom/tw];
       if(right>left){bounds=[left/tw,top/tw,right/tw,bottom/tw];rectangular=opaque/((right-left)*(bottom-top))>.96;}
       if(bounds&&right-left>=4){
         const inset=Math.max(1,Math.round((right-left)*.025));
@@ -3391,7 +3397,7 @@ export function init2D(root,A){
       }
 
     }catch{}
-    const info={contact,bounds,rectangular,trunk,base,solidBase};cache.set(key,info);return info;
+    const info={contact,bounds,rectangular,trunk,base,solidBase,alphaBounds};cache.set(key,info);return info;
   }
   function makePaintLookup(source=sheets){
     const profiles=new Map();

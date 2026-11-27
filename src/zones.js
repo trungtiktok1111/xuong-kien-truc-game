@@ -1,3 +1,4 @@
+import {surfaceSpriteContact} from './proj.js';
 import {builtWallZones} from './wall2d.js';
 import {gateZones} from './gate2d.js';
 // Vùng chặn hình học (không phụ thuộc ảnh). Toạ độ liên tục trong "ô" (ô i chiếm [i,i+1)).
@@ -65,7 +66,8 @@ export function zPath(ctx,z,T){
 // vùng chặn tự suy ra từ chân (nền) của từng vật cảnh: e.zb=[dx,dy,w,h] so với góc trước (x+1,y+1)
 function fromSprite(entity,u,v){
   const scale=entity.sc||1;
-  const x=(u-.5+(entity.ox||0))*scale,y=(v-1+(entity.oy||0))*scale;
+  const anchor=surfaceSpriteContact(entity)||[.5-(entity.ox||0),1-(entity.oy||0)];
+  const x=(u-anchor[0])*scale,y=(v-anchor[1])*scale;
   if(entity.contactProjection==='top')return [x,y];
   if(entity.contactProjection==='angle')return [x/1.5,y/(1.5*181/256)];
   return [(y+x/2)/.75,(y-x/2)/.75];
@@ -92,6 +94,20 @@ export function decoZones(ents=[]){
     const X=e.x+1,Y=e.y+1,id='dz'+e.id;
     const addPoly=(points,index=0)=>out.push({id:id+'p'+index,k:'poly',
       pts:points.map(([x,y])=>[X+x,Y+y]),th:0,closed:true,deco:e.id});
+    if(e.cropContacts?.length&&(!e.flat||e.sceneLayer===2||e.sceneLayer===3)){
+      const flip=e.spriteFlip||0;
+      for(const [index,[u,v]] of e.cropContacts.entries()){
+        const a=flip&1?1-u:u,b=flip&2?1-v:v;
+        const [dx,dy]=flip&4?fromSprite(e,b,a):fromSprite(e,a,b);
+        const radius=Math.max(.018,(e.sc||1)*.018);
+        out.push({id:id+'crop'+index,k:'ell',x:X+dx-radius,y:Y+dy-radius,w:2*radius,h:2*radius,rot:0,deco:e.id});
+      }
+      continue;
+    }
+    if(e.groundedRoof&&!e.roofDirection&&e.solidBase&&e.artBase?.length===4){
+      addPoly(e.artBase.map(([u,v])=>fromSprite(e,u,v)));
+      continue;
+    }
     if(e.groundedRoof){
       const half=(e.sc||.95)/1.9;
       addPoly([[-half,-half],[half,-half],[half,half],[-half,half]]);
