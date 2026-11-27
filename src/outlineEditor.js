@@ -92,11 +92,11 @@ export function joinOutlineSample(loops,w,h,level,axis,width){
  return {loops:cropOutline(joined,[0,0],[W,H]),w:W,h:H,added,start,dest,width};
 }
 
-export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan'){
+export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  const is3D=editor.kind==='3d';
  const map=editor.map(),minSide=is3D?16:4,maxSide=is3D?320:MAX_MAP_SIDE;
  let propEdits=structuredClone(map.cfg.outline?.propEdits||[]);
- const outlineLevels=levelLibrary(editor.builtinOutlineSample());
+ const outlineLevels=dock?[]:levelLibrary(editor.builtinOutlineSample());
  let W=map.w,H=map.h,origin=[0,0];
  const copy=loops=>JSON.parse(JSON.stringify(loops));
  const original=copy(map.cfg.outline?.loops||[]);
@@ -226,6 +226,7 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
  const point=e=>{const [a,b]=screen(e),x=(a-ox)/s,y=(b-oy)/s;return snap.checked||e.shiftKey?clamp(Math.round(x),Math.round(y)):clamp(x,y);};
  const points=loop=>{c.moveTo(xp(loop[0][0]),yp(loop[0][1]));for(const p of loop.slice(1))c.lineTo(xp(p[0]),yp(p[1]));};
  function draw(){
+  if(dock)return;
   c.clearRect(0,0,canvas.width,canvas.height);c.fillStyle='#17212b';c.fillRect(0,0,canvas.width,canvas.height);
   c.strokeStyle='#364956';c.lineWidth=1;c.beginPath();
   const stride=Math.max(1,Math.ceil(10/s));
@@ -792,7 +793,7 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
   for(const shape of outlineShapes)templateTiles.get(shape.id).hidden=category.value!=='Tất cả'&&shape.group!==category.value;
   patterns.scrollTop=0;
  };
- for(const shape of outlineShapes){
+ for(const shape of dock?[]:outlineShapes){
   const icon=el('canvas',{width:76,height:47,'aria-hidden':'true'}),ctx=icon.getContext('2d');
   ctx.beginPath();
   for(const loop of fitShape({...shape,square:true},76,47,.97)){
@@ -932,8 +933,8 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
   }
   return {tiles,filter,cards};
  }
- const outdoor=surfaceCatalog(surfaceLevels,loadOutdoorLevel,surfaceFromLevel);
- const outdoorPieces=surfaceCatalog(surfacePieces,item=>{armedSurfacePiece=item;draw();},item=>{
+ const outdoor=surfaceCatalog(dock?[]:surfaceLevels,loadOutdoorLevel,surfaceFromLevel);
+ const outdoorPieces=surfaceCatalog(dock?[]:surfacePieces,item=>{armedSurfacePiece=item;draw();},item=>{
   const bounds=[0,0,46,29];
   const underlay=item.id==='bridge'?[{kind:'river',bounds:[15,0,31,29]}]:[];
   return {...newSurface('blank'),patches:[...underlay,{piece:item.id,bounds}]};
@@ -1119,10 +1120,11 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
   control.urls.clear();
  }
  function closeOutline(){
-  layoutObserver.disconnect();
+  layoutObserver?.disconnect();
   cancelAnimationFrame(planFrame);
   for(const row of layerControls)releaseGallery(row);
   ov.remove();
+  if(dock)dock.classList.remove('has-materials');
  }
  function originalImageUrl(control,item){
   const key=item.id+'::original';
@@ -1530,12 +1532,16 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
   return [key,input,label];
  });
  const surfaceSketch=B('Bố cục thô',()=>changeSurface({finish:false}));
- const surfaceFinish=B('Chọn lớp vật liệu',()=>{
-  if(surface.finish===false)changeSurface({finish:true});
-  materialsPanel.open=true;
-  switchWorkspace('materials');
-  materialsPanel.scrollIntoView({block:'nearest'});
- });
+ const surfaceFinish=B('Áp dụng và mở Vật liệu',()=>runAction(async()=>{
+  const outline=outlineData();
+  outline.surface={...outline.surface,finish:true};
+  if(levelDraft){
+   if(!await yes('Dùng mẫu “'+levelDraft.name+'” thay bố cục màn hiện tại? Bạn có thể hoàn tác sau khi áp dụng.'))return false;
+   await editor.replaceWithOutlineMap(outline,W,H,levelDraft,stamps,origin,materials());
+  }else await editor.applyOutline(outline,collision.checked,W,H,stamps,origin,materials());
+  closeOutline();
+  editor.showAssembly();editor.openMaterials();
+ },false));
  const surfaceInfo=el('span',{class:'hint',role:'status'});
  const surfaceControls=el('div',{class:'surface-controls'},
   el('div',{class:'row'},surfaceSketch,surfaceFinish,B('Nền trống',()=>{
@@ -1573,10 +1579,9 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
   box.dataset.page=page;
   plan.hidden=page!=='plan';
   settings.hidden=page!=='settings';
-  if(materialPage)materialPage.hidden=page!=='materials';
   for(const [name,button] of workspaceTabs)button.setAttribute('aria-pressed',String(name===page));
  }
- for(const [page,label] of [['plan','Mặt bằng'],['settings','Thiết lập'],...(!is3D?[['materials','Vật liệu']]:[])]){
+ for(const [page,label] of [['plan','Mặt bằng'],['settings','Thiết lập']]){
   workspaceTabs.set(page,B(label,()=>switchWorkspace(page)));
  }
  const assemblyLink=is3D?null:B('Ráp Cảnh 2D',async()=>{
@@ -1595,20 +1600,46 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
  const outlineDimensions=el('details',{open:''},el('summary',{},'Kích thước sàn, tường và vùng chặn'),footer);
  const settings=el('section',{class:'outline-settings-page'},linkPanel,guideBox('outline',appGuides.outline),outlineDimensions);
  library.append(editShape);
- const materialPage=materialsPanel?el('section',{class:'outline-materials-page'},materialsPanel):null;
- box.append(header,plan,settings,materialPage,buttons,actionStatus);
- ov.append(box);document.body.append(ov);
- switchWorkspace(is3D?'plan':initialPage);
- const layoutObserver=new ResizeObserver(()=>{
-  const redraw=(target,fallback,onResize)=>{
-   const width=wideOutline.matches?target.clientWidth:fallback[0];
-   const height=wideOutline.matches?target.clientHeight:fallback[1];
-   if(width<64||height<64||(target.width===width&&target.height===height))return;
-   target.width=width;target.height=height;onResize();
-  };
-  redraw(canvas,[760,465],()=>{fitGrid();draw();});
- });
- layoutObserver.observe(canvas);
+ let layoutObserver;
+ if(dock){
+  let current=map;
+  const applyMaterials=B('Áp dụng lên cảnh 2D',async()=>{
+   if(commitBusy)return;
+   if(editor.map()!==current){
+    showActionStatus('Màn đang chỉnh đã thay đổi. Hãy mở lại bảng Vật liệu.',true);return;
+   }
+   if(layerControls.some(row=>row.loading)){
+    showActionStatus('Đang đọc ảnh vật liệu. Hãy thử lại khi ảnh xuất hiện.');return;
+   }
+   const choice=materials(true);
+   if(!choice){showActionStatus('Bật Tự phối vật liệu để áp dụng bộ đang chọn.',true);return;}
+   commitBusy=true;applyMaterials.disabled=true;closeMaterials.disabled=true;
+   showActionStatus('Đang phối vật liệu…');
+   try{
+    await editor.applySceneMaterials(choice);
+    current=editor.map();
+    showActionStatus('Đã cập nhật cảnh 2D. Ctrl+Z để hoàn tác.');
+   }catch(error){showActionStatus(error.message,true);}
+   finally{commitBusy=false;applyMaterials.disabled=false;closeMaterials.disabled=false;}
+  });
+  const closeMaterials=B('Đóng',closeOutline);
+  closeMaterials.classList.add('scene-materials-close');
+  ov.className='scene-materials-dock';ov.removeAttribute('style');
+  ov.setAttribute('aria-label','Vật liệu cảnh 2D');
+  ov.append(el('div',{class:'row scene-materials-actions'},applyMaterials,closeMaterials),materialsPanel,actionStatus);
+  dock.classList.add('has-materials');dock.append(ov);
+ }else{
+  box.append(header,plan,settings,buttons,actionStatus);
+  ov.append(box);document.body.append(ov);
+  switchWorkspace('plan');
+  layoutObserver=new ResizeObserver(()=>{
+   const width=wideOutline.matches?canvas.clientWidth:760;
+   const height=wideOutline.matches?canvas.clientHeight:465;
+   if(width<64||height<64||(canvas.width===width&&canvas.height===height))return;
+   canvas.width=width;canvas.height=height;fitGrid();draw();
+  });
+  layoutObserver.observe(canvas);
+ }
  if(!is3D){
  void (async()=>{
   await restoreOutlineZipLibrary();
@@ -1630,7 +1661,8 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
   void editor.outlinePackSources().then(packs=>{
    if(!ov.isConnected)return;
    stockSources=packs;
-   for(const row of layerControls)refreshSources(row,row.source.value);
+   for(const row of layerControls)if(row.source.value)refreshSources(row,row.source.value);
   }).catch(error=>{catalogNote.textContent=error.message;});
  }draw();
+ return closeOutline;
 }

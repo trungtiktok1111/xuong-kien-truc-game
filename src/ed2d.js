@@ -15,7 +15,7 @@ import {settlementIssues} from './settlementChecks.js';
 import {settlementCriteria} from './settlementCriteria.js';
 import {alignmentGuides,measureJoin,roofHeightAt,seamHeightDifference,JOIN_EPSILON} from './pieceAlignment.js';
 import {actorHeights,bodyHeight,bodyFootprint,roofPlane} from './headroom2d.js';
-import {usedGridBounds,rebaseOutlineSource} from './outlineGrid.js';
+import {DEFAULT_OUTLINE_WALL_HEIGHT,usedGridBounds,rebaseOutlineSource} from './outlineGrid.js';
 import {builtWallFaces,mountGate,outlineSupports,isMapLink,projectSegment,wallThickness,WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS} from './wall2d.js';
 import {gateWalls,gateZones} from './gate2d.js';
 import {constructionContext,gateIssue,propIssue,wallIssue,isRoof,isBearingColumn,roofBearing,roofOnGround,roofIssue,wallHasFoundation,headroomIssue} from './constructionRules2d.js';
@@ -3718,14 +3718,23 @@ export function init2D(root,A){
     applySceneEdits(m,prepared,placementZones);
     return {M:m,sheets:prepared,dressing,placementZones};
   }
-  async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[],origin=[0,0],materials=null){
+  async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[],origin=[0,0],materials=null,keepView=false){
     const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
     const {M:m,dressing}=await buildOutlineEdit(outline,updateCollision,w,h,stamps,origin,materials,prepared);
     if(M!==current||curMap!==index||revision!==buildRevision)throw Error('Màn đang chỉnh đã đổi. Hãy mở lại Đường bao.');
     const error=structureError(current,m);if(error)throw Error(error);
     sheets.push(...prepared.slice(sheets.length));
     pushUndo();M=m;sel=null;hov=null;
-    after();fit();draw();toast('Đã áp dụng đường bao.'+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
+    after();if(!keepView)fit();draw();toast((keepView?'Đã phối vật liệu.':'Đã áp dụng đường bao.')+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
+  }
+  function applySceneMaterials(materials){
+    const outline=M.cfg.outline;
+    if(!outline?.loops?.length)throw Error('Màn này cần có đường bao để phối vật liệu.');
+    const next={...outline,front:outline.front??DEFAULT_OUTLINE_WALL_HEIGHT,
+      rear:outline.rear??DEFAULT_OUTLINE_WALL_HEIGHT};
+    if(outline.surface)next.surface={...outline.surface,finish:true};
+    return applyOutline(next,outline.floorCollision!==false,M.w,M.h,[],[0,0],materials,true)
+      .then(()=>cv.focus({preventScroll:true}));
   }
   function outlineFill(source,stamps){
     return source?.layers[0].find(Boolean)||stamps.flatMap(stamp=>stamp).find(cell=>cell.tiles[0])?.tiles[0];
@@ -4090,6 +4099,6 @@ export function init2D(root,A){
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
     .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
-  const api={ready,showAssembly(){useTool('inventory');},connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
   return api;
 }

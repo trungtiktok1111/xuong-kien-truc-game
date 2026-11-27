@@ -132,6 +132,11 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
 .outline-levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;overflow:auto;scrollbar-gutter:stable;padding:1px 5px 2px 1px}
 .outline-levels small{color:#b4c5d3}.outline-levels strong{font-weight:600}.outline-actions{margin-top:8px}
 .outline-actions .b:not(:disabled):nth-child(2),.outline-level-actions .b:not(:disabled):last-child{background:#2e7558}
+#pn2.has-materials>.ptabs,#pn2.has-materials>.pbody{display:none}
+.scene-materials-dock{min-height:0;flex:1;overflow:auto;padding:8px}
+.scene-materials-actions{position:sticky;top:0;z-index:6;padding:6px 0;background:#192834}
+.scene-materials-dock .outline-stage-controls{grid-template-columns:minmax(0,1fr)}
+.scene-materials-dock input[type=file],.scene-materials-dock select{max-width:100%}
 .outline-stage-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-top:8px}
 .outline-stage{display:grid;align-content:start;gap:6px;min-width:0;padding:8px;background:var(--panel2,#233442);border:1px solid #405766;border-radius:8px}
 .outline-stage label{display:grid;gap:3px}
@@ -200,15 +205,14 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
 .outline-workspace-header{display:flex}
 .outline-workspace-header h2{margin:0 auto 0 0;font-size:1.12rem}
 .outline-workspace>section[hidden]{display:none!important}
-.outline-plan-page,.outline-settings-page,.outline-materials-page{display:contents}
+.outline-plan-page,.outline-settings-page{display:contents}
 @media(min-width:901px) and (pointer:fine){
  .outline-overlay{padding:0!important;place-items:stretch!important;overflow:hidden!important}
  .outline-workspace{width:100%;height:100%;border:0;border-radius:0;padding:8px 12px;box-sizing:border-box;display:flex;flex-direction:column;min-height:0}
  .outline-workspace-header{display:flex;flex:none;margin-bottom:6px}
  .outline-workspace-header h2{margin:0 auto 0 0;font-size:1.12rem}
- .outline-plan-page,.outline-settings-page,.outline-materials-page{display:none}
+ .outline-plan-page,.outline-settings-page{display:none}
  .outline-workspace[data-page=plan] .outline-plan-page{display:flex;flex-direction:column;flex:1;min-height:0}
- .outline-workspace[data-page=materials] .outline-materials-page{display:block;flex:1;min-height:0;overflow:auto}
  .outline-workspace[data-page=settings] .outline-settings-page{display:block;flex:1;min-height:0;overflow:auto}
  .outline-layout{flex:1;min-height:0;margin:0;align-items:stretch;grid-template-columns:minmax(0,1fr) clamp(220px,17vw,340px)}
  .outline-drawing-area{min-height:0;min-width:0;display:flex;flex-direction:column}
@@ -256,7 +260,7 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
 
 .zip-scene-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:12px}.zip-scene-card{display:flex;flex-direction:column;gap:7px;padding:11px;border:1px solid #334d60;border-radius:10px}.zip-scene-card h3,.zip-scene-card p{margin:0}.zip-scene-card img{width:100%;aspect-ratio:16/9;object-fit:contain;background:#17222b;border-radius:5px}.zip-scene-card button{align-self:flex-start;margin-top:auto}.zip-pack-choices{max-height:240px;overflow:auto}.zip-pack-choices>div:not([hidden]){display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:9px;padding:6px;border-bottom:1px solid #334d60}.zip-pack-choices small{display:block;color:#a8bac7}.zip-pack-choices span{overflow-wrap:anywhere}.zip-pack-choices label{white-space:nowrap}
 </style></head><body><div id="app">
-<div id="bar"><h1>Xưởng Kiến Trúc Game</h1><button id="assemble2dbtn" class="tabbtn" data-v="2d" type="button">Ráp Cảnh 2D</button><button class="tabbtn" data-v="3d">🧱 3D</button><button id="outlinebtn" class="tabbtn">Đường bao</button><button id="levelbtn" class="tabbtn">Màn mẫu</button><button id="zipscenebtn" class="tabbtn">Cảnh ZIP</button><button id="studiobtn" class="tabbtn">Dự án game</button><button id="playbtn" class="tabbtn" style="background:#2e8b57;color:#fff">🎮 Chơi</button><button id="chkbtn" class="tabbtn" style="background:#3a6ea5;color:#fff">✅ Kiểm</button><button id="helpbtn" class="tabbtn" title="Phím tắt F1">Phím tắt</button><button id="relbtn" class="tabbtn" style="background:#b8742a;color:#fff">🚀 Xuất</button></div>
+<div id="bar"><h1>Xưởng Kiến Trúc Game</h1><button id="assemble2dbtn" class="tabbtn" data-v="2d" type="button">Ráp Cảnh 2D</button><button class="tabbtn" data-v="3d">🧱 3D</button><button id="outlinebtn" class="tabbtn">Đường bao</button><button id="zipscenebtn" class="tabbtn">Cảnh ZIP</button><button id="studiobtn" class="tabbtn">Dự án game</button><button id="playbtn" class="tabbtn" style="background:#2e8b57;color:#fff">🎮 Chơi</button><button id="chkbtn" class="tabbtn" style="background:#3a6ea5;color:#fff">✅ Kiểm</button><button id="helpbtn" class="tabbtn" title="Phím tắt F1">Phím tắt</button><button id="relbtn" class="tabbtn" style="background:#b8742a;color:#fff">🚀 Xuất</button></div>
 <section id="xuong-startup" aria-label="Trạng thái khởi động">
  <div class="startup-card">
   <h2>Xưởng Kiến Trúc Game</h2>

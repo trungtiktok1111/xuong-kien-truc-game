@@ -38,11 +38,12 @@ $('#playbtn').onclick=()=>{
 const gd=k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData();
 $('#chkbtn').onclick=()=>openCheck({kind:cur,getData:gd});
 $('#relbtn').onclick=()=>openRelease({kind:cur,sheets:()=>e2.sheets(),exportMapPNG:e2.exportPNG,getData:k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData()});
-async function openPlan(tab,page='plan'){
+async function openPlan(tab){
+  document.querySelector('.scene-materials-dock .scene-materials-close')?.click();
   const editor=cur==='3d'?e3:e2;
   if(!editor||document.querySelector('.outline-overlay'))return;
   await editor.ready;
-  if(editor===(cur==='3d'?e3:e2)&&editor.map()&&!document.querySelector('.outline-overlay'))openOutlineEditor(editor,tab,page);
+  if(editor===(cur==='3d'?e3:e2)&&editor.map()&&!document.querySelector('.outline-overlay'))openOutlineEditor(editor,tab);
 }
 $('#assemble2dbtn').onclick=async()=>{
   if(document.querySelector('.outline-overlay'))return;
@@ -50,9 +51,11 @@ $('#assemble2dbtn').onclick=async()=>{
   await e2.ready;
   if(cur==='2d'&&e2.map())e2.showAssembly();
 };
-e2.openMaterials=()=>openPlan('shapes','materials');
+e2.openMaterials=()=>{
+  if(cur!=='2d'||!e2.map()||document.querySelector('.outline-overlay,.scene-materials-dock'))return;
+  openOutlineEditor(e2,'shapes',$('#pn2'));
+};
 $('#outlinebtn').onclick=()=>openPlan('shapes');
-$('#levelbtn').onclick=()=>openPlan('levels');
 $('#zipscenebtn').onclick=async()=>{go('2d');await e2.ready;e2.showStockScenes();};
 $('#studiobtn').onclick=()=>{go('2d');if(e2.map())openStudio(e2);};
 function shortcutHelp(){toggleShortcutHelp($(cur==='2d'?'#pn2':'#pn3'));}
@@ -63,7 +66,7 @@ const searchItems=[
  ['Ráp Cảnh 2D','dựng cảnh bản đồ nền vật phẩm','#assemble2dbtn'],
  ['Dựng cảnh 3D','mô hình không gian','#bar [data-v="3d"]'],
  ['Đường Bao','mặt bằng cảnh ráp vật liệu mảnh ghép quản lý ZIP','#outlinebtn'],
- ['Màn mẫu','bố cục mẫu địa hình hầm ngục','#levelbtn'],
+ ['Màn mẫu','bố cục mẫu địa hình hầm ngục',()=>openPlan('levels')],
  ['Cảnh ZIP','nhập cảnh thư viện gói tài nguyên','#zipscenebtn'],
  ['Dự án game','lưu bản thiết kế tệp dự án','#studiobtn'],
  ['Chơi thử','chạy game di chuyển','#playbtn'],
