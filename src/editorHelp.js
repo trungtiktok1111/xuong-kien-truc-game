@@ -82,6 +82,7 @@ export function guideFor(view,key,options){
  return guideBox(view+'-'+key,list[key],options);
 }
 const keys=[
+ ['P · K','Đổi phép chiếu · Luân phiên tắt, vùng chặn, chặn và đi'],
  ['Q · [ / ] · J','Chọn vật đã đặt · Thu nhỏ / Phóng to cảnh · Thu hoặc mở bảng phải'],
  ['W','Dựng tuyến tường theo các điểm bấm. Enter hoặc Esc kết thúc tuyến.'],
  ['B · V · E · I','Đặt mảnh · Chọn vùng · Xóa · Lấy mẫu'],

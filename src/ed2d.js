@@ -807,6 +807,7 @@ export function init2D(root,A){
     if(desktop()&&document.activeElement!==cv)return;
     const k=(e.key||'').toLowerCase(),m=e.ctrlKey||e.metaKey;
     if(desktop()&&!m&&!e.altKey){
+      if(k==='p'){if(!e.repeat)void toggleProjection();e.preventDefault();return;}
       if(k==='j'){if(!e.repeat)sidebarButton.click();e.preventDefault();return;}
       if(k==='['||k===']'){zoomBy(k===']'?1.25:1/1.25);updateDesktop();e.preventDefault();return;}
     }
@@ -911,13 +912,16 @@ export function init2D(root,A){
      [...dk.children].forEach(b=>{if(b.tagName==='BUTTON'){b.style.flex='none';b.style.whiteSpace='nowrap';b.style.padding='7px 9px';b.style.fontSize='13px';}});
      return true;};
    dk.dataset.css0=dk.style.cssText;
-   setInterval(()=>{if(!dockMobile())placeOnCanvas(dk,host);const k=tool+'|'+act+'|'+(tab==='tools'?1:0)+'|'+(smoothOn()?1:0)+(ISOQ()?1:0)+fogLv();if(k===dkey)return;dkey=k;dk.textContent='';
+   setInterval(()=>{if(!dockMobile())placeOnCanvas(dk,host);const k=tool+'|'+act+'|'+(tab==='tools'?1:0)+'|'+(smoothOn()?1:0)+(ISOQ()?1:0)+fogLv()+'|'+colMode+'|'+ANGQ();if(k===dkey)return;dkey=k;dk.textContent='';
      [['draw','Đặt mảnh','Bấm hoặc kéo để đặt mảnh đang chọn'],['erase','🧽 Xóa','Chọn nhóm cần xóa ở bảng Dựng cảnh'],['select','⬚ Chọn vùng','Kéo khung để chọn một vùng, rồi Sao chép / Xóa / Đổ nền'],['paste','📥 Dán','Dán vùng đã sao chép: bấm lên bản đồ'],['pan','✋ Kéo','Kéo để di chuyển bản đồ']].forEach(([t,n,tp])=>{const bb=mk(n,()=>{useTool(t);},tool===t);bb.title=tp;dk.append(bb);});
      dk.append(sep());
      ['Nền','Phủ nền','Vật thể','Mái/cửa'].forEach((n,i)=>dk.append(mk(n,()=>{if(tool==='select'||tool==='paste'||tool==='pan')tool='draw';tab='tools';useLayer(i);},act===i,'#35453a')));
      dk.append(sep(),mk('↶',doUndo),mk('↷',doRedo),mk('⤢',fit));
-     if(ISOQ()){dk.append(sep());const pb=mk(ANGQ()?'📐 Chiếu: Angle':'📐 Chiếu: Isometric',async()=>{pushUndo();const to=ANGQ()?'iso':'angle';if(to==='angle'){const m=await ensureAngle(sheets);if(m.length)toast('Chưa có bộ Angle cho: '+m.join(', '));}M.cfg.proj=to;isoK='';angN=-1;after();dkey='';fit();dirty=true;toast(to==='angle'?'Chiếu Angle (xiên mặt trước): ô sàn gần chữ nhật':'Chiếu Isometric');},ANGQ());pb.title='Đổi phép chiếu của cả cảnh: Isometric (hình thoi) hoặc Angle (xiên mặt trước). Dữ liệu cảnh giữ nguyên.';dk.append(pb);const sb=mk('🌿 Nền mượt',()=>{pushUndo();M.cfg.smooth=smoothOn()?false:true;after();toast(smoothOn()?'Nền mượt: BẬT (hòa trộn mép, xoay lật ô, đốm sáng tối)':'Nền mượt: TẮT');dkey='';dirty=true;},smoothOn());sb.title='Bật: nền hòa trộn ở mép giữa hai loại ô, hết cảm giác ô vuông';dk.append(sb);const fb=mk(['🌫 Sương: tắt','🌫 Sương: nhẹ','🌫 Sương: vừa','🌫 Sương: dày'][fogLv()],()=>{pushUndo();M.cfg.fog=(fogLv()+1)%4;after();dkey='';dirty=true;},fogLv()>0);fb.title='Sương mờ phủ lên trên cùng (tiền cảnh). Bản chơi thì sương trôi chậm.';dk.append(fb);}
+     dk.append(sep(),mk('Va chạm: '+collisionLabels[colMode],toggleCollisionPreview,!!colMode),
+       mk('Phép chiếu: '+(ANGQ()?'Angle':'Isometric'),toggleProjection,ANGQ()));
+     if(ISOQ()){const sb=mk('🌿 Nền mượt',()=>{pushUndo();M.cfg.smooth=smoothOn()?false:true;after();toast(smoothOn()?'Nền mượt: BẬT (hòa trộn mép, xoay lật ô, đốm sáng tối)':'Nền mượt: TẮT');dkey='';dirty=true;},smoothOn());sb.title='Bật: nền hòa trộn ở mép giữa hai loại ô, hết cảm giác ô vuông';dk.append(sb);const fb=mk(['🌫 Sương: tắt','🌫 Sương: nhẹ','🌫 Sương: vừa','🌫 Sương: dày'][fogLv()],()=>{pushUndo();M.cfg.fog=(fogLv()+1)%4;after();dkey='';dirty=true;},fogLv()>0);fb.title='Sương mờ phủ lên trên cùng (tiền cảnh). Bản chơi thì sương trôi chậm.';dk.append(fb);}
    },150);}
+  const collisionLabels=['Tắt','Vùng chặn','Chặn và đi'];
   const desktopTools=[['draw','Đặt mảnh','B'],['select','Chọn vùng','V'],['erase','Xóa','E'],['collisionPreview','Va chạm','K']];
   const toolNames={draw:'Đặt mảnh',pick:'Lấy mẫu',rect:'Đặt theo khung',fill:'Thay vùng liền',obj:'Đối tượng',paste:'Dán',pan:'Kéo khung nhìn',inventory:'Vật phẩm'};
   const layerNames=[...LAYN,'Vùng chặn'];
@@ -927,6 +931,10 @@ export function init2D(root,A){
     const b=el('button',{type:'button',title:label+' ('+key+')','aria-keyshortcuts':key,onclick:()=>id==='collisionPreview'?toggleCollisionPreview():useTool(id)},el('kbd',{},key),label);
     rail.append(b);return [id,b];
   });
+  const projectionButton=el('button',{type:'button',title:'Đổi phép chiếu (P)','aria-keyshortcuts':'P',onclick:toggleProjection},el('kbd',{},'P'),'Phép chiếu');
+  const projectionState=el('span',{},'Isometric');
+  projectionButton.append(projectionState);
+  rail.append(projectionButton);
   rail.append(el('button',{type:'button',title:'Vừa khung (F)',onclick:()=>{fit();cv.focus();}},el('kbd',{},'F'),'Vừa khung'));
   const inventoryButton=el('button',{type:'button',title:'Chọn vật đã đặt (Q)','aria-keyshortcuts':'Q','aria-pressed':'false',onclick:()=>useTool('inventory')},
     el('kbd',{},'Q'),'Chọn vật');
@@ -964,11 +972,32 @@ export function init2D(root,A){
     renderTabs();draw();dirty=true;cv.focus({preventScroll:true});
   }
   function toggleCollisionPreview(){
-    colMode=colMode?0:1;dirty=true;updateDesktop();cv.focus({preventScroll:true});
+    colMode=(colMode+1)%collisionLabels.length;dirty=true;updateDesktop();cv.focus({preventScroll:true});
+  }
+  let changingProjection=false;
+  async function toggleProjection(){
+    if(!M||changingProjection)return;
+    const map=M,to=ANGQ()?'iso':'angle';
+    changingProjection=true;projectionButton.disabled=true;
+    try{
+      if(to==='angle')await ensureAngle(sheets);
+      if(M!==map)return;
+      pushUndo();M.cfg.view='iso';M.cfg.proj=to;isoK='';angN=-1;after();fit();draw();
+      cv.focus({preventScroll:true});
+    }catch(error){toast(error.message||'Không đổi được phép chiếu.');}
+    finally{changingProjection=false;projectionButton.disabled=false;}
   }
   function updateDesktop(){
     if(!desktop())return;
     for(const [id,b] of toolButtons)b.setAttribute('aria-pressed',String(id==='collisionPreview'?!!colMode:id===tool));
+    const collisionButton=toolButtons.find(([id])=>id==='collisionPreview')[1];
+    const collisionLabel='Va chạm: '+collisionLabels[colMode];
+    if(collisionButton.getAttribute('aria-label')!==collisionLabel){
+      collisionButton.replaceChildren(el('kbd',{},'K'),'Va chạm',el('span',{},collisionLabels[colMode]));
+      collisionButton.setAttribute('aria-label',collisionLabel);
+    }
+    const projection=ANGQ()?'Angle':'Isometric';
+    if(projectionState.textContent!==projection)projectionState.textContent=projection;
     inventoryButton.setAttribute('aria-pressed',String(tool==='inventory'));
     layerPicker.value=String(act);
     const r=selRect(),current=desktopTools.find(t=>t[0]===tool);
@@ -2273,16 +2302,11 @@ export function init2D(root,A){
       const TL=simple?[['draw','Đặt mảnh'],['erase','🧽 Xóa'],['select','⬚ Chọn vùng'],['paste','📥 Dán'],['pan','✋ Kéo']]:[['draw','Đặt mảnh'],['erase','🧽 Xóa'],['fill','Thay vùng'],['rect','Đặt theo khung'],['pick','💧 Hút'],['select','⬚ Chọn vùng'],['paste','📥 Dán'],['zone','🚧 Vùng chặn'],['pan','✋ Kéo']];
       body.append(el('div',{class:'row legacy-panel-tools'},TL.map(([k,n])=>btn(n,()=>{useTool(k);},tool===k?'on':''))));
       if(tool==='zone')body.append(zoneUI());
-      if(desktop())body.append(el('details',{ontoggle:e=>{viewDetails=e.currentTarget.open;} ,...(viewDetails?{open:''}:{})},el('summary',{},'Hiển thị và phép chiếu'),
+      if(desktop())body.append(el('details',{ontoggle:e=>{viewDetails=e.currentTarget.open;} ,...(viewDetails?{open:''}:{})},el('summary',{},'Hiển thị'),
         el('div',{class:'row'},btn(smoothOn()?'Nền mượt: bật':'Nền mượt: tắt',()=>{pushUndo();M.cfg.smooth=!smoothOn();after();draw();}),
           btn(grid?'Lưới: bật':'Lưới: tắt',switchGrid),
-          btn('Sương: '+fogLv(),()=>{pushUndo();M.cfg.fog=(fogLv()+1)%4;after();draw();}),
-          tool!=='zone'?btn(['Va chạm: ẩn','Va chạm: vùng chặn','Va chạm: chặn và đi'][colMode],()=>{colMode=(colMode+1)%3;dirty=true;draw();}):null,
-          btn('Phép chiếu: '+(ANGQ()?'Angle':'Isometric'),async()=>{
-            pushUndo();const to=ANGQ()?'iso':'angle';if(to==='angle')await ensureAngle(sheets);
-            M.cfg.view='iso';M.cfg.proj=to;isoK='';angN=-1;after();fit();draw();
-          }))));
-      if(simple&&!desktop())body.append(el('div',{class:'row'},btn('↶ Hoàn tác',doUndo),btn('↷ Làm lại',doRedo),btn('＋',()=>zoomBy(1.4)),btn('－',()=>zoomBy(1/1.4)),btn('⤢ Vừa khung',fit)));else if(!desktop())body.append(el('div',{class:'row'},btn('↶ Hoàn tác',doUndo),btn('↷ Làm lại',doRedo),btn('＋',()=>zoomBy(1.4)),btn('－',()=>zoomBy(1/1.4)),btn('⤢ Vừa khung',fit),btn(grid?'▦ Lưới: bật':'▦ Lưới: tắt',()=>{grid=!grid;dirty=true;draw();}),tool!=='zone'?btn(['🚧 Va chạm: ẩn','🚧 Hiện vùng CHẶN (đỏ)','🚧 Chặn (đỏ) + Đi được (xanh)'][colMode],()=>{colMode=(colMode+1)%3;dirty=true;draw();ui.tools&&ui.tools();}):null));
+          btn('Sương: '+fogLv(),()=>{pushUndo();M.cfg.fog=(fogLv()+1)%4;after();draw();}))));
+      if(simple&&!desktop())body.append(el('div',{class:'row'},btn('↶ Hoàn tác',doUndo),btn('↷ Làm lại',doRedo),btn('＋',()=>zoomBy(1.4)),btn('－',()=>zoomBy(1/1.4)),btn('⤢ Vừa khung',fit)));else if(!desktop())body.append(el('div',{class:'row'},btn('↶ Hoàn tác',doUndo),btn('↷ Làm lại',doRedo),btn('＋',()=>zoomBy(1.4)),btn('－',()=>zoomBy(1/1.4)),btn('⤢ Vừa khung',fit),btn(grid?'▦ Lưới: bật':'▦ Lưới: tắt',()=>{grid=!grid;dirty=true;draw();})));
       if(!desktop()&&!building&&tool!=='erase')body.append(el('div',{class:'row'},el('span',{class:'lbl'},'Lớp đang sửa: '),LAYN.concat(['Vùng chặn']).map((n,i)=>btn(n,()=>{act=i;draw();},act===i?'on':''))));
       if((!simple||desktop())&&(tool==='select'||tool==='paste')){
         const box=el('div',{style:'border:1px solid #34485a;border-radius:10px;padding:8px;margin:6px 0'});
