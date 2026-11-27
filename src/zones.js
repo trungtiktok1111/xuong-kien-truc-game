@@ -63,12 +63,21 @@ export function zPath(ctx,z,T){
   const P=zPts(z);ctx.beginPath();P.forEach((p,i)=>{const q=T(p[0],p[1]);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});if(z.k!=='line'||z.closed)ctx.closePath();}
 
 // vùng chặn tự suy ra từ chân (nền) của từng vật cảnh: e.zb=[dx,dy,w,h] so với góc trước (x+1,y+1)
+function fromSprite(entity,u,v){
+  const scale=entity.sc||1;
+  const x=(u-.5+(entity.ox||0))*scale,y=(v-1+(entity.oy||0))*scale;
+  if(entity.contactProjection==='top')return [x,y];
+  if(entity.contactProjection==='angle')return [x/1.5,y/(1.5*181/256)];
+  return [(y+x/2)/.75,(y-x/2)/.75];
+}
+
 function rockFootprint(entity,name){
   if(!/^surface-rock-/.test(entity.id||'')&&!/(?:vach (?:nui )?da)/i.test(name)&&entity.groundContact!=='rock')return null;
   // Ground-contact polygon in the 96 px rock frame, relative to its 49,87 anchor.
   const scale=(entity.sc||3.1)/(.75*96);
   const [ax,ay]=entity.surfaceGenerated?[49,87]:[96*(.5-(entity.ox||0)),96*(1-(entity.oy||0))];
   return [[6,83],[47,65],[92,82],[59,96],[22,95]].map(([x,y])=>{
+    if(!entity.surfaceGenerated)return fromSprite(entity,x/96,y/96);
     const dx=x-ax,dy=y-ay;
     return [(dy+dx/2)*scale,(dy-dx/2)*scale];
   });
@@ -88,22 +97,26 @@ export function decoZones(ents=[]){
       addPoly([[-half,-half],[half,-half],[half,half],[-half,half]]);
       continue;
     }
-    const name=[e.name,e.assetSource].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const name=[e.name,e.assetSource].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[đĐ]/g,'d');
     const rock=rockFootprint(e,name);
     if(rock){addPoly(rock);continue;}
 
-    if(/palm|coconut|\bdua\b/i.test(name)){
-      const radius=Math.max(.025,(e.sc||1)*.022);
-      out.push({id:id+'trunk',k:'ell',x:X-radius,y:Y-radius,w:radius*2,h:radius*2,rot:0,deco:e.id});
+    if(e.trunkContact||/palm|coconut|\bdua\b/i.test(name)){
+      const foot=e.trunkContact;
+      const [dx,dy]=foot?fromSprite(e,foot.u,foot.v):[0,0];
+      const radius=Math.max(.018,Math.min(.13,(e.sc||1)*(foot?foot.width/.75:.022)*.55));
+      out.push({id:id+'trunk',k:'ell',x:X+dx-radius,y:Y+dy-radius,w:radius*2,h:radius*2,rot:0,deco:e.id});
       continue;
     }
-    if(e.flat&&e.sceneLayer!==2&&e.sceneLayer!==3){
-      if(e.tile&&/(?:^|[^a-z])(?:roof|mai)(?=$|[^a-z])/i.test(name)){
-        const half=(e.sc||.95)*.42;
-        addPoly([[-half,-half],[half,-half],[half,half],[-half,half]]);
-      }
+    const detachedRoof=e.tile&&!e.housePart&&/(?:^|[^a-z])(?:roof|mai)[ _-]?[nesw]?(?=$|[^a-z])/i.test(name);
+    if(detachedRoof&&!e.col?.length&&!e.zp?.length&&!e.zps?.length){
+      const contact=e.artContact;
+      const [dx,dy]=contact?fromSprite(e,contact.u,contact.v):[0,0];
+      const span=(e.sc||.95)*Math.max(.13,(e.spriteBounds?e.spriteBounds[2]-e.spriteBounds[0]:.6)*.48);
+      addPoly([[dx-span,dy-span],[dx+span,dy-span],[dx+span,dy],[dx,dy+span*.15],[dx-span,dy]]);
       continue;
     }
+    if(e.flat&&e.sceneLayer!==2&&e.sceneLayer!==3)continue;
     const pad=e.surfaceGenerated&&e.id?.startsWith('surface-tree-')&&Number.isFinite(e.sc)?e.sc*80/(336*1.5):0;
     const pieces=pad?[{k:'rect',x:-pad/2,y:-pad/2,w:pad,h:pad}]:e.col;
     if(pieces?.length){

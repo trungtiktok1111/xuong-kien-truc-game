@@ -1026,13 +1026,17 @@ export function init2D(root,A){
     }
     return ruleContext.context;
   }
-  function withAssetSource(e){
-    const tile=e.tile;
-    if(e.t!=='deco'||e.assetSource||!sheets[tile?.sid])return e;
-    return {...e,assetSource:constructionTile(tile.sid,tile.idx,0).source};
+  function withAssetSource(e,cfg){
+    const tile=e.tile,sheet=sheets[tile?.sid];
+    if(e.t!=='deco'||!sheet||e.wallLine||e.wallId||e.housePart||e.gateAssembly||e.sceneLayer===0||e.sceneLayer===1)return e;
+    const assetSource=[e.assetSource,sheet.name,constructionTile(tile.sid,tile.idx,0).source].filter(Boolean).join(' ');
+    const art=sheet.img&&!sheet.iso&&e.tiledLayer==null?tileContact(sheet,tile.idx,e.spriteFlip||0):null;
+    const projection=cfg?.view==='iso'?(cfg.proj==='angle'?'angle':'iso'):'top';
+    return {...e,assetSource,contactProjection:projection,artContact:art?.contact,trunkContact:art?.trunk,
+      spriteBounds:e.spriteBounds||art?.bounds};
   }
   function structuralPieces(map){
-    const pieces=map.ents.map(withAssetSource),layer=map.layers[3];
+    const pieces=map.ents.map(e=>withAssetSource(e,map.cfg)),layer=map.layers[3];
     for(let i=0;i<layer.length;i++){
       if(!layer[i])continue;
       const roof=legacyRoof(layer[i],i,map.w);
@@ -3035,7 +3039,7 @@ export function init2D(root,A){
     const key=idx*8+f;
     if(cache.has(key))return cache.get(key);
     const tw=sheet.tw;
-    let contact=null,bounds=null,rectangular=false;
+    let contact=null,bounds=null,rectangular=false,trunk=null;
     try{
       const ctx=el('canvas',{width:tw,height:tw}).getContext('2d',{willReadFrequently:true});
       drawTile(ctx,enc(sheets.indexOf(sheet),idx,f),0,0,tw);
@@ -3046,6 +3050,27 @@ export function init2D(root,A){
         left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x+1);bottom=Math.max(bottom,y+1);opaque++;
       }
       if(right>left){bounds=[left/tw,top/tw,right/tw,bottom/tw];rectangular=opaque/((right-left)*(bottom-top))>.96;}
+      if(bounds&&bottom-top>(right-left)*1.15){
+        // The lit trunk stays warm near the base. Exclude dark or translucent shadow pixels.
+        const bands=[];
+        let foliage=0;
+        for(let y=top;y<bottom;y++){
+          let lo=right,hi=left,count=0;
+          for(let x=left;x<right;x++){
+            const i=(y*tw+x)*4,r=rgba[i],g=rgba[i+1],b=rgba[i+2],a=rgba[i+3];
+            if(a<165)continue;
+            if(y<top+(bottom-top)*.52&&g>58&&g>r*.82&&g>b*1.3)foliage++;
+            if(y<top+(bottom-top)*.54||r<66||r<g*1.14||g<b*1.1||r<b*1.55)continue;
+            lo=Math.min(lo,x);hi=Math.max(hi,x);count++;
+          }
+          if(count&&hi-lo+1<=(right-left)*.14)bands.push({y,lo,hi});
+        }
+        if(foliage>opaque*.06&&bands.length>=(bottom-top)*.18){
+          const foot=bands.at(-1);
+          trunk={u:(foot.lo+foot.hi+1)/(2*tw),v:(foot.y+.5)/tw,width:(foot.hi-foot.lo+1)/tw};
+        }
+      }
+
     }catch{}
     const info={contact,bounds,rectangular};cache.set(key,info);return info;
   }
@@ -3059,7 +3084,7 @@ export function init2D(root,A){
       let profile=null;
       if(sheet?.img){
         const info=sheet===sheets[sid]?constructionTile(sid,idx,0):{source:sheet.name};
-        if(!roofTextureDirection(info.source,true)){
+        if(layer===2||!roofTextureDirection(info.source,true)){
           const family=paintFamily(info.source,info.type,'Chặn đường')||'solid';
           if(idx===0&&sheet.tw===64&&/^Đá Xoáy · cổng, cột, rương/.test(sheet.name))
             profile=daXoayArchProfiles(f);
@@ -3078,7 +3103,7 @@ export function init2D(root,A){
     return automaticPaintZones(M,makePaintLookup(),groups);
   }
   function sceneForPlay(map,cfg,lookup){
-    const layers=map.layers.map(layer=>layer.slice()),ents=structuredClone(map.ents.map(withAssetSource));
+    const layers=map.layers.map(layer=>layer.slice()),ents=structuredClone(map.ents.map(e=>withAssetSource(e,cfg)));
     for(let i=0;i<layers[3].length;i++){
       if(!layers[3][i])continue;
       const roof=legacyRoof(layers[3][i],i,map.w);
