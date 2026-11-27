@@ -3953,19 +3953,6 @@ export function init2D(root,A){
     map.ents=map.ents.map(e=>withAssetSource(e,map.cfg,source));
     applyOutlinePropEdits({M:map,sheets:source,placementZones});
   }
-  async function liveOutlineMap(outline,w,h,level,stamps,origin,materials,updateCollision){
-    if(level||!M.cfg.outline?.loops?.length)return previewOutlineMap(outline,w,h,level,stamps,origin,materials);
-    return buildOutlineEdit(outline,updateCollision,w,h,stamps,origin,materials,sheets.slice());
-  }
-  async function previewOutlineMap(outline,w,h,level,stamps=[],origin=[0,0],materials=null){
-    const previewSheets=sheets.slice();
-    const draft=await buildOutlineMap(outline,w,h,level,previewSheets,stamps,true,null,origin);
-    const dressing=surfaceDressing(draft,await prepareOutlineDressing(draft,previewSheets,materials));
-    if(draft.cfg.proj==='angle')await ensureAngle(previewSheets);
-    const placementZones=automaticPaintZones(draft,makePaintLookup(previewSheets));
-    applySceneEdits(draft,previewSheets,placementZones);
-    return {M:draft,sheets:previewSheets,dressing,placementZones};
-  }
   async function replaceWithOutlineMap(outline,w,h,level,stamps=[],origin=[0,0],materials=null){
     const before=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
     const incoming=MAPS.flatMap((map,i)=>i===index?[]:map.ents.filter(e=>isMapLink(e)&&e.to===index&&e.tx!=null&&e.ty!=null));
@@ -4007,6 +3994,6 @@ export function init2D(root,A){
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
     .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
-  const api={ready,showAssembly(){useTool('inventory');},connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  const api={ready,showAssembly(){useTool('inventory');},connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
   return api;
 }

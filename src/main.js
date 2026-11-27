@@ -38,11 +38,11 @@ $('#playbtn').onclick=()=>{
 const gd=k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData();
 $('#chkbtn').onclick=()=>openCheck({kind:cur,getData:gd});
 $('#relbtn').onclick=()=>openRelease({kind:cur,sheets:()=>e2.sheets(),exportMapPNG:e2.exportPNG,getData:k=>k==='3d'?(e3||(e3=init3D($('#v3d')))).gameData():e2.gameData()});
-async function openPlan(tab,page='plan',pane){
+async function openPlan(tab,page='plan'){
   const editor=cur==='3d'?e3:e2;
   if(!editor||document.querySelector('.outline-overlay'))return;
   await editor.ready;
-  if(editor===(cur==='3d'?e3:e2)&&editor.map()&&!document.querySelector('.outline-overlay'))openOutlineEditor(editor,tab,page,pane);
+  if(editor===(cur==='3d'?e3:e2)&&editor.map()&&!document.querySelector('.outline-overlay'))openOutlineEditor(editor,tab,page);
 }
 $('#assemble2dbtn').onclick=async()=>{
   if(document.querySelector('.outline-overlay'))return;
@@ -50,7 +50,7 @@ $('#assemble2dbtn').onclick=async()=>{
   await e2.ready;
   if(cur==='2d'&&e2.map())e2.showAssembly();
 };
-e2.openMaterials=()=>openPlan('shapes','preview','materials');
+e2.openMaterials=()=>openPlan('shapes','materials');
 $('#outlinebtn').onclick=()=>openPlan('shapes');
 $('#levelbtn').onclick=()=>openPlan('levels');
 $('#zipscenebtn').onclick=async()=>{go('2d');await e2.ready;e2.showStockScenes();};
