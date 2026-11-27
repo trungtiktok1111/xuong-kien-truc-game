@@ -3,8 +3,8 @@ import {el,toast,packBytes,expandPacks} from './util.js';
 import {unzipSync} from 'fflate';
 /* Hoạt ảnh nhân vật 2D: bộ hoạt ảnh = các trạng thái (đứng/chạy/đánh/trúng đòn), mỗi trạng thái là 1 dải ảnh nhiều khung.
    Hướng: 1 ảnh nhiều hàng (mỗi hàng 1 hướng) HOẶC mỗi hướng 1 ảnh (tên có số, vd CHAR_0_Run … CHAR_7_Run). */
-export const STATES=[['idle','Đứng yên'],['run','Chạy'],['atk','Đánh'],['hit','Trúng đòn']];
-const LOOP={idle:1,run:1,atk:0,hit:0,pickup:0};
+export const STATES=[['idle','Đứng yên'],['walk','Đi'],['run','Chạy'],['atk','Đánh'],['hit','Trúng đòn']];
+const LOOP={idle:1,walk:1,run:1,atk:0,hit:0,pickup:0};
 const ORD=[['cw','Vòng thuận: Nam→Tây→Bắc→Đông'],['ccw','Vòng ngược: Nam→Đông→Bắc→Tây'],['rpg4','4 hướng kiểu RPG: Nam,Tây,Đông,Bắc']];
 
 /* tên trùng (vd 8 hướng cùng tên) → đánh số theo thứ tự: tên, tên#2, tên#3… */
@@ -27,7 +27,7 @@ export function makeAnims(cfg,sheets){uniqNames(sheets);
     let sl=c;if(set.ord==='ccw')sl=(dirs-c)%dirs;else if(set.ord==='rpg4'&&dirs===4)sl=[0,1,3,2][c];
     return (sl+(set.off||0))%dirs;}
   function pickState(set,want){const ok=n=>!!(set.st&&set.st[n]&&set.st[n].src&&set.st[n].src.length);
-    if(ok(want))return want;if(/^atk\d+$/.test(want)&&ok('atk'))return 'atk';if(want==='run'||/^atk/.test(want)||want==='hit')return ok('idle')?'idle':ok('run')?'run':null;return ok('run')?'run':null;}
+    if(ok(want))return want;if(want==='run'&&ok('walk'))return 'walk';if(/^atk\d+$/.test(want)&&ok('atk'))return 'atk';if(want==='run'||/^atk/.test(want)||want==='hit')return ok('idle')?'idle':ok('run')?'run':null;return ok('run')?'run':null;}
   /* vẽ khung hình hiện tại. sx,sy = tâm ô trên màn hình, s = cỡ 1 ô. Trả về false nếu không có hoạt ảnh. */
   function clipSec(set,stn){const sp=strip(set,stn,0);if(!sp)return 0;return sp.dur?sp.dur.reduce((p,q)=>p+q,0)/1000:sp.n/sp.fps;}
   function frame(cx,set,stn,d,tt,sx,sy,s,flipL,grounded=false,height=0){
@@ -47,6 +47,8 @@ export function makeAnims(cfg,sheets){uniqNames(sheets);
     cx.imageSmoothingEnabled=sm;return true;}
   function drawChar(cx,q,id,sx,sy,s,t,hint){
     const set=get(id);if(!set)return false;
+    const pose=hint?.pose;
+    if(pose&&set.st?.[pose.state])return frame(cx,set,pose.state,pose.direction,t,sx,sy,s,false,hint.grounded,hint.height);
     if(q.lx!==undefined){let dx=q.x-q.lx,dy=q.y-q.ly;if(hint&&hint.iso&&!hint.ang){const a=dx-dy,b=(dx+dy)*.5;dx=a;dy=b;}if(Math.abs(dx)+Math.abs(dy)>.0004){q.mvt=t;const m=Math.hypot(dx,dy);q.afx=dx/m;q.afy=dy/m;if(Math.abs(dx)>.0002)q.aface=dx>0?1:-1;}}q.lx=q.x;q.ly=q.y;
     const want=hint&&hint.pk&&set.st&&set.st.pickup?'pickup':hint&&hint.hit?'hit':hint&&hint.atk?('atk'+(hint.atk>1?hint.atk:'')):(t-(q.mvt===undefined?-9:q.mvt)<.12?'run':'idle');
     const stn=pickState(set,want);if(!stn)return false;

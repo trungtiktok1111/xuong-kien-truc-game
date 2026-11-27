@@ -1,3 +1,4 @@
+import {directionalPanel} from './directionalPanel.js';
 import {drawSurfaceTerrain} from './surfaceContours.js';
 import {surfaceLevels,surfaceLevelById,surfacePieces} from './surfaceLibrary.js';
 import {diamondOutline,newSurface,planSurface,surfaceFromLevel,surfaceTypes,surfaceWater} from './surfaceTerrain.js';
@@ -403,7 +404,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
    surfaceMode.textContent=surface?'Dùng đường bao hầm / tự vẽ':'Phủ kín hình thoi';
    materialsPanel.hidden=false;
    if(surface){
-    materialSummary.textContent='Lớp vật liệu mặt đất · chọn riêng nền, phủ nền, tường, vật dụng, nhà và nhân vật';
+    materialSummary.textContent='Lớp vật liệu mặt đất · chọn riêng nền, phủ nền, tường, vật dụng và nhà';
     surfaceSketch.setAttribute('aria-pressed',String(surface.finish===false));
     surfaceFinish.setAttribute('aria-pressed',String(surface.finish!==false));
     materialsPanel.hidden=false;
@@ -413,7 +414,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
     for(const [tile,item] of pieceTiles)tile.setAttribute('aria-pressed',String(item===armedSurfacePiece));
     for(const [tile,item] of outdoorTiles)tile.setAttribute('aria-pressed',String(item.id===surface.layout));
    }else{
-    materialSummary.textContent='Lớp vật liệu hầm ngục · chọn riêng nền, phủ nền, tường, vật dụng, nhà và nhân vật';
+    materialSummary.textContent='Lớp vật liệu hầm ngục · chọn riêng nền, phủ nền, tường, vật dụng và nhà';
    }
   }
   setTab(activeTab);
@@ -1047,9 +1048,9 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  floorScale.value=String(saved.floorScale||1);
  const matchJoints=el('input',{type:'checkbox','aria-label':'Tự khớp mạch',...(saved.matchJoints?{checked:''}:{})});
  const surfaceStyle=()=>({floorScale:+floorScale.value,matchJoints:matchJoints.checked});
- const catalogNote=el('p',{class:'hint',role:'status'},'ZIP nhập ở đây được dùng chung cho nền, phủ nền, tường, vật dụng, nhà và nhân vật. Chọn gói trong từng lớp để duyệt tài nguyên; không cần nhập lại.');
+ const catalogNote=el('p',{class:'hint',role:'status'},'ZIP nhập ở đây được dùng chung cho nền, phủ nền, tường, vật dụng và nhà. Chọn gói trong từng lớp để duyệt tài nguyên; không cần nhập lại.');
  let stockSources=[];
- const rows=[['floor','Nền',true],['overlay','Phủ nền',false],['wall','Tường bao',true],['props','Vật dụng',true],['house','Nhà',false],['character','Nhân vật',true]];
+ const rows=[['floor','Nền',true],['overlay','Phủ nền',false],['wall','Tường bao',true],['props','Vật dụng',true],['house','Nhà',false]];
  const layerControls=rows.map(([key,label,active])=>{
   const source=el('select',{'aria-label':'Gói cho '+label.toLowerCase()});
   const addSource=B('Thêm gói',()=>{
@@ -1068,7 +1069,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   const scaleInput=el('input',{type:'number',min:'.2',max:'5',step:'.05',placeholder:'tự động',
    'aria-label':'Chỉnh tay tỉ lệ gói cho '+label.toLowerCase()});
   scaleLabel.append(scaleInput);
-  const control={key,source,addSource,sourceList,sources:[],catalogs:new Map(),note,picker,search,gallery,summary,selected,scaleInput,scaleLabel,items:[],ids:[],trial:null,revision:0,loading:false,urls:new Map(),limits:[24,24]};
+  const control={key,dragIds:new Set(),source,addSource,sourceList,sources:[],catalogs:new Map(),note,picker,search,gallery,summary,selected,scaleInput,scaleLabel,items:[],ids:[],trial:null,revision:0,loading:false,urls:new Map(),limits:[24,24]};
   const allImages=B('Tất cả ảnh',()=>{
    control.all=!control.all;
    allImages.setAttribute('aria-pressed',String(control.all));
@@ -1113,7 +1114,8 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   search.oninput=()=>{control.limits=[24,24];renderGallery(control);};
   picker.ontoggle=()=>{if(picker.open)renderGallery(control);else gallery.replaceChildren();};
   control.element=el('div',{class:'outline-stage'},
-   el('strong',{},label),el('label',{},'Gói ZIP · thư viện dùng chung',source),allImages,sourceList,scaleLabel,selected,picker,
+   el('strong',{},label),el('label',{},'Gói ZIP · thư viện dùng chung',source),allImages,sourceList,scaleLabel,selected,
+   dock&&['props','house'].includes(key)?el('p',{class:'hint'},'Bấm chọn ảnh trong khay rồi kéo một ảnh đã chọn để đặt cả cụm.'):null,picker,
    el('div',{class:'row'},prev,next),el('div',{class:'row'},clear,keep,restore),note);
   control.initialSource=saved.layers?.[key]?.sources?.[0]||saved.layers?.[key]?.source||(key==='character'?'builtin:character':defaultSource);
   control.initialSources=saved.layers?.[key]?.sources||[control.initialSource];
@@ -1228,13 +1230,29 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   control.keep.hidden=control.restore.hidden=!trial;
   control.keep.disabled=ids.includes(trial);
   control.summary.textContent=ids.length?'Chọn ảnh · '+ids.length+' mảnh':'Chọn mảnh bằng hình';
-  control.selected.replaceChildren(...(trial?[trial]:ids.slice(0,4)).map(id=>{
+  control.selected.replaceChildren(...(trial?[trial]:dock&&['props','house'].includes(control.key)?ids:ids.slice(0,4)).map(id=>{
    const key=splitAssetToken(id),item=items.find(a=>a.id===id)||(()=>{
     if(!key)return null;
     const cached=control.catalogs.get(key.source)?.items?.find(a=>a.id===key.id);
     return cached?{...cached,source:key.source,assetId:key.id,id,packageName:sourceTitle(control,key.source)}:null;
    })();
-   return item?el('span',{title:item.packageName+' · '+item.label},thumbFor(control,item,true)):el('span',{class:'hint'},'Cần chọn lại hoặc nạp ZIP');
+   if(!item)return el('span',{class:'hint'},'Cần chọn lại hoặc nạp ZIP');
+   if(!dock||!['props','house'].includes(control.key)||trial)return thumbFor(control,item,false);
+   const card=el('button',{class:'b outline-drag-item',type:'button',draggable:'true',
+    title:item.label,'aria-label':item.label,'aria-pressed':String(control.dragIds.has(id))},thumbFor(control,item,false));
+   card.onclick=()=>{
+    if(control.dragIds.has(id))control.dragIds.delete(id);else control.dragIds.add(id);
+    card.setAttribute('aria-pressed',String(control.dragIds.has(id)));
+   };
+   card.ondragstart=event=>{
+    const ids=control.dragIds.has(id)?control.ids.filter(token=>control.dragIds.has(token)):[id];
+    const assets=ids.map(splitAssetToken).filter(Boolean);
+    editor.startMaterialDrag(event,{role:control.key,assets,style:surfaceStyle(),files:new Map(outlineZipFiles),
+     scales:Object.fromEntries(assets.map(({source})=>[source,layerScale(control,source)]))});
+   };
+   card.ondragend=()=>editor.endMaterialDrag();
+   for(const img of card.querySelectorAll('img'))img.draggable=false;
+   return card;
   }));
   const item=items.find(a=>a.id===trial);
   const first=layerControls.findIndex(c=>c.source.value===control.source.value)===layerControls.indexOf(control);
@@ -1519,7 +1537,6 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   el('div',{class:'row'},el('label',{},dressing,' Tự phối vật liệu'),assembly,
    el('label',{},'Nhập nhiều ZIP ',zipFiles)),
   presetPanel,
-  el('p',{class:'hint'},'Nhân vật được chọn đầu tiên dùng để chơi. Các ảnh chọn tiếp theo là nhân vật phụ trong cảnh.'),
   el('details',{},el('summary',{},'Quản lý ZIP đã nhập'),catalogNote,
    el('div',{class:'row'},zipPicker,deleteZip,deleteAllZips)),
   el('div',{class:'row'},el('label',{},'Cỡ viên gạch nền ',floorScale),el('label',{},matchJoints,' Tự khớp mạch')),
@@ -1624,10 +1641,10 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  library.append(editShape);
  let layoutObserver;
  if(dock){
-  let current=map;
+  const current=editor.materialMapIndex();
   const applyMaterials=B('Áp dụng lên cảnh 2D',async()=>{
    if(commitBusy)return;
-   if(editor.map()!==current){
+   if(editor.materialMapIndex()!==current){
     showActionStatus('Màn đang chỉnh đã thay đổi. Hãy mở lại bảng Vật liệu.',true);return;
    }
    if(layerControls.some(row=>row.loading)){
@@ -1639,7 +1656,6 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
    showActionStatus('Đang phối vật liệu…');
    try{
     await editor.applySceneMaterials(choice);
-    current=editor.map();
     showActionStatus('Đã cập nhật cảnh 2D. Ctrl+Z để hoàn tác.');
    }catch(error){showActionStatus(error.message,true);}
    finally{commitBusy=false;applyMaterials.disabled=false;closeMaterials.disabled=false;}
@@ -1648,7 +1664,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   closeMaterials.classList.add('scene-materials-close');
   ov.className='scene-materials-dock';ov.removeAttribute('style');
   ov.setAttribute('aria-label','Vật liệu cảnh 2D');
-  ov.append(el('div',{class:'row scene-materials-actions'},applyMaterials,closeMaterials),materialsPanel,actionStatus);
+  ov.append(el('div',{class:'row scene-materials-actions'},applyMaterials,closeMaterials),materialsPanel,directionalPanel(editor),actionStatus);
   dock.classList.add('has-materials');dock.append(ov);
  }else{
   box.append(header,plan,settings,buttons,actionStatus);
@@ -1674,7 +1690,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
     for(const sourceId of initSources)await selectLayerSource(row,sourceId,bySource.get(sourceId)||[]);
     for(const [sourceId,ids] of bySource)if(!initSources.includes(sourceId))await selectLayerSource(row,sourceId,ids);
    }else{
-    const legacyAssets=(row.initialAsset||[]).map(id=>({source:row.initialSource,id}));
+    const legacyAssets=(Array.isArray(row.initialAsset)?row.initialAsset:[]).map(id=>({source:row.initialSource,id}));
     const bySource=new Map();for(const asset of legacyAssets){if(!bySource.has(asset.source))bySource.set(asset.source,[]);bySource.get(asset.source).push(asset.id);}
     for(const sourceId of initSources)await selectLayerSource(row,sourceId,row.initialAsset===true&&sourceId===row.initialSource?true:(bySource.get(sourceId)||[]));
    }

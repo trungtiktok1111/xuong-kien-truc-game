@@ -9,7 +9,7 @@ export function canArrangeProp(entity){
 }
 
 export function arrangementLayer(entity){
- if(entity.outlineAutoHouse||entity.housePart||/(?:^outline-house-|^surface-house-)/.test(String(entity.id)))return 'house';
+ if(entity.outlineAutoHouse||entity.housePlacement||entity.housePart||/(?:^outline-house-|^surface-house-)/.test(String(entity.id)))return 'house';
  return ({0:'floor',1:'overlay',3:'roof'})[entity.sceneLayer]||'prop';
 }
 

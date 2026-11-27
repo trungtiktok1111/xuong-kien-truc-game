@@ -216,7 +216,7 @@ export function init2D(root,A){
       const p=g2s(e.x+.5,e.y+.5),col=OT[e.t][2],sz=S*1.5;
       cx.lineWidth=sel?3:1.5;cx.strokeStyle=col;pathQ(e.x,e.y,1,1);cx.stroke();
       if(e.tile){tileG0(enc(e.tile.sid,e.tile.idx),p[0]-sz/2,p[1]-sz*.85,sz);}
-      else{let ok=false;if(e.anim){try{const A=isoAN();if(A){A.drawChar(cx,{x:0,y:0,dir:0,vx:0,vy:0},e.anim,p[0],p[1]+S*.1,sc,0,{iso:true});ok=true;}}catch(_){}}
+      else{let ok=false;if(e.anim){try{const A=isoAN();if(A){ok=A.drawChar(cx,{x:0,y:0},e.anim,p[0],p[1],sc,performance.now()/1000,{iso:true,grounded:true,pose:e.animationPose});}}catch(_){}}
         if(!ok){cx.fillStyle=col+'55';pathQ(e.x,e.y,1,1);cx.fill();}
         if(view.z>=.9){cx.font='bold '+Math.max(9,S*.5)+'px system-ui';cx.textAlign='center';cx.textBaseline='alphabetic';const t=e.name||OT[e.t][1],w=cx.measureText(t).width+6;cx.fillStyle='#000b';cx.fillRect(p[0]-w/2,p[1]-sz*.95-2,w,Math.max(11,S*.5)+4);cx.fillStyle=col;cx.fillText(t,p[0],p[1]-sz*.95+Math.max(9,S*.5)-1);}}
       isoHB.push({e,r:[p[0]-sz/2,p[1]-sz*.85,p[0]+sz/2,p[1]+S*.1],f:[e.x,e.y,e.x+1,e.y+1]});}
@@ -355,7 +355,15 @@ export function init2D(root,A){
     if(hov&&!object&&tool!=='paste'&&tool!=='obj'&&tool!=='wall'){cx.strokeStyle='#ffd24a';cx.lineWidth=2;const ww=(tool==='draw'?stamp.w:1),hh=(tool==='draw'?stamp.h:1);pathQ(hov.x,hov.y,ww,hh);cx.stroke();}
     if(sel||drag&&drag.rect){const r=sel||drag.rect;const x0=Math.min(r.x0,r.x1),y0=Math.min(r.y0,r.y1),x1=Math.max(r.x0,r.x1),y1=Math.max(r.y0,r.y1);cx.setLineDash([6,4]);cx.strokeStyle='#4fd1ff';cx.lineWidth=2;pathQ(x0,y0,x1-x0+1,y1-y0+1);cx.stroke();cx.setLineDash([]);}
   }
-  (function loop(){render();requestAnimationFrame(loop);})();
+  let animationMap,animationRevision,sceneAnimated=false,lastAnimation=0;
+  (function loop(time=0){
+    if(animationMap!==M||M&&animationRevision!==buildRevision){
+      animationMap=M;animationRevision=buildRevision;
+      sceneAnimated=!!M?.ents.some(e=>e.animationPose&&(M.cfg.anims||[]).find(set=>set.id===e.anim)?.st[e.animationPose.state]?.n>1);
+    }
+    if(sceneAnimated&&time-lastAnimation>=100){dirty=true;lastAnimation=time;}
+    render();requestAnimationFrame(loop);
+  })();
   // ===== thao tác =====
   const inb=(x,y)=>x>=0&&y>=0&&x<M.w&&y<M.h;
   function put(x,y,v,l=act){if(!inb(x,y))return;(l===4?M.blk:M.layers[l])[y*M.w+x]=v;}
@@ -420,7 +428,8 @@ export function init2D(root,A){
     if(e.wallLine&&M.ents.some(q=>q.wallId===e.id)){
       toast('Đoạn tường có cổng. Hãy xóa cổng trong Mái / cửa trước.');return false;
     }
-    pushUndo();M.ents=M.ents.filter(q=>q.id!==e.id);
+    const removed=new Set(propGroup(M.ents,e).map(part=>part.id));
+    pushUndo();M.ents=M.ents.filter(q=>!removed.has(q.id));
     if(!acceptStructure())return false;
     if(selId===e.id)selId=null;
     eraseSelected=null;after();draw();return true;
@@ -516,8 +525,9 @@ export function init2D(root,A){
   function clearSel(all){if(!sel)return;pushUndo();const x0=Math.min(sel.x0,sel.x1),y0=Math.min(sel.y0,sel.y1),x1=Math.max(sel.x0,sel.x1),y1=Math.max(sel.y0,sel.y1);
     for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){if(all)for(let l=0;l<5;l++)put(x,y,0,l);else put(x,y,0);}
     const mounted=new Set(M.ents.filter(e=>e.wallId).map(e=>e.wallId));
-    M.ents=M.ents.filter(e=>e.t==='start'||(!all&&(sceneEntityLayer(e)!==act||(e.wallLine&&mounted.has(e.id))))||
-      !inSelection(e,x0,y0,x1,y1));
+    const removed=new Set(M.ents.filter(e=>e.t!=='start'&&(all||sceneEntityLayer(e)===act&&!(e.wallLine&&mounted.has(e.id)))&&
+      inSelection(e,x0,y0,x1,y1)).flatMap(e=>propGroup(M.ents,e).map(part=>part.id)));
+    M.ents=M.ents.filter(e=>!removed.has(e.id));
     const wallIds=new Set(M.ents.filter(e=>e.wallLine).map(e=>e.id));
     if(all)M.ents=M.ents.filter(e=>!e.wallId||e.wallId.startsWith('outline:')||wallIds.has(e.wallId));
     if(!acceptStructure())return;
@@ -949,8 +959,13 @@ export function init2D(root,A){
     dirty=true;cv.focus({preventScroll:true});
   }},el('kbd',{},'J'),'Thu bảng phải');
   rail.append(zoomButton('Thu nhỏ','[',1/1.25),zoomButton('Phóng to',']',1.25),sidebarButton);
-  const layerPicker=el('select',{'aria-label':'Lớp đang sửa',onchange:e=>useLayer(Number(e.target.value))},
-    layerNames.map((label,index)=>el('option',{value:index},(index+1)+' · '+label)));
+  const layerPicker=el('select',{'aria-label':'Lớp đang sửa',onchange:e=>{
+    const value=e.target.value;
+    if(value==='house'||value==='animated'){
+      inventoryLayer=value;inventoryId=inventoryGroup='';inventoryPage=0;useTool('inventory');
+    }else{inventoryLayer='all';useLayer(Number(value));}
+  }},layerNames.map((label,index)=>el('option',{value:index},(index+1)+' · '+label)),
+    el('option',{value:'house'},'Nhà'),el('option',{value:'animated'},'Animation/Animated'));
   const statusText=el('span',{}),statusHint=el('span',{class:'desktop-status-hint'},'Space + kéo · Cuộn để zoom · Chuột phải');
   statusBar.append(layerPicker,statusText,statusHint);
   cv.before(rail);cv.after(statusBar);
@@ -999,7 +1014,7 @@ export function init2D(root,A){
     const projection=ANGQ()?'Angle':'Isometric';
     if(projectionState.textContent!==projection)projectionState.textContent=projection;
     inventoryButton.setAttribute('aria-pressed',String(tool==='inventory'));
-    layerPicker.value=String(act);
+    layerPicker.value=tool==='inventory'&&['house','animated'].includes(inventoryLayer)?inventoryLayer:String(act);
     const r=selRect(),current=desktopTools.find(t=>t[0]===tool);
     statusText.textContent=(tool==='erase'?'Xóa · '+(eraseActors?'Đối tượng':layerNames[act]):current?.[1]||toolNames[tool]||'Công cụ')+(r?' · '+r.w+' × '+r.h+' ô':'')+' · '+Math.round(view.z*100)+'%';
   }
@@ -1820,9 +1835,10 @@ export function init2D(root,A){
   let inventoryGroup='',inventoryId='',inventoryMoving=false,inventoryItem=null,inventoryQuery='',inventoryPage=0;
 
   const inventoryLayers=[['all','Tất cả'],['floor','Nền'],['overlay','Phủ nền'],['prop','Vật dụng'],
-    ['house','Nhà'],['roof','Mái / cửa'],['wall','Tường'],['actors','Đối tượng']];
+    ['house','Nhà'],['roof','Mái / cửa'],['wall','Tường'],['animated','Animation/Animated'],['actors','Đối tượng']];
   let inventoryLayer='all',inventorySnap=false,inventoryLightDrag=true;
   function inventoryLayerOf(e){
+    if(e.anim)return 'animated';
     return e.wallLine?'wall':e.t==='deco'?arrangementLayer({...e,sceneLayer:e.sceneLayer??sceneEntityLayer(e)}):'actors';
   }
   const inInventoryLayer=e=>inventoryLayer==='all'||inventoryLayerOf(e)===inventoryLayer;
@@ -3461,7 +3477,7 @@ export function init2D(root,A){
     syncCur();
     const first=MAPS[0].cfg||{},lookup=makePaintLookup();
     const maps=MAPS.map((map,i)=>{
-      const cfg=i>0&&!map.cfg.outlineHero?{...map.cfg,anims:first.anims,heroAnim:first.heroAnim,hero:first.hero,outlineHero:first.outlineHero,playerHeight:first.playerHeight,crouchHeight:first.crouchHeight}:map.cfg;
+      const cfg=i>0&&!map.cfg.outlineHero?{...map.cfg,anims:[...new Map([...(first.anims||[]),...(map.cfg.anims||[])].map(set=>[set.id,set])).values()],heroAnim:map.cfg.heroAnim||first.heroAnim,hero:first.hero,outlineHero:first.outlineHero,playerHeight:first.playerHeight,crouchHeight:first.crouchHeight}:map.cfg;
       return sceneForPlay(map,cfg,lookup);
     });
     let gid=lsGet('thk_gid',null);
@@ -3894,13 +3910,89 @@ export function init2D(root,A){
     if(file)return (await readOutlineFile(file,style)).materials;
     throw Error('Hãy chọn lại hoặc thêm lại tệp ZIP của lớp này.');
   }
+  let materialDrag=null;
+  cv.addEventListener('dragover',event=>{
+    if(materialDrag){event.preventDefault();event.dataTransfer.dropEffect='copy';}
+  });
+  cv.addEventListener('drop',event=>{
+    const batch=materialDrag;
+    if(!batch)return;
+    event.preventDefault();materialDrag=null;
+    const p=pos(event),at=s2g(p.x,p.y);
+    void placeMaterialBatch(batch,at).catch(error=>toast(error.message));
+  });
+  function startMaterialDrag(event,batch){
+    materialDrag=batch;
+    event.dataTransfer.setData('application/x-xuong-material','1');
+    event.dataTransfer.effectAllowed='copy';
+  }
+  let placementQueue=Promise.resolve();
+  function placeMaterialBatch(batch,at){
+    const mapIndex=curMap;
+    const job=placementQueue.then(async()=>{
+      if(curMap!==mapIndex)throw Error('Màn đang chỉnh đã đổi. Hãy kéo lại.');
+      if(!inb(at.x,at.y))throw Error('Hãy thả vào trong bản đồ.');
+      const map=M,revision=buildRevision,prepared=sheets.slice(),sheetCount=sheets.length,next=clone(map),parts=[];
+      const floor=ruleCtx().floor;
+      if(batch.animation){
+        const x=Math.floor(at.x),y=Math.floor(at.y);
+        if(!map.cfg.anims?.some(set=>set.id===batch.animation.id))throw Error('Bộ hoạt ảnh chưa có trong màn.');
+        if(!floor(x+.5,y+.5,.22))throw Error('Hãy đặt hoạt ảnh trên sàn.');
+        parts.push({...newEnt('npc',x,y),name:batch.animation.name,anim:batch.animation.id,animationPose:batch.pose,tile:null,text:''});
+      }else{
+        let right=null;
+        for(const {source,id} of batch.assets){
+          const style={...batch.style,manualScale:batch.scales[source]};
+          const pack=await outlineLayerPack(source,batch.files,style);
+          let item=pack[outlineRoles[batch.role]]?.find(asset=>asset.id===id),sourceSheets=pack.sheets;
+          if(!item&&pack.raw&&batch.role==='props'){
+            const manual=await outlineManualImage(pack.raw,id,'props',{...style,packScale:pack.scale});
+            item=manual.item;sourceSheets=manual.sheets;
+          }
+          if(!item)throw Error('Mẫu này chưa có dữ liệu đặt theo lớp đã chọn.');
+          const group='placed-'+crypto.randomUUID();
+          const chunk=batch.role==='house'?item.ents.map(e=>({...e,x:e.x+at.x-item.w/2,y:e.y+at.y-item.h/2,housePlacement:true})):
+            [item.create(at.x,at.y,group)];
+          const bounds=inventoryFootBounds(chunk.flatMap(propFootprint));
+          const dx=right===null?0:right+.25-bounds[0];
+          right=bounds[2]+dx;
+          for(const [i,e] of chunk.entries()){
+            e.tile={...e.tile,sid:await loadBuiltinSheet(sourceSheets[e.tile.sid],prepared)};
+            delete e.outlineAutoProp;delete e.outlineAutoHouse;
+            e.id=group+'-'+i;e.arrangementGroup=group;e.x+=dx;
+            if(!floor(e.x+1,e.y+1,0))throw Error('Một phần cụm nằm ngoài sàn.');
+            parts.push(e);
+          }
+        }
+      }
+      if(map!==M||revision!==buildRevision||sheetCount!==sheets.length)throw Error('Màn đang chỉnh đã đổi. Hãy kéo lại.');
+      next.ents.push(...parts);
+      const previousLength=sheets.length;
+      sheets.push(...prepared.slice(previousLength));
+      if(!commitInventory(next)){sheets.length=previousLength;return;}
+      draw();cv.focus({preventScroll:true});
+    });
+    placementQueue=job.catch(()=>{});
+    return job;
+  }
+  async function installDirectionalSet(set,assets,map){
+    const prepared=sheets.slice(),count=sheets.length;
+    for(const asset of assets)await loadBuiltinSheet(asset,prepared);
+    if(M!==map||sheets.length!==count)throw Error('Màn đang chỉnh đã đổi. Hãy nạp lại.');
+    sheets.push(...prepared.slice(count));pushUndo();
+    M.cfg.anims=[...(M.cfg.anims||[]),set];anK='';after();draw();
+  }
+  function setAnimatedHero(id){
+    if(!M.cfg.anims?.some(set=>set.id===id))return;
+    pushUndo();M.cfg.heroAnim=id;after();draw();toast('Đã chọn hoạt ảnh cho nhân vật chính.');
+  }
   async function outlineLayerChoices(role,source,files,style){
     const pack=await outlineLayerPack(source,files,style);
     const choices=pack[outlineRoles[role]]||[],suggested=new Set(choices.map(a=>a.id));
     const primary=await Promise.all(choices.map(async item=>({id:item.id,label:item.label,recommended:true,
       thumb:role==='house'?await outlineHouseThumb(pack,item):pack.sheets[item.sid]?.url,
       image:pack.raw?.files?.[item.id]?()=>new Blob([pack.raw.files[item.id]]):undefined})));
-    const others=pack.raw?outlineImageChoices(pack.raw).filter(a=>!suggested.has(a.id)).map(a=>({...a,
+    const others=pack.raw&&role!=='house'?outlineImageChoices(pack.raw).filter(a=>!suggested.has(a.id)).map(a=>({...a,
       image:()=>new Blob([pack.raw.files[a.id]],{type:a.id.endsWith('.png')?'image/png':a.id.endsWith('.webp')?'image/webp':'image/jpeg'})})): [];
     return {items:[...primary,...others],message:pack.skipReason||pack.assetWarning||'',scale:pack.scale};
   }
@@ -4124,6 +4216,6 @@ export function init2D(root,A){
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
     .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
-  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){materialDrag=null;},installDirectionalSet,setAnimatedHero,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
   return api;
 }
