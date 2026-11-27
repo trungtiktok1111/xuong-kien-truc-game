@@ -3034,6 +3034,13 @@ export function init2D(root,A){
     const message='Đã nối hai chiều · '+out.name+' · ô '+out.x+', '+out.y+'.';
     toast(message);return message;
   }
+  async function outlinePlayData(index){
+    const data=gameData();
+    const map=(data.maps||[data])[index];
+    if(!map)throw Error('Màn đã chọn không còn trong dự án.');
+    if(map.cfg?.proj==='angle')await ensureAngle(sheets);
+    return {M:map,sheets};
+  }
   function outlineConnectionTargets(){
     return MAPS.map((_,i)=>({id:i,name:mapName(i),current:i===curMap}));
   }
@@ -3867,5 +3874,5 @@ export function init2D(root,A){
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
     .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
-  return {ready,connectMap,mapConnectionBox,outlineConnectionTargets,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  return {ready,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,previewOutlineMap,liveOutlineMap,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
 }
