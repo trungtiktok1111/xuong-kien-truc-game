@@ -1174,7 +1174,15 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
     card.append(thumbFor(control,item,true),el('span',{},item.label));
     return card;
    });
-   control.gallery.append(el('p',{class:'outline-gallery-label'},(index?'Ảnh khác':'Gợi ý cho lớp này')+' · '+group.length),
+   const shown=group.slice(0,cards.length);
+   control.gallery.append(el('div',{class:'row'},
+    el('span',{class:'outline-gallery-label'},(index?'Ảnh khác':'Gợi ý cho lớp này')+' · '+group.length),
+    B('Chọn '+shown.length+' ảnh đang hiện',()=>{
+     clearTrials();dressing.checked=true;activateSurfaceMaterials();
+     control.ids=[...new Set([...control.ids,...shown.map(item=>item.id)])];
+     control.sources=[...new Set([...control.sources,...shown.map(item=>item.source)])];
+     renderSources(control);syncLayer(control);
+    })),
     el('div',{class:'outline-gallery-grid'},...cards));
    if(cards.length<group.length)control.gallery.append(B('Xem thêm',()=>{
     control.limits[index]+=24;renderGallery(control);syncLayer(control);
@@ -1485,7 +1493,7 @@ export function openOutlineEditor(editor,initialTab='shapes',initialPage='plan')
  const materialSummary=el('summary',{},'Lớp vật liệu hầm ngục');
  const materialsPanel=is3D?null:el('details',{open:''},materialSummary,
   el('div',{class:'row'},el('label',{},dressing,' Tự phối vật liệu'),assembly,
-   el('label',{},'Thêm ZIP ',zipFiles)),
+   el('label',{},'Nhập nhiều ZIP ',zipFiles)),
   presetPanel,
   el('p',{class:'hint'},'Nhân vật được chọn đầu tiên dùng để chơi. Các ảnh chọn tiếp theo là nhân vật phụ trong cảnh.'),
   el('details',{},el('summary',{},'Quản lý ZIP đã nhập'),catalogNote,

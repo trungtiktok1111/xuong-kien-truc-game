@@ -2195,7 +2195,9 @@ export function init2D(root,A){
     lightDrag.checked=inventoryLightDrag;
     body.append(title,el('div',{class:'row inventory-controls'},el('label',{},'Lớp ',layer),
       btn('Hoàn tác',doUndo),btn('Làm lại',doRedo),el('label',{},snap,' Bám tâm ô'),el('label',{},lightDrag,' Kéo nhẹ'),
-      btn('Phối vật liệu',()=>api.openMaterials?.())));
+      btn('Phối vật liệu',()=>api.openMaterials?.())),
+      el('div',{class:'row inventory-controls'},btn('Nhập nhiều ảnh',addSheet),
+        btn('Nhập nhiều ZIP/RAR',chooseArchiveFiles)));
     if(!groups.length){body.append(el('p',{class:'hint'},'Màn này chưa có vật phẩm.'));return;}
     const gallery=el('div',{class:'build-materials'});
     const paging=el('div',{class:'row build-pages'});
