@@ -78,7 +78,7 @@ export function decoZones(ents=[]){
   for(const e of ents){
     if(e.gateAssembly)out.push(...gateZones(e));
     if(e.t!=='deco'||e.flat||e.sceneLayer===0||e.sceneLayer===1||
-      e.wallLine||e.gateAssembly||e.roofDirection||e.roofSurface||e.housePart?.roof||e.door?.st==='mo')continue;
+      e.wallLine||e.roofDirection||e.roofSurface||e.housePart?.roof||e.door?.st==='mo')continue;
     const X=e.x+1,Y=e.y+1,id='dz'+e.id;
     const addPoly=(points,index=0)=>out.push({id:id+'p'+index,k:'poly',
       pts:points.map(([x,y])=>[X+x,Y+y]),th:0,closed:true,deco:e.id});
@@ -99,7 +99,7 @@ export function decoZones(ents=[]){
     else if(e.zb){
       const [x,y,w,h]=e.zb;
       out.push({id,k:'rect',x:X+x,y:Y+y,w,h,rot:0,deco:e.id});
-    }else if(e.tile&&!e.wallId){
+    }else if(e.tile&&!e.wallId&&!e.gateAssembly){
       const art=e.spriteBounds;
       const width=art?art[2]-art[0]:.4;
       const radius=Math.min(2,Math.max(.09,width*(e.sc||1)*.29));
