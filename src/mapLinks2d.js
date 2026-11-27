@@ -1,6 +1,6 @@
 import {miniatureHouseHeadroom} from './miniatureHouse.js';
 import {mapCollision} from './mapCollision.js';
-import {decoZones,zonesHit} from './zones.js';
+import {zonesHit} from './zones.js';
 import {constructionContext,isRoof} from './constructionRules2d.js';
 import {actorFootprint,actorHeights,fitsUnderRoof} from './headroom2d.js';
 import {bridgeHeight,bridgeRails} from './settlementBridge.js';
@@ -13,8 +13,9 @@ const cellKey=(x,y)=>x+':'+y;
 
 export function linkWalkability(map,placementZones=map.placementZones||[]){
   const collision=mapCollision(map),bridge=map.cfg?.settlement?.plan?.bridge;
-  const zones=[...(map.cfg?.zones||[]),...decoZones(map.ents),...bridgeRails(bridge),...placementZones];
-  const roofs=[...(map.ents.some(isRoof)?constructionContext(map).headroom():[]),...miniatureHouseHeadroom(map.ents)];
+  const construction=constructionContext(map,placementZones);
+  const zones=[...(map.cfg?.zones||[]),...construction.objects,...bridgeRails(bridge),...placementZones];
+  const roofs=[...(map.ents.some(isRoof)?construction.headroom():[]),...miniatureHouseHeadroom(map.ents)];
   const {standing}=actorHeights(map.cfg);
   const free=(x,y,r=radius)=>collision.free(x,y,r)&&!zonesHit(zones,x,y,r)&&
     fitsUnderRoof(roofs,actorFootprint(x,y,r),standing+bridgeHeight(bridge,x,y));

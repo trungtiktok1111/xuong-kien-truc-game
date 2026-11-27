@@ -4,7 +4,7 @@ import {campaignStart,mapLinkLanding} from './mapLinks2d.js';
 import {bridgeHeight,bridgeRails,drawSettlementBridge,pickBridge} from './settlementBridge.js';
 import {tiledDepth} from './tiledScene.js';
 import {actorFootprint,actorHeights,bodyHeight,fitsUnderRoof,lowestCeiling,roofPlane,roofBlockedFootprint} from './headroom2d.js';
-import {constructionContext,isRoof,roofBearing,headroomIssue} from './constructionRules2d.js';
+import {constructionContext,isRoof,roofBearing,roofOnGround,headroomIssue} from './constructionRules2d.js';
 import {builtWallFaces,isMapLink,portalAnchor} from './wall2d.js';
 import {gateWalls} from './gate2d.js';
 import {automaticPaintZones,estimateContact,makePaintProfile,paintedPieces,roofTextureDirection,sceneEntityLayer} from './placement2d.js';
@@ -55,11 +55,11 @@ export function play2D(o){
   const DCL=decos.flatMap(e=>{
     if(!isRoof(e))return headroomIssue(e,structuralCeilings,CF)?[]:[e];
     const support=roofBearing(e,build);
-    return support?[{...e,roofBase:support.base,roofRise:support.rise,ceiling:roofPlane(e,support)}]:[];
+    return support?[{...e,roofBase:support.base,roofRise:support.rise,ceiling:roofPlane(e,support)}]:[roofOnGround(e)];
   });
   const coverDepth=e=>e.tiledLayer===undefined?e.y+(ANG?0:e.x):tiledDepth(e,W,H,ANG);
   const housePlanes=new Map(houseCeilings.map(plane=>[plane.id,plane]));
-  const covers=DCL.filter(d=>d.placedProp&&sceneEntityLayer(d)===3&&(isRoof(d)||d.tiledLayer!==undefined)).sort((a,b)=>coverDepth(a)-coverDepth(b));
+  const covers=DCL.filter(d=>!d.groundedRoof&&d.placedProp&&sceneEntityLayer(d)===3&&(isRoof(d)||d.tiledLayer!==undefined)).sort((a,b)=>coverDepth(a)-coverDepth(b));
   const coverSet=new Set(covers);
   const fitsAt=(x,y,r,top)=>fitsUnderRoof(ceilings,actorFootprint(x,y,r),top+bridgeHeight(bridge,x,y));
   const postureHeight=e=>e===P?(P.crouching?playerSize.crouching:playerSize.standing):(e.height||1.2);

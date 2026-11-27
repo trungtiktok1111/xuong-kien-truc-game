@@ -17,7 +17,7 @@ import {actorHeights,bodyHeight,bodyFootprint,roofPlane} from './headroom2d.js';
 import {usedGridBounds,rebaseOutlineSource} from './outlineGrid.js';
 import {builtWallFaces,mountGate,outlineSupports,isMapLink,projectSegment,wallThickness,WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS} from './wall2d.js';
 import {gateWalls,gateZones} from './gate2d.js';
-import {constructionContext,gateIssue,propIssue,wallIssue,isRoof,isBearingColumn,roofBearing,roofIssue,wallHasFoundation,headroomIssue} from './constructionRules2d.js';
+import {constructionContext,gateIssue,propIssue,wallIssue,isRoof,isBearingColumn,roofBearing,roofOnGround,roofIssue,wallHasFoundation,headroomIssue} from './constructionRules2d.js';
 import {automaticPaintZones, daXoayArchProfiles, estimateContact, makePaintProfile, paintedPieces, paintFamily, roofTextureDirection, sceneEntityLayer, propContact, resizeProp, turnProp} from './placement2d.js';
 import {openArchivePicker} from './archivePicker.js';
 import {tiledDepth} from './tiledScene.js';
@@ -241,17 +241,18 @@ export function init2D(root,A){
     const sheet=sheets[e.tile.sid],unit=CELL*view.z/(ISOQ()?.75:1);
     const support=isRoof(e)?(previewSupport===undefined?roofBearing(e,ruleCtx()):previewSupport):null;
     if(isRoof(e)&&!support)issue=roofIssue;
-    const frame=propDisplayFrame(e,support);
+    const displayed=isRoof(e)&&!support?roofOnGround(e):e;
+    const frame=propDisplayFrame(displayed,support);
     const active=(selId!==null&&e.id===selId)||preview;
     cx.save();
-    if(isRoof(e)&&!support)cx.globalAlpha=.42;
+    if(preview&&isRoof(e)&&!support)cx.globalAlpha=.42;
     if(preview){if(!issue)cx.globalAlpha=.68;for(const wall of gateWalls(e,ANGQ()||!ISOQ()))drawGateWall(wall);}
-    drawPlacedProp(cx,e,sheet,frame);
+    drawPlacedProp(cx,displayed,sheet,frame);
     cx.restore();
     if(active){
       const [px,py]=g2s(e.x+1,e.y+1);
       cx.strokeStyle=issue?'#ff7979':'#ffdb74';cx.lineWidth=1.6;
-      for(const zone of decoZones([e])){
+      for(const zone of decoZones([displayed])){
         zPath(cx,zone,g2s);
         if(zone.k==='line'){cx.lineWidth=Math.max(2,zone.th*CELL*view.z);cx.globalAlpha=.65;}
         cx.stroke();cx.lineWidth=1.6;cx.globalAlpha=1;
@@ -319,7 +320,7 @@ export function init2D(root,A){
         pathQ(i%M.w,Math.floor(i/M.w),1,1);cx.fill();
       }
       cx.restore();cx.fillStyle='rgba(255,40,40,.5)';cx.strokeStyle='rgba(255,120,120,.9)';cx.lineWidth=1;
-      for(const q of decoZones(M.ents)){zPath(cx,q,g2s);cx.lineWidth=q.k==='line'?Math.max(1,q.th*CELL*view.z):1;cx.fill();cx.stroke();}
+      for(const q of ruleCtx().objects){zPath(cx,q,g2s);cx.lineWidth=q.k==='line'?Math.max(1,q.th*CELL*view.z):1;cx.fill();cx.stroke();}
       cx.lineWidth=1;
       for(const q of currentPaintZones()){
         cx.fillStyle=q.estimated?'rgba(255,170,45,.45)':'rgba(255,40,40,.5)';
