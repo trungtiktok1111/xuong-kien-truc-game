@@ -7,7 +7,7 @@ import {actorFootprint,actorHeights,bodyHeight,fitsUnderRoof,lowestCeiling,roofP
 import {constructionContext,isRoof,roofBearing,headroomIssue} from './constructionRules2d.js';
 import {builtWallFaces,isMapLink,portalAnchor} from './wall2d.js';
 import {gateWalls} from './gate2d.js';
-import {paintedPieces,sceneEntityLayer} from './placement2d.js';
+import {automaticPaintZones,estimateContact,makePaintProfile,paintedPieces,roofTextureDirection,sceneEntityLayer} from './placement2d.js';
 import {tileFoot,tileSpan} from './spriteFoot.js';
 import {mapCollision} from './mapCollision.js';
 import {outline2D,clipOutline,stoneBackdrop,drawFloorSlab,stoneWall,outlineWallImage,drawFloorCollision} from './outline2d.js';
@@ -19,6 +19,33 @@ import {makeAnims} from './anim.js';
 import {slab,shore,tile192,mirF} from './isoslab.js';
 import {bakeLayer0,noiseOverlay,paintSlab,drawFog} from './groundfx.js';
 const HERO=88,FOES=[108,109,120,121,122,111,110],TD=2;
+function playPaintZones(map,sheets){
+  if(map.cfg?.autoObjectCollision===false)return map.placementZones||[];
+  const saved=map.placementZones||[];
+  const existing=new Set(saved.map(zone=>zone.id));
+  const profiles=new Map();
+  const canvas=document.createElement('canvas');
+  const context=canvas.getContext('2d',{willReadFrequently:true});
+  const generated=automaticPaintZones(map,(value)=>{
+    if(profiles.has(value))return profiles.get(value);
+    const raw=value-1,idx=(raw>>3)&4095,sheet=sheets[raw>>15],flip=raw&7;
+    let profile=null;
+    if(sheet?.img&&!roofTextureDirection(sheet.name,true)){
+      const size=sheet.tw,step=size+(sheet.margin||0);
+      let contact=null;
+      try{
+        canvas.width=canvas.height=size;
+        context.drawImage(sheet.img,idx%sheet.cols*step,Math.floor(idx/sheet.cols)*step,size,size,0,0,size,size);
+        contact=estimateContact(context.getImageData(0,0,size,size).data,size,flip);
+      }catch{/* Use the default ground contact when pixel data is unavailable. */}
+      profile=makePaintProfile('solid',contact||{u:.5,v:.87,width:.38});
+    }
+    profiles.set(value,profile);
+    return profile;
+  });
+  return [...saved,...generated.filter(zone=>!existing.has(zone.id))];
+}
+
 export function play2D(o){
   const M=o.M,W=M.w,H=M.h,sheets=o.sheets;const CF=Object.assign({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:TD,idx:HERO},win:'auto'},M.cfg||{});const EN=(M.ents||[]).map(e=>e.door?Object.assign({},e,{door:Object.assign({},e.door)}):e),legacy=!EN.length;const VW=CF.view||'rpg',SIDE=VW==='side',ISO=VW==='iso',ANG=ISO&&CF.proj==='angle',decos=EN.filter(e=>e.t==='deco');
   const bridge=CF.settlement?.plan?.bridge;
@@ -70,9 +97,11 @@ export function play2D(o){
     ov.append(note);
   }
   const AN=makeAnims(CF,sheets);
-  const collision=mapCollision(M);
+  const placementZones=playPaintZones(M,sheets);
+  const collision=mapCollision({...M,placementZones});
   const portalFloor=CF.outline?.loops?.length?mapCollision({...M,cfg:{...CF,outline:{...CF.outline,floorCollision:true}}}).floor:null;
-  const ZP=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(DCL.filter(e=>!e.door)),...bridgeRails(bridge)],DRS=DCL.filter(e=>e.door);let ZS=ZP,ZR=zRaster(ZS,W,H);
+  const ZP=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(DCL.filter(e=>!e.door).map(e=>
+    /Vách núi đá/i.test(sheets[e.tile?.sid]?.name||'')?{...e,groundContact:'rock'}:e)),...bridgeRails(bridge)],DRS=DCL.filter(e=>e.door);let ZS=ZP,ZR=zRaster(ZS,W,H);
   /* cửa hai trạng thái: tìm đường coi cửa là đi qua được (ZP); va chạm thật (ZS) theo trạng thái hiện tại */
   const setDoor=(e,st)=>{const v=e.door.v&&e.door.v[st];if(!v||e.door.st===st)return;e.door.st=st;if(v.tile)e.tile=v.tile;e.col=v.col&&v.col.length?v.col:undefined;rebuildZ();};
   function rebuildZ(){ZS=DRS.length?[...ZP,...decoZones(DRS)]:ZP;ZR=zRaster(ZS,W,H);}
@@ -403,7 +432,7 @@ export function play2D(o){
       cx.save();if(collision.floor)clipOutline(cx,collision.floor,Tq);
       cx.fillStyle='rgba(255,40,40,.5)';for(let i=0;i<W*H;i++)if(collision.tileBlocked(i)){const x=i%W,y=(i/W)|0;cx.beginPath();for(const [a,b] of [[x,y],[x+1,y],[x+1,y+1],[x,y+1]]){const q=Tq(a,b);cx.lineTo(q[0],q[1]);}cx.closePath();cx.fill();}
       cx.restore();cx.fillStyle='rgba(255,40,40,.30)';cx.strokeStyle='#ff8a8a';cx.lineWidth=1.5;for(const q of ZS){if(q.k==='line'){cx.save();cx.strokeStyle='rgba(255,40,40,.5)';cx.lineWidth=(q.th||.6)*s;cx.lineJoin='round';zPath(cx,q,Tq);cx.stroke();cx.restore();}else{zPath(cx,q,Tq);cx.fill();cx.stroke();}}
-      for(const q of M.placementZones||[]){
+      for(const q of placementZones){
         cx.fillStyle=q.estimated===false?'rgba(255,40,40,.5)':'rgba(255,170,45,.45)';
         cx.strokeStyle=q.estimated===false?'#ff8a8a':'#ffbd69';
         zPath(cx,q,Tq);cx.fill();cx.stroke();
