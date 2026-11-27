@@ -1,9 +1,10 @@
 import {arrangementLayer,canArrangeProp,propFootprint,propPlacement,propGroup,transformPropGroup} from './outlinePropPlacement.js';
-import {zPath,zBounds} from './zones.js';
+import {decoZones,zPath,zBounds} from './zones.js';
 import {drawSurfaceTerrain} from './surfaceContours.js';
 import {surfaceLevels,surfaceLevelById,surfacePieces} from './surfaceLibrary.js';
 import {diamondOutline,newSurface,planSurface,surfaceFromLevel,surfaceTypes,surfaceWater} from './surfaceTerrain.js';
 import {drawOutlineDraft} from './outlineDraftView.js';
+import {drawFloorCollision,outline2D} from './outline2d.js';
 import {WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS} from './wall2d.js';
 import {DEFAULT_OUTLINE_WALL_HEIGHT,fitDraftGrid} from './outlineGrid.js';
 import {captureOutlineTiles,placeOutlineTiles} from './outlineMaterials.js';
@@ -1427,6 +1428,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const surfaceFinish=B('Chọn lớp vật liệu',()=>{
   if(surface.finish===false)changeSurface({finish:true});
   materialsPanel.open=true;
+  setPreviewPane('materials');setPreviewSidebar(true);
   if(wideOutline.matches)switchWorkspace('preview');
   else materialsPanel.scrollIntoView({block:'nearest'});
  });
@@ -1445,6 +1447,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const liveCanvas=el('canvas',{width:900,height:410,tabindex:0,style:'touch-action:none','aria-label':'Cảnh ráp isometric trong Đường Bao'});
  const liveStatus=el('p',{class:'hint',role:'status'});
  const camera={zoom:1,x:0,y:0,mapFrame:true};
+ let showLiveCollision=false;
  let liveView=null,liveProjection=null,selectedProp=null,gesture=null,guidePointer=null;
  const snapProps=el('input',{type:'checkbox'});
  snapProps.checked=true;
@@ -1602,6 +1605,18 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const candidate=gesture?.candidate,entity=candidate||liveView.M.ents.find(e=>e.id===selectedProp);
   if(!liveProjection)return;
   const ctx=liveCanvas.getContext('2d'),{project}=liveProjection;
+  if(showLiveCollision){
+   const outline=preview.M.cfg.outline;
+   const geometry=outline?.floorCollision?outline2D(outline,false,preview.M.ents):null;
+   if(geometry)drawFloorCollision(ctx,geometry,project,liveCanvas.width,liveCanvas.height);
+   ctx.save();ctx.fillStyle='#f36d6244';ctx.strokeStyle='#ff988e';
+   const unit=Math.abs(project(1,0)[0]-project(0,0)[0]);
+   for(const zone of [...decoZones(preview.M.ents),...(preview.M.cfg.zones||[]),...(preview.placementZones||[])]){
+    ctx.lineWidth=zone.k==='line'?Math.max(1.25,(zone.th||.25)*unit):1.25;
+    zPath(ctx,zone,project);if(zone.k!=='line'||zone.closed)ctx.fill();ctx.stroke();
+   }
+   ctx.restore();
+  }
   function guide(x,y,dx,dy){
    const reach=2*Math.hypot(liveCanvas.width,liveCanvas.height),length=Math.hypot(dx,dy)||1;
    dx=dx*reach/length;dy=dy*reach/length;
@@ -1795,15 +1810,48 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   }else return;
   e.preventDefault();e.stopPropagation();
  };
- const liveTools=el('div',{class:'row'},el('button',{type:'button',class:'b','aria-label':'Thu nhỏ cảnh ráp',onclick:()=>zoomLive(1/1.25)},'−'),zoomValue,
-  el('button',{type:'button',class:'b','aria-label':'Phóng to cảnh ráp',onclick:()=>zoomLive(1.25)},'+'),
-  B('Vừa khung',fitLive),
-  el('label',{},'Lớp ',layerPicker),duplicate,turnProp,removeProp,B('Hoàn tác',()=>travel(undo,redo)),el('label',{},snapProps,' Bám tâm ô'),el('label',{title:'Khi kéo, chỉ vẽ khung chân vật và đường dóng. Hình cập nhật khi thả.'},lightDrag,' Kéo nhẹ'));
- const livePanel=is3D?null:el('section',{class:'outline-live-view','aria-label':'Xem trước cảnh ráp'},
-  el('strong',{},'Xem trước cảnh ráp'),liveTools,
-  el('details',{open:''},el('summary',{},'Ảnh vật đã đặt trong lớp'),propPicker,propPages),
+ const liveTools=el('div',{class:'row'},
+  el('label',{},'Lớp ',layerPicker),duplicate,turnProp,removeProp,B('Hoàn tác',()=>travel(undo,redo)),
+  el('label',{},snapProps,' Bám tâm ô'),
+  el('label',{title:'Khi kéo, chỉ vẽ khung chân vật và đường dóng. Hình cập nhật khi thả.'},lightDrag,' Kéo nhẹ'));
+ const collisionView=B('Va chạm',()=>{
+  showLiveCollision=!showLiveCollision;
+  collisionView.setAttribute('aria-pressed',String(showLiveCollision));
+  redrawLive(true);liveCanvas.focus({preventScroll:true});
+ });
+ collisionView.setAttribute('aria-pressed','false');
+ const liveRail=el('nav',{class:'outline-preview-rail','aria-label':'Công cụ cảnh ráp'},
+  B('Chọn vật',()=>{setPreviewPane('objects');setPreviewSidebar(true);liveCanvas.focus({preventScroll:true});}),
+  B('Vừa khung',fitLive),collisionView,
+  el('div',{class:'row outline-preview-zoom'},
+   el('button',{type:'button',class:'b','aria-label':'Thu nhỏ cảnh ráp',onclick:()=>zoomLive(1/1.25)},'−'),zoomValue,
+   el('button',{type:'button',class:'b','aria-label':'Phóng to cảnh ráp',onclick:()=>zoomLive(1.25)},'+')));
+ const livePanel=is3D?null:el('section',{class:'outline-live-view','aria-label':'Cảnh ráp'},liveCanvas);
+ const objectTools=el('section',{},liveTools,propStatus,
+  el('details',{open:''},el('summary',{},'Ảnh vật đã đặt trong lớp'),propPicker,propPages));
+ const materialTools=el('section',{},materialsPanel);
+ const previewHelp=el('section',{},
   el('p',{class:'hint'},'Pixel đo khung ảnh, kể cả phần trong suốt. Nhà có thể ghép nhiều mảnh; ảnh xem trước chỉ là ảnh thu nhỏ. Chọn vật để xem kích thước chân tính theo ô.'),
-  el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),el('p',{class:'hint'},'Phím tắt khi bấm vào cảnh: +/− thu phóng, 0 vừa khung, mũi tên dịch vật theo trục lưới, Shift + mũi tên dịch khung nhìn, D hoặc nhấp đúp vào vật để nhân bản, R đổi hướng, Delete xóa vật đang chọn, G bật/tắt bám tâm ô, Esc hủy.'),liveCanvas,propStatus,liveStatus);
+  el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),
+  el('p',{class:'hint'},'Phím tắt khi bấm vào cảnh: +/− thu phóng, 0 vừa khung, mũi tên dịch vật, Shift + mũi tên dịch khung nhìn, D hoặc nhấp đúp để nhân bản, R đổi hướng, Delete xóa vật đang chọn, G bật/tắt bám tâm ô, Esc hủy.'));
+ const previewPanes=[['objects','Vật đã đặt',objectTools],['materials','Vật liệu',materialTools],['settings','Thiết lập',previewHelp]];
+ const previewTabs=new Map(previewPanes.map(([key,label])=>[key,B(label,()=>setPreviewPane(key))]));
+ function setPreviewPane(key){
+  for(const [name,,panel] of previewPanes){
+   panel.hidden=name!==key;
+   previewTabs.get(name).setAttribute('aria-pressed',String(name===key));
+  }
+ }
+ setPreviewPane('objects');
+ const sidebarToggle=B('Thu gọn bảng phải',()=>setPreviewSidebar(sidebarToggle.getAttribute('aria-expanded')!=='true'));
+ sidebarToggle.classList.add('outline-sidebar-toggle');
+ function setPreviewSidebar(open){
+  box.dataset.sidebar=open?'open':'closed';
+  sidebarToggle.textContent=open?'Thu gọn bảng phải':'Mở bảng phải';
+  sidebarToggle.setAttribute('aria-expanded',String(open));
+  sidebarToggle.setAttribute('aria-controls','outline-preview-sidebar');
+ }
+ setPreviewSidebar(true);
  let liveTimer,liveKey='',liveRevision=0,liveBuildBusy=false,liveBuildPending=false;
  queueLivePreview=(force=false)=>{
   if(is3D||!ov.isConnected||wideOutline.matches&&box.dataset.page!=='preview'||surface?.finish!==false&&layerControls.some(row=>row.loading))return;
@@ -1872,6 +1920,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const workspaceTabs=new Map();
  function switchWorkspace(page){
   box.dataset.page=page;
+  (page==='preview'?previewHelp:settings).append(outlineDimensions);
   for(const [name,button] of workspaceTabs)button.setAttribute('aria-pressed',String(name===page));
   if(page==='preview')queueLivePreview();
   else if(wideOutline.matches){clearTimeout(liveTimer);liveRevision++;liveKey='';stopSequence();}
@@ -1880,16 +1929,17 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   workspaceTabs.set(page,B(label,()=>switchWorkspace(page)));
  }
  const title=is3D?'Đường Bao 3D · mặt bằng XZ':'Đường bao bản đồ';
- const header=el('div',{class:'outline-workspace-header row'},el('h2',{},title),...workspaceTabs.values(),B('Đóng',closeOutline));
+ const header=el('div',{class:'outline-workspace-header row'},el('h2',{},title),...workspaceTabs.values(),is3D?null:sidebarToggle,B('Đóng',closeOutline));
  const drawingWrap=el('div',{class:'outline-canvas-wrap',style:'position:relative'},canvas,aim);
  const drawingArea=el('div',{class:'outline-drawing-area'},gridSetup,gridNote,viewTools,drawingWrap,status);
  const plan=el('section',{class:'outline-plan-page'},surfacePanel,setup,toolbar,
   el('div',{class:'outline-layout'},drawingArea,library));
- const settings=el('section',{class:'outline-settings-page'},linkPanel,guideBox('outline',appGuides.outline),
-  el('details',{open:''},el('summary',{},'Kích thước sàn, tường và vùng chặn'),footer));
+ const outlineDimensions=el('details',{open:''},el('summary',{},'Kích thước sàn, tường và vùng chặn'),footer);
+ const settings=el('section',{class:'outline-settings-page'},linkPanel,guideBox('outline',appGuides.outline),outlineDimensions);
  library.append(editShape);
- const preview=livePanel?el('section',{class:'outline-preview-page'},livePanel,
-  el('aside',{class:'outline-preview-materials','aria-label':'Vật liệu cảnh ráp'},materialsPanel)):null;
+ const preview=livePanel?el('section',{class:'outline-preview-page'},liveRail,livePanel,
+  el('aside',{id:'outline-preview-sidebar',class:'outline-preview-materials','aria-label':'Bảng công cụ cảnh ráp'},
+   el('div',{class:'row outline-preview-tabs'},...previewTabs.values()),liveStatus,...previewPanes.map(([, ,panel])=>panel))):null;
  box.append(header,plan,preview,settings,buttons,actionStatus);
  switchWorkspace('plan');
  ov.append(box);document.body.append(ov);

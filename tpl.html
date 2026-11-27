@@ -197,6 +197,11 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
  .outline-canvas-wrap{grid-column:1;grid-row:1/span 12;align-self:start}
  .outline-canvas-wrap canvas{max-height:calc(100vh - 28px)}
 }
+.outline-preview-rail{display:flex;gap:6px;flex-wrap:wrap}
+.outline-preview-zoom{justify-content:center}
+.outline-preview-tabs{margin-bottom:8px}
+.outline-preview-materials [hidden]{display:none!important}
+.outline-sidebar-toggle{display:none}
 /* Outline editing uses the full desktop viewport. */
 .outline-workspace-header{display:none}
 .outline-plan-page,.outline-settings-page,.outline-preview-page,.outline-preview-materials{display:contents}
@@ -208,8 +213,13 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
  .outline-plan-page,.outline-settings-page,.outline-preview-page{display:none}
  .outline-workspace[data-page=plan] .outline-plan-page{display:flex;flex-direction:column;flex:1;min-height:0}
  .outline-workspace[data-page=settings] .outline-settings-page{display:block;flex:1;min-height:0;overflow:auto}
- .outline-workspace[data-page=preview] .outline-preview-page{display:grid;flex:1;min-height:0;grid-template-columns:minmax(0,1fr) clamp(260px,25vw,390px);gap:10px}
- .outline-preview-page .outline-live-view{display:flex;flex-direction:column;min-height:0;min-width:0;margin:0}
+ .outline-workspace[data-page=preview] .outline-preview-page{display:grid;flex:1;min-height:0;grid-template-columns:72px minmax(0,1fr) clamp(260px,24vw,380px);gap:8px}
+ .outline-workspace[data-page=preview] .outline-sidebar-toggle{display:inline-flex}
+ .outline-workspace[data-page=preview][data-sidebar=closed] .outline-preview-page{grid-template-columns:72px minmax(0,1fr)}
+ .outline-workspace[data-sidebar=closed] .outline-preview-materials{display:none}
+ .outline-preview-rail{flex-direction:column;flex-wrap:nowrap;overflow:auto;padding:5px;background:#17232d;border-radius:8px;min-height:0}
+ .outline-preview-rail>.b{white-space:normal;padding:7px 3px}
+ .outline-preview-page .outline-live-view{position:relative;min-height:0;min-width:0;margin:0;padding:0;overflow:hidden}
  .outline-preview-materials{display:block;min-width:0;min-height:0;overflow:auto;border:1px solid #435667;border-radius:8px;padding:8px;background:#17232d}
  .outline-preview-materials .outline-stage-controls{grid-template-columns:minmax(0,1fr)}
  .outline-preview-materials :is(select,input[type=file]){max-width:100%}
@@ -219,7 +229,7 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
  .outline-canvas-wrap canvas{position:absolute;inset:0;width:100%!important;height:100%!important;box-sizing:border-box}
  .outline-library{overflow:auto}
  .outline-patterns,.outline-levels{max-height:none}
- .outline-live-view canvas{flex:1;min-height:0;height:0}
+ .outline-live-view>canvas{position:absolute;inset:0;width:100%;height:100%;margin:0}
  .outline-actions{flex:none}
 }
 .pack-results,.installed-packs{margin:8px 0;padding:8px;border:1px solid #34485a;border-radius:8px;overflow-wrap:anywhere}
