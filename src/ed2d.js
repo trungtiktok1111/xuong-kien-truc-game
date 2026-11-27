@@ -1,6 +1,6 @@
 import {drawAssemblyGuides} from './assemblyGuides.js';
 import {stonePavingSheets} from './stonePaving.js';
-import {applyOutlinePropEdits,arrangementLayer,canArrangeProp,propGroup,transformPropGroup} from './outlinePropPlacement.js';
+import {applyOutlinePropEdits,arrangementLayer,canArrangeProp,propFootprint,propPlacement,propGroup,transformPropGroup} from './outlinePropPlacement.js';
 import {drawSurfaceTerrain,surfaceTerrainTile} from './surfaceContours.js';
 import {outlineHeight} from './outlineAnchors.js';
 import {surfaceLevelById} from './surfaceLibrary.js';
@@ -659,7 +659,7 @@ export function init2D(root,A){
     }
     if(drag.rect){if(tool==='rect'){pushUndo();rectFill(drag.rect);if(acceptStructure())after();}else{sel=drag.rect;ui.sel();}}drag=null;dirty=true;};
   cv.addEventListener('dblclick',()=>{
-    if(tool==='inventory'&&inventoryItem&&inventoryCanCopy(inventoryItem))startInventoryAction('copy');
+    if(tool==='inventory'&&inventoryItem&&inventoryCanCopy(inventoryItem))openInventoryCopy(inventoryItem);
   });
   cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);cv.addEventListener('pointerleave',e=>{if(e.pointerType!=='touch'&&!drag?.wallPointer){hov=null;dirty=true;}});
   cv.addEventListener('contextmenu',e=>{
@@ -1894,30 +1894,39 @@ export function init2D(root,A){
     const item=gesture?.item||inventoryItem;
     const parts=item?propGroup(M.ents,item.e):[];
     const offset=gesture?inventoryDragPoint(gesture,lastPt).map((v,i)=>v-inventoryPoint(item.e)[i]):[0,0];
-    const candidates=canArrangeProp(item?.e||{})?parts.map(part=>({...part,x:part.x+offset[0],y:part.y+offset[1]})):null;
-    if(gesture&&!inventoryLightDrag&&candidates){
+    const candidates=item?parts.map(part=>({...part,x:part.x+offset[0],y:part.y+offset[1]})):null;
+    const arrange=canArrangeProp(item?.e||{});
+    if(gesture&&!inventoryLightDrag&&arrange){
       for(const piece of candidates)if(piece.tile&&piece.placedProp)drawIndependentProp(piece,true);
     }
     if(ISOQ()&&lastPt&&hov&&!drag?.pan){
-      const geo=candidates?outline2D(M.cfg.outline,ANGQ(),M.ents):null;
-      const walls=candidates?[...(geo?.walls||[]),...builtWallFaces(M.ents,ANGQ())]:[];
+      const geo=arrange?outline2D(M.cfg.outline,ANGQ(),M.ents):null;
+      const walls=arrange?[...(geo?.walls||[]),...builtWallFaces(M.ents,ANGQ())]:[];
       const wallEdges=walls.flatMap(wall=>{
         const shape=wallSurface(wall,(x,y)=>[x,y],1,geo);
         return shape?.high>0?[shape.front,shape.back]:[];
       });
       drawAssemblyGuides(cx,{width,height,project:g2s,pointer:[lastPt.x,lastPt.y],
-        parts:candidates,entities:M.ents,wallEdges});
+        parts:arrange?candidates:null,entities:M.ents,wallEdges});
     }
     if(!item)return;
-    const points=parts.length>1?convexOutline(parts.flatMap(e=>inventoryOutline({e}))):inventoryOutline(item);
-    if(gesture){
-      const [x,y]=inventoryDragPoint(gesture,lastPt),from=g2s(...inventoryPoint(item.e)),to=g2s(x,y);
-      for(const p of points){p[0]+=to[0]-from[0];p[1]+=to[1]-from[1];}
-    }
-    cx.save();cx.beginPath();cx.moveTo(...points[0]);for(const point of points.slice(1))cx.lineTo(...point);cx.closePath();
-    cx.lineWidth=5;cx.strokeStyle='#13212d';cx.stroke();cx.lineWidth=2;cx.strokeStyle='#78f2d6';cx.stroke();
+    const feet=(candidates||parts).flatMap(propFootprint);
+    const [l,t,r,b]=inventoryFootBounds(feet);
+    const [x,y]=g2s((l+r)/2,(t+b)/2);
+    cx.save();
+    cx.lineWidth=2;cx.strokeStyle='#ffd879';cx.fillStyle='#ffd87948';
+    for(const zone of feet){zPath(cx,zone,g2s);cx.fill();cx.stroke();}
+    cx.beginPath();cx.moveTo(x-8,y);cx.lineTo(x+8,y);cx.moveTo(x,y-8);cx.lineTo(x,y+8);
+    cx.lineWidth=4;cx.strokeStyle='#192834';cx.stroke();
+    cx.lineWidth=2;cx.strokeStyle='#ffd879';cx.stroke();
     cx.restore();
   }
+  function inventoryFootBounds(zones){
+    const bounds=zones.map(zBounds);
+    return [Math.min(...bounds.map(b=>b[0])),Math.min(...bounds.map(b=>b[1])),
+      Math.max(...bounds.map(b=>b[2])),Math.max(...bounds.map(b=>b[3]))];
+  }
+
   function inventoryClick(p){
     if(inventoryMoving&&inventoryItem){
       const raw=s2g(p.x,p.y);
@@ -1968,7 +1977,7 @@ export function init2D(root,A){
     const {e,cell}=item;
     const precise=e.placedProp||canArrangeProp(e)&&!cell;
     const anchor=e.placedProp?1:0;
-    const position=value=>precise?Math.round(value*1000)/1000-anchor:Math.floor(value);
+    const position=value=>precise?value-anchor:Math.floor(value);
     const nx=position(x),ny=position(y);
     if(e.x===nx&&e.y===ny){inventoryMoving=false;draw();dirty=true;return;}
     const next=clone(M);
@@ -2041,8 +2050,71 @@ export function init2D(root,A){
     inventoryMoving=inventoryMoving===mode?false:mode;
     draw();dirty=true;cv.focus({preventScroll:true});
   }
+  function openInventoryCopy(item){
+    const source=item.e,originals=propGroup(M.ents,source),map=M;
+    const dialog=el('dialog',{class:'scene-copy-dialog',style:'background:#192834;color:#fff;border:1px solid #567180;border-radius:10px;padding:18px'});
+    const count=el('input',{type:'number',min:1,max:1000,value:1,required:''});
+    const gap=el('input',{type:'number',min:0,max:600,step:.01,value:1,required:''});
+    const directions=[['↑','Bắc',0,-1,2,1],['←','Tây',-1,0,1,2],['→','Đông',1,0,3,2],['↓','Nam',0,1,2,3]];
+    const chosen=new Set();
+    const message=el('p',{class:'hint',role:'status'});
+    const grid=el('div',{style:'display:grid;grid-template:repeat(3,36px)/repeat(3,42px);gap:4px;margin:10px 0'},
+      el('span',{style:'grid-area:2 / 2;display:grid;place-items:center'},'Gốc'));
+    for(const direction of directions){
+      const [arrow,label,,,column,row]=direction;
+      const button=el('button',{type:'button',class:'b','aria-label':label,'aria-pressed':'false',onclick:()=>{
+        if(chosen.has(direction))chosen.delete(direction);else chosen.add(direction);
+        button.classList.toggle('on',chosen.has(direction));
+        button.setAttribute('aria-pressed',String(chosen.has(direction)));
+        message.textContent='';
+      }},arrow);
+      button.style.gridArea=row+' / '+column;grid.append(button);
+    }
+    const form=el('form',{},el('strong',{},'Nhân bản · '+entityName(source)),
+      el('p',{},el('label',{},'Số bản sao mỗi hướng ',count)),
+      el('p',{},el('label',{},'Khoảng hở giữa các chân vật (ô) ',gap)),grid,message,
+      el('div',{class:'row'},el('button',{class:'b',type:'submit'},'Thực hiện'),
+        el('button',{class:'b',type:'button',onclick:()=>dialog.close()},'Hủy')));
+    form.onsubmit=event=>{
+      event.preventDefault();
+      if(!chosen.size){message.textContent='Chọn ít nhất một hướng.';return;}
+      if(M!==map){message.textContent='Bản đồ đã thay đổi. Hãy mở lại hộp nhân bản.';return;}
+      const next=clone(M);
+      const staging={M:next,placementZones:currentPaintZones()};
+      const [l,t,r,b]=inventoryFootBounds(originals.flatMap(propFootprint));
+      const stopped=[];
+      let total=0;
+      for(const direction of directions){
+        if(!chosen.has(direction))continue;
+        const [,label,dx,dy]=direction,step=(dx?r-l:b-t)+gap.valueAsNumber+.0001;
+        let previous=originals;
+        const samples=Math.max(1,Math.ceil(step/.25));
+        const at=distance=>transformPropGroup(originals,source,{x:source.x+dx*distance,y:source.y+dy*distance});
+        const blocked=(parts,ignore)=>parts.some(part=>!inb(...inventoryPoint(part))||propPlacement(staging,part,ignore));
+        for(let i=1;i<=count.valueAsNumber;i++){
+          const ignore=new Set(previous.map(part=>part.id));
+          let clear=true;
+          for(let j=1;j<samples&&clear;j++)clear=!blocked(at(step*(i-1+j/samples)),ignore);
+          const parts=at(step*i);
+          if(!clear||blocked(parts,new Set())){
+            stopped.push(label);break;
+          }
+          replaceInventoryGroup(next,parts,true);
+          previous=parts;total++;
+        }
+      }
+      if(!total){message.textContent='Không có chỗ đặt bản sao theo hướng đã chọn.';return;}
+      if(!commitInventory(next)){message.textContent='Không thể đặt bản sao tại vị trí đã chọn.';return;}
+      inventoryMoving=false;draw();dialog.close();
+      toast('Đã đặt '+total+' bản sao.'+(stopped.length?' Dừng ở hướng '+stopped.join(', ')+'.':''));
+    };
+    dialog.append(form);
+    dialog.addEventListener('close',()=>{dialog.remove();cv.focus({preventScroll:true});},{once:true});
+    document.body.append(dialog);dialog.showModal();count.select();
+  }
   function inventoryShortcut(key,event){
-    if(event.ctrlKey||event.metaKey||event.altKey)return false;
+    if(event.altKey)return false;
+    if((event.ctrlKey||event.metaKey)&&key!=='d')return false;
     if(key==='+'||key==='='||key==='-'||key==='−'){
       zoomBy(key==='+'||key==='='?1.25:1/1.25);updateDesktop();return true;
     }
@@ -2055,7 +2127,7 @@ export function init2D(root,A){
     const item=inventoryItem;
     if(!item)return false;
     if(key==='delete'){if(!event.repeat&&item.e.t!=='start')removeInventory(item);return true;}
-    if(key==='d'){if(!event.repeat&&inventoryCanCopy(item))startInventoryAction('copy');return true;}
+    if(key==='d'){if(!event.repeat&&inventoryCanCopy(item))openInventoryCopy(item);return true;}
     if(key==='m'){if(!event.repeat)startInventoryAction('move');return true;}
     if(key==='enter'){if(!event.repeat)body.querySelector('.inventory-controls input')?.focus();return true;}
     const group=propGroup(M.ents,item.e);
@@ -2079,7 +2151,24 @@ export function init2D(root,A){
     if(!delta)return false;
     if(event.shiftKey){view.x-=delta[0]*45;view.y-=delta[1]*45;dirty=true;return true;}
     const [x,y]=inventoryPoint(item.e);
-    const step=item.e.placedProp||canArrangeProp(item.e)&&!item.cell ? .01 : 1;
+    const precise=item.e.placedProp||canArrangeProp(item.e)&&!item.cell;
+    const axis=delta[0]?0:1,sign=delta[axis];
+    let step=precise ? .01 : 1;
+    if(precise){
+      const ids=new Set(group.map(part=>part.id));
+      const moving=group.flatMap(propFootprint).map(zBounds);
+      const across=1-axis;
+      for(const other of M.ents){
+        if(ids.has(other.id)||!canArrangeProp(other))continue;
+        for(const b of propFootprint(other).map(zBounds))for(const a of moving){
+          if(a[across]>b[across+2]+.05||b[across]>a[across+2]+.05)continue;
+          for(const from of [a[axis],a[axis+2]])for(const to of [b[axis],b[axis+2]]){
+            const distance=(to-from)*sign;
+            if(distance>1e-8&&distance<step)step=distance;
+          }
+        }
+      }
+    }
     moveInventory(item,x+delta[0]*step,y+delta[1]*step);
     return true;
   }
@@ -2144,7 +2233,12 @@ export function init2D(root,A){
         if(Number.isFinite(input.valueAsNumber))bulkBoardThickness(items,input.valueAsNumber);
       }},el('label',{},'Độ dày (ô) ',input),el('button',{type:'submit',class:'b'},'Áp dụng cho '+items.length+' tấm')));
     }
-    if(inventoryItem)body.append(el('p',{class:'hint'},entityName(inventoryItem.e)+' · '+xy(inventoryPoint(inventoryItem.e))));
+    if(inventoryItem){
+      const e=inventoryItem.e;
+      const [l,t,r,b]=inventoryFootBounds(propGroup(M.ents,e).flatMap(propFootprint));
+      body.append(el('p',{class:'hint'},entityName(e)+' · Chân '+coord.format(r-l)+' × '+coord.format(b-t)+
+        ' ô · Tâm đáy '+xy([(l+r)/2,(t+b)/2])));
+    }
     if(!inventoryItem)return;
     const item=inventoryItem,[x,y]=inventoryPoint(item.e);
     const coordinate=(axis,value)=>el('input',{class:'num',type:'number',step:'any',required:'',value:+value.toFixed(3),'aria-label':'Tọa độ '+axis});
@@ -2154,7 +2248,7 @@ export function init2D(root,A){
     }},el('label',{},'X ',xInput),el('label',{},'Y ',yInput),el('button',{type:'submit',class:'b'},'Đặt tọa độ')),
     el('div',{class:'row inventory-controls'},
       btn('Di chuyển · M',()=>startInventoryAction('move'),inventoryMoving==='move'?'on':''),
-      inventoryCanCopy(item)?btn('Nhân bản · D',()=>startInventoryAction('copy'),inventoryMoving==='copy'?'on':''):null,
+      inventoryCanCopy(item)?btn('Nhân bản · D',()=>openInventoryCopy(item)):null,
       (item.e.placedProp||propGroup(M.ents,item.e).length>1)&&inventoryCanCopy(item)?btn('Đổi hướng · R',()=>{inventoryShortcut('r',{});cv.focus({preventScroll:true});}):null,
       btn('Đưa vào giữa khung',()=>{centerInventory(item);dirty=true;cv.focus({preventScroll:true});}),
       item.e.t==='start'?null:btn('Xóa · Delete',()=>{removeInventory(item);cv.focus({preventScroll:true});})),
