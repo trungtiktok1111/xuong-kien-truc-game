@@ -1069,6 +1069,15 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
    'aria-label':'Chỉnh tay tỉ lệ gói cho '+label.toLowerCase()});
   scaleLabel.append(scaleInput);
   const control={key,source,addSource,sourceList,sources:[],catalogs:new Map(),note,picker,search,gallery,summary,selected,scaleInput,scaleLabel,items:[],ids:[],trial:null,revision:0,loading:false,urls:new Map(),limits:[24,24]};
+  const allImages=B('Tất cả ảnh',()=>{
+   control.all=!control.all;
+   allImages.setAttribute('aria-pressed',String(control.all));
+   picker.open=true;
+   clearTrials();void refreshLayer(control,control.ids);
+  });
+  allImages.disabled=true;
+  allImages.setAttribute('aria-pressed','false');
+  allImages.setAttribute('aria-label','Tất cả ảnh · '+label);
   const prev=B('Trước',()=>step(-1)),next=B('Sau',()=>step(1));
   const keep=B('Thêm mảnh đang xem',()=>{
    const id=control.trial;
@@ -1082,13 +1091,14 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   prev.setAttribute('aria-label','Mảnh trước cho '+label.toLowerCase());
   next.setAttribute('aria-label','Mảnh sau cho '+label.toLowerCase());
   clear.setAttribute('aria-label','Bỏ qua '+label.toLowerCase());
-  Object.assign(control,{prev,next,clear,keep,restore});
+  Object.assign(control,{prev,next,clear,keep,restore,allImages,all:false});
   function step(delta){
    const id=control.trial||control.ids.at(-1),i=control.items.findIndex(item=>item.id===id);
    clearTrials();
    testImage(control,i<0?(delta<0?control.items.length-1:0):(i+delta+control.items.length)%control.items.length);
   }
   source.onchange=()=>{
+   control.all=false;allImages.setAttribute('aria-pressed','false');
    clearTrials();dressing.checked=true;activateSurfaceMaterials();control.limits=[24,24];
    renderSources(control);syncScaleInputs();
    void refreshLayer(control,control.ids);
@@ -1103,7 +1113,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   search.oninput=()=>{control.limits=[24,24];renderGallery(control);};
   picker.ontoggle=()=>{if(picker.open)renderGallery(control);else gallery.replaceChildren();};
   control.element=el('div',{class:'outline-stage'},
-   el('strong',{},label),el('label',{},'Gói ZIP · thư viện dùng chung',source),sourceList,scaleLabel,selected,picker,
+   el('strong',{},label),el('label',{},'Gói ZIP · thư viện dùng chung',source),allImages,sourceList,scaleLabel,selected,picker,
    el('div',{class:'row'},prev,next),el('div',{class:'row'},clear,keep,restore),note);
   control.initialSource=saved.layers?.[key]?.sources?.[0]||saved.layers?.[key]?.source||(key==='character'?'builtin:character':defaultSource);
   control.initialSources=saved.layers?.[key]?.sources||[control.initialSource];
@@ -1173,7 +1183,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
     card.classList.add('outline-material-card');
     card.title=item.packageName+' · '+item.assetId;card.dataset.item=item.id;
     card.setAttribute('aria-label',item.label);
-    card.append(thumbFor(control,item,true),el('span',{},item.label));
+    card.append(thumbFor(control,item,true),el('span',{},item.label),control.all?el('small',{},item.packageName):null);
     return card;
    });
    const shown=group.slice(0,cards.length);
@@ -1214,6 +1224,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   control.prev.disabled=control.next.disabled=loading||!items.length;
   control.clear.disabled=loading||!ids.length;
   control.search.disabled=loading;
+  control.allImages.disabled=!control.source.options.length;
   control.keep.hidden=control.restore.hidden=!trial;
   control.keep.disabled=ids.includes(trial);
   control.summary.textContent=ids.length?'Chọn ảnh · '+ids.length+' mảnh':'Chọn mảnh bằng hình';
@@ -1270,20 +1281,29 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   const revision=++control.revision;
   control.loading=true;control.gallery.replaceChildren();syncLayer(control);
   const currentSource=control.source.value;
-  const style={...surfaceStyle(),manualScale:layerScale(control,currentSource)};
-  try{
-   let result=control.catalogs.get(currentSource);
-   if(!result){result=await editor.outlineLayerChoices(control.key,currentSource,outlineZipFiles,style);if(!currentSource.startsWith('zip:')||outlineZipFiles.has(currentSource))control.catalogs.set(currentSource,result);}
-   if(revision!==control.revision||!ov.isConnected)return;
-   control.items=result.items.map(item=>({...item,source:currentSource,assetId:item.id,id:assetToken(currentSource,item.id),packageName:sourceTitle(control,currentSource)}));
-   control.message=result.message;control.scale=result.scale;
-  }catch(error){
-   if(revision!==control.revision||!ov.isConnected)return;
-   control.items=[];control.message=error.message;control.scale=null;
+  const sources=control.all?[...new Set([...control.source.options].map(option=>option.value).filter(Boolean))]:[currentSource];
+  const items=[],messages=[];
+  let scale=null;
+  for(const sourceId of sources){
+   try{
+    const style={...surfaceStyle(),manualScale:layerScale(control,sourceId)};
+    let result=control.catalogs.get(sourceId);
+    if(!result)result=await editor.outlineLayerChoices(control.key,sourceId,outlineZipFiles,style);
+    if(revision!==control.revision||!ov.isConnected)return;
+    if(!sourceId.startsWith('zip:')||outlineZipFiles.has(sourceId))control.catalogs.set(sourceId,result);
+    items.push(...result.items.map(item=>({...item,source:sourceId,assetId:item.id,id:assetToken(sourceId,item.id),packageName:sourceTitle(control,sourceId)})));
+    if(sourceId===currentSource)scale=result.scale;
+    if(result.message)messages.push(result.message);
+   }catch(error){
+    if(revision!==control.revision||!ov.isConnected)return;
+    messages.push(error.message);
+   }
   }
+  control.items=items;
+  control.message=control.all?(messages.length?messages.length+' gói có thông báo':''):messages[0];
+  control.scale=scale;
   releaseGallery(control);
   const suggested=control.items.find(item=>item.recommended);
-  const known=new Set(control.items.map(item=>item.id));
   if(wanted===true){control.ids=suggested?[suggested.id]:[];}
   else if(Array.isArray(wanted))control.ids=[...new Set([...wanted,...control.ids])];
   if(suggested&&wanted===true&&!control.sources.includes(currentSource))control.sources.push(currentSource);
@@ -1292,6 +1312,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   renderSources(control);renderGallery(control);syncLayer(control);
  }
  async function selectLayerSource(control,sourceId,assets){
+  control.all=false;control.allImages.setAttribute('aria-pressed','false');
   refreshSources(control,sourceId);control.source.value=sourceId;
   if(!control.sources.includes(sourceId))control.sources.push(sourceId);
   renderSources(control);
@@ -1361,7 +1382,8 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
      refreshSources(row,row.sources[0]||(row.key==='character'?'builtin:character':defaultSource));
      void refreshLayer(row,row.ids);
     }else{
-     refreshSources(row,previous);renderSources(row);syncLayer(row);
+     refreshSources(row,previous);renderSources(row);
+     if(row.all)void refreshLayer(row,row.ids);else syncLayer(row);
     }
    }
    refreshZipManager();
@@ -1385,7 +1407,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   for(const control of layerControls){
    const source=control.source.value;
    refreshSources(control,source);
-   if(control.message&&outlineZipFiles.has(source))
+   if(control.all||control.message&&outlineZipFiles.has(source))
     void refreshLayer(control,control.ids);
   }
  };
@@ -1661,7 +1683,10 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   void editor.outlinePackSources().then(packs=>{
    if(!ov.isConnected)return;
    stockSources=packs;
-   for(const row of layerControls)if(row.source.value)refreshSources(row,row.source.value);
+   for(const row of layerControls)if(row.source.value){
+    refreshSources(row,row.source.value);
+    if(row.all)void refreshLayer(row,row.ids);
+   }
   }).catch(error=>{catalogNote.textContent=error.message;});
  }draw();
  return closeOutline;
