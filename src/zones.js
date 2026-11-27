@@ -97,7 +97,11 @@ export function decoZones(ents=[]){
       addPoly([[-half,-half],[half,-half],[half,half],[-half,half]]);
       continue;
     }
-    const name=[e.name,e.assetSource].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[đĐ]/g,'d');
+    const name=[e.name,e.assetSource,e.assetSheet].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[đĐ]/g,'d');
+    if(e.artBase?.length===4&&/(?:stair|stone.?step|\bsteps?\b|\bbac[ _-]*(?:thang|da)|\bcau[ _-]*thang)/i.test(name)){
+      addPoly(e.artBase.map(([u,v])=>fromSprite(e,u,v)));
+      continue;
+    }
     const rock=rockFootprint(e,name);
     if(rock){addPoly(rock);continue;}
 

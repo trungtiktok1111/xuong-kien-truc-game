@@ -89,7 +89,7 @@ export function init2D(root,A){
     saveStatus.textContent=okL?'Đã tự lưu trên trình duyệt này.':'Chưa tự lưu được. Hãy bấm Lưu dự án.';
     if(!okL&&!warned){warned=1;toast('Chưa tự lưu được. Chọn Tệp → Lưu dự án để giữ bản sao.');}}
   // ===== vẽ ô =====
-  function drawTile(c,v,dx,dy,s){if(!v)return;const d=dec(v),sh=sheets[d.sid];if(!sh||!sh.img)return;const col=d.idx%sh.cols,row=Math.floor(d.idx/sh.cols);
+  function drawTile(c,v,dx,dy,s,source=sheets){if(!v)return;const d=dec(v),sh=source[d.sid];if(!sh||!sh.img)return;const col=d.idx%sh.cols,row=Math.floor(d.idx/sh.cols);
     const sx=col*(sh.tw+sh.margin),sy=row*(sh.tw+sh.margin);
     if(!d.f){c.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,s,s);return;}
     c.save();c.translate(dx+s/2,dy+s/2);if(d.f&4){c.rotate(Math.PI/2);c.scale(1,-1);}if(d.f&1)c.scale(-1,1);if(d.f&2)c.scale(1,-1);c.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-s/2,-s/2,s,s);c.restore();}
@@ -1026,13 +1026,13 @@ export function init2D(root,A){
     }
     return ruleContext.context;
   }
-  function withAssetSource(e,cfg){
-    const tile=e.tile,sheet=sheets[tile?.sid];
+  function withAssetSource(e,cfg,source=sheets){
+    const tile=e.tile,sheet=source[tile?.sid];
     if(e.t!=='deco'||!sheet||e.wallLine||e.wallId||e.housePart||e.gateAssembly||e.sceneLayer===0||e.sceneLayer===1)return e;
-    const assetSource=[e.assetSource,sheet.name,constructionTile(tile.sid,tile.idx,0).source].filter(Boolean).join(' ');
-    const art=sheet.img&&!sheet.iso&&e.tiledLayer==null?tileContact(sheet,tile.idx,e.spriteFlip||0):null;
+    const assetSource=e.assetSource||(sheet===sheets[tile.sid]?constructionTile(tile.sid,tile.idx,0).source:sheet.name);
+    const art=sheet.img&&!sheet.iso?tileContact(sheet,tile.idx,e.spriteFlip||0,source):null;
     const projection=cfg?.view==='iso'?(cfg.proj==='angle'?'angle':'iso'):'top';
-    return {...e,assetSource,contactProjection:projection,artContact:art?.contact,trunkContact:art?.trunk,
+    return {...e,assetSource,assetSheet:sheet.name,contactProjection:projection,artContact:art?.contact,trunkContact:art?.trunk,artBase:art?.base,
       spriteBounds:e.spriteBounds||art?.bounds};
   }
   function structuralPieces(map){
@@ -3033,23 +3033,36 @@ export function init2D(root,A){
           btn('🗑',()=>{pushUndo();M.ents=M.ents.filter(q=>q.id!==e.id);selId=null;after();draw();}))));}
   }
   const contactCache=new WeakMap();
-  function tileContact(sheet,idx,f){
+  function tileContact(sheet,idx,f,source=sheets){
     let cache=contactCache.get(sheet.img);
     if(!cache){cache=new Map();contactCache.set(sheet.img,cache);}
     const key=idx*8+f;
     if(cache.has(key))return cache.get(key);
     const tw=sheet.tw;
-    let contact=null,bounds=null,rectangular=false,trunk=null;
+    let contact=null,bounds=null,rectangular=false,trunk=null,base=null;
     try{
       const ctx=el('canvas',{width:tw,height:tw}).getContext('2d',{willReadFrequently:true});
-      drawTile(ctx,enc(sheets.indexOf(sheet),idx,f),0,0,tw);
+      drawTile(ctx,enc(source.indexOf(sheet),idx,f),0,0,tw,source);
       const rgba=ctx.getImageData(0,0,tw,tw).data;
       contact=estimateContact(rgba,tw,0);
       let left=tw,top=tw,right=0,bottom=0,opaque=0;
+      const footRows=new Int32Array(tw).fill(-1);
       for(let y=0;y<tw;y++)for(let x=0;x<tw;x++)if(rgba[(y*tw+x)*4+3]>=112){
-        left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x+1);bottom=Math.max(bottom,y+1);opaque++;
+        footRows[x]=y;left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x+1);bottom=Math.max(bottom,y+1);opaque++;
       }
       if(right>left){bounds=[left/tw,top/tw,right/tw,bottom/tw];rectangular=opaque/((right-left)*(bottom-top))>.96;}
+      if(bounds&&right-left>=4){
+        const inset=Math.max(1,Math.round((right-left)*.025));
+        const low=(start,end)=>Math.max(...footRows.subarray(start,end));
+        const leftY=low(left,left+inset+1),rightY=low(right-inset-1,right);
+        let frontLeft=left,frontRight=right-1;
+        while(footRows[frontLeft]<bottom-2)frontLeft++;
+        while(footRows[frontRight]<bottom-2)frontRight--;
+        const a=[(left+.5)/tw,(leftY+.5)/tw],b=[(right-.5)/tw,(rightY+.5)/tw];
+        const f=[(frontLeft+frontRight+1)/(2*tw),(bottom-.5)/tw];
+        const rear=[a[0]+b[0]-f[0],a[1]+b[1]-f[1]];
+        if(f[1]>Math.max(a[1],b[1])+1/tw)base=[a,f,b,rear];
+      }
       if(bounds&&bottom-top>(right-left)*1.15){
         // The lit trunk stays warm near the base. Exclude dark or translucent shadow pixels.
         const bands=[];
@@ -3072,7 +3085,7 @@ export function init2D(root,A){
       }
 
     }catch{}
-    const info={contact,bounds,rectangular};cache.set(key,info);return info;
+    const info={contact,bounds,rectangular,trunk,base};cache.set(key,info);return info;
   }
   function makePaintLookup(source=sheets){
     const profiles=new Map();
@@ -3396,7 +3409,7 @@ export function init2D(root,A){
     }
     const dressing=surfaceDressing(m,await prepareOutlineDressing(m,prepared,materials,arrivals));
     const placementZones=automaticPaintZones(m,makePaintLookup(prepared));
-    applyOutlinePropEdits({M:m,sheets:prepared,placementZones});
+    applySceneEdits(m,prepared,placementZones);
     return {M:m,sheets:prepared,dressing,placementZones};
   }
   async function applyOutline(outline,updateCollision,w=M.w,h=M.h,stamps=[],origin=[0,0],materials=null){
@@ -3726,6 +3739,10 @@ export function init2D(root,A){
       warnings:skipped.length?'Đã bỏ qua '+skipped.join('. ')+'.':''
     };
   }
+  function applySceneEdits(map,source,placementZones){
+    map.ents=map.ents.map(e=>withAssetSource(e,map.cfg,source));
+    applyOutlinePropEdits({M:map,sheets:source,placementZones});
+  }
   async function liveOutlineMap(outline,w,h,level,stamps,origin,materials,updateCollision){
     if(level||!M.cfg.outline?.loops?.length)return previewOutlineMap(outline,w,h,level,stamps,origin,materials);
     return buildOutlineEdit(outline,updateCollision,w,h,stamps,origin,materials,sheets.slice());
@@ -3736,7 +3753,7 @@ export function init2D(root,A){
     const dressing=surfaceDressing(draft,await prepareOutlineDressing(draft,previewSheets,materials));
     if(draft.cfg.proj==='angle')await ensureAngle(previewSheets);
     const placementZones=automaticPaintZones(draft,makePaintLookup(previewSheets));
-    applyOutlinePropEdits({M:draft,sheets:previewSheets,placementZones});
+    applySceneEdits(draft,previewSheets,placementZones);
     return {M:draft,sheets:previewSheets,dressing,placementZones};
   }
   async function replaceWithOutlineMap(outline,w,h,level,stamps=[],origin=[0,0],materials=null){
@@ -3748,7 +3765,7 @@ export function init2D(root,A){
     const collision=linkWalkability(replacement,automaticPaintZones(replacement,makePaintLookup(prepared)));
     if(incoming.some(e=>!collision.free(e.tx+.5,e.ty+.5,.28)))
       throw Error('Có cửa từ màn khác dẫn vào ô bị chặn trong mẫu. Hãy đưa đích cửa về chế độ tự động hoặc tạo bản sao.');
-    applyOutlinePropEdits({M:replacement,sheets:prepared,placementZones:automaticPaintZones(replacement,makePaintLookup(prepared))});
+    applySceneEdits(replacement,prepared,automaticPaintZones(replacement,makePaintLookup(prepared)));
     replacement.name=before.name;
     sheets.push(...prepared.slice(sheets.length));
     pushUndo();M=replacement;selId=null;sel=null;hov=null;
@@ -3765,7 +3782,7 @@ export function init2D(root,A){
       let i=2;while(MAPS.some(m=>m.name===name+' · '+i)||M.name===name+' · '+i)i++;
       fresh.name=name+' · '+i;
     }
-    applyOutlinePropEdits({M:fresh,sheets:prepared,placementZones:automaticPaintZones(fresh,makePaintLookup(prepared))});
+    applySceneEdits(fresh,prepared,automaticPaintZones(fresh,makePaintLookup(prepared)));
     const next=MAPS.length;
     const other=connect?(linkFrom===index?current:MAPS[linkFrom]):null;
     if(connect&&!other)throw Error('Màn đã chọn để nối không còn trong dự án.');

@@ -6,6 +6,11 @@ export function canArrangeProp(entity){
   !entity.gateAssembly&&!entity.surfaceWaterProp;
 }
 
+export function arrangementLayer(entity){
+ if(entity.outlineAutoHouse||entity.housePart||/(?:^outline-house-|^surface-house-)/.test(String(entity.id)))return 'house';
+ return ({0:'floor',1:'overlay',3:'roof'})[entity.sceneLayer]||'prop';
+}
+
 export function propGroupId(entity){
  return entity.arrangementGroup||String(entity.id).match(/^(outline-house-\d+|surface-house-\d+-\d+)-\d+$/)?.[1];
 }
@@ -26,7 +31,8 @@ export function transformPropGroup(parts,source,target,mirror=false){
   result.placedProp=true;
  result.spriteFlip=(part.spriteFlip||0)^1;
   result.ox=-(part.ox||0);
-  if(part.roofDirection)result.roofDirection=sides[part.roofDirection];
+  if(part.artBase)result.artBase=part.artBase.map(([u,v])=>[1-u,v]);
+ if(part.roofDirection)result.roofDirection=sides[part.roofDirection];
   if(part.zb){const [x,y,w,h]=part.zb;result.zb=[y,x,h,w];}
   if(part.zp)result.zp=part.zp.map(swap);
   if(part.zps)result.zps=part.zps.map(points=>points.map(swap));
@@ -76,9 +82,15 @@ export function applyOutlinePropEdits(view){
  const edits=view.M.cfg.outline?.propEdits;
  if(!edits?.length)return;
  const reapplied=[];
- const moved=new Set(edits.map(edit=>edit.entity.id));
- view.M.ents=view.M.ents.filter(entity=>!moved.has(entity.id));
+ const moved=new Set(edits.filter(edit=>!edit.removed).map(edit=>edit.entity.id));
+ const removed=new Map(edits.filter(edit=>edit.removed).map(edit=>[edit.entity.id,edit]));
+ view.M.ents=view.M.ents.filter(entity=>{
+  const entry=removed.get(entity.id);
+  return !moved.has(entity.id)&&!(entry&&canArrangeProp(entity)&&
+    entry.entity.name===entity.name&&view.sheets[entity.tile.sid]?.name===entry.sheet);
+ });
  for(const edit of edits){
+  if(edit.removed)continue;
   const sid=view.sheets.findIndex(sheet=>sheet?.name===edit.sheet);
   if(sid<0)throw Error('Thiếu gói ảnh của '+(edit.entity.name||'vật dụng đã di chuyển')+'.');
   const entity={...edit.entity,tile:{...edit.entity.tile,sid}};

@@ -1,4 +1,4 @@
-import {canArrangeProp,propFootprint,propPlacement,propGroup,transformPropGroup} from './outlinePropPlacement.js';
+import {arrangementLayer,canArrangeProp,propFootprint,propPlacement,propGroup,transformPropGroup} from './outlinePropPlacement.js';
 import {zPath,zBounds} from './zones.js';
 import {drawSurfaceTerrain} from './surfaceContours.js';
 import {surfaceLevels,surfaceLevelById,surfacePieces} from './surfaceLibrary.js';
@@ -1410,8 +1410,33 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const propStatus=el('p',{class:'hint',role:'status'});
  const zoomValue=el('output',{},'100%');
  const propPicker=el('select',{'aria-label':'Chọn vật trong cảnh'});
+ const layerPicker=el('select',{'aria-label':'Lớp đối tượng trong cảnh'},
+  ...[['prop','Vật dụng'],['house','Nhà'],['roof','Mái / cửa rời'],['overlay','Phủ nền'],['floor','Mảnh nền']]
+   .map(([value,label])=>el('option',{value},label)));
+ const inLayer=entity=>canArrangeProp(entity)&&arrangementLayer(entity)===layerPicker.value;
+ layerPicker.onchange=()=>{
+  selectProp(null);
+  if(liveView)refreshPropPicker(liveView);
+  redrawLive();
+ };
+ const removeProp=B('Xóa đối tượng đã chọn',()=>{
+  const entity=liveView?.M.ents.find(part=>part.id===selectedProp&&inLayer(part));
+  if(!entity||gesture)return;
+  const parts=propGroup(liveView.M.ents,entity);
+  const ids=new Set(parts.map(part=>part.id));
+  record();
+  propEdits=[...propEdits.filter(edit=>!ids.has(edit.entity.id)),...parts.map(part=>({
+   removed:true,entity:{id:part.id,name:part.name},sheet:liveView.sheets[part.tile.sid]?.name
+  }))];
+  liveView.M.ents=liveView.M.ents.filter(part=>!ids.has(part.id));
+  selectProp(null);
+  propStatus.textContent='Đã xóa '+(entity.name||'vật dụng')+'. Có thể Hoàn tác.';
+  refreshPropPicker(liveView);
+  redrawLive();
+ });
+ removeProp.disabled=true;
  function refreshPropPicker(view){
-  const available=view.M.ents.filter(canArrangeProp);
+  const available=view.M.ents.filter(inLayer);
     propPicker.replaceChildren(el('option',{value:''},'Chọn vật hoặc bấm trên cảnh'),
      ...available.map(e=>el('option',{value:String(e.id)},(e.name||'Vật dụng')+' · '+(e.x+1).toFixed(1)+', '+(e.y+1).toFixed(1))));
     propPicker.value=selectedProp==null?'':String(selectedProp);
@@ -1419,7 +1444,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  function selectProp(entity){
   selectedProp=entity?.id??null;
   propPicker.value=entity?String(entity.id):'';
-  duplicate.disabled=turnProp.disabled=!entity;
+  duplicate.disabled=turnProp.disabled=removeProp.disabled=!entity;
   propStatus.textContent=entity?.name||(entity?'Vật dụng':'');
  }
  propPicker.onchange=()=>{
@@ -1632,7 +1657,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   if(!liveProjection||gesture||e.button>1)return;
   const point=livePoint(e),[x,y]=point;
   const hit=e.button===0&&[...liveProjection.hits].reverse().find(hit=>{
-   if(!canArrangeProp(hit.e)||!hit.size)return false;
+   if(!inLayer(hit.e)||!hit.size)return false;
    const [left,top,right,bottom]=hit.e.spriteBounds||[0,0,1,1];
    const u=(x-hit.x)/hit.size,v=(y-hit.y)/hit.size;
    const imageX=hit.e.spriteFlip&1?1-u:u;
@@ -1681,7 +1706,10 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    gesture=null;
    propStatus.textContent='';redrawLive();
   }else if(gesture)return;
-  else if((e.ctrlKey||e.metaKey)&&key!=='d')return;
+  else if((e.ctrlKey||e.metaKey)&&key==='z'){
+   if(!e.repeat)e.shiftKey?travel(redo,undo):travel(undo,redo);
+  }else if((e.ctrlKey||e.metaKey)&&key!=='d')return;
+  else if(key==='delete'&&!removeProp.disabled){if(!e.repeat)removeProp.click();}
   else if(key==='d'&&!duplicate.disabled){
    if(!e.repeat)duplicate.click();
   }else if(!e.ctrlKey&&!e.metaKey&&(key==='+'||key==='='))zoomLive(1.25);
@@ -1710,10 +1738,10 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const liveTools=el('div',{class:'row'},el('button',{type:'button',class:'b','aria-label':'Thu nhỏ cảnh ráp',onclick:()=>zoomLive(1/1.25)},'−'),zoomValue,
   el('button',{type:'button',class:'b','aria-label':'Phóng to cảnh ráp',onclick:()=>zoomLive(1.25)},'+'),
   B('Vừa khung',fitLive),
-  el('label',{},'Chọn vật ',propPicker),duplicate,turnProp,el('label',{},snapProps,' Bám tâm ô'),el('label',{title:'Khi kéo, chỉ vẽ khung chân vật và đường dóng. Hình cập nhật khi thả.'},lightDrag,' Kéo nhẹ'));
+  el('label',{},'Lớp ',layerPicker),el('label',{},'Chọn vật ',propPicker),duplicate,turnProp,removeProp,B('Hoàn tác',()=>travel(undo,redo)),el('label',{},snapProps,' Bám tâm ô'),el('label',{title:'Khi kéo, chỉ vẽ khung chân vật và đường dóng. Hình cập nhật khi thả.'},lightDrag,' Kéo nhẹ'));
  const livePanel=is3D?null:el('section',{class:'outline-live-view','aria-label':'Xem trước cảnh ráp'},
   el('strong',{},'Xem trước cảnh ráp'),liveTools,
-  el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),el('p',{class:'hint'},'Phím tắt khi bấm vào cảnh: +/− thu phóng, 0 vừa khung, mũi tên dịch vật theo trục lưới, Shift + mũi tên dịch khung nhìn, D hoặc nhấp đúp vào vật để nhân bản, R đổi hướng, G bật/tắt bám tâm ô, Esc hủy.'),liveCanvas,propStatus,liveStatus);
+  el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),el('p',{class:'hint'},'Phím tắt khi bấm vào cảnh: +/− thu phóng, 0 vừa khung, mũi tên dịch vật theo trục lưới, Shift + mũi tên dịch khung nhìn, D hoặc nhấp đúp vào vật để nhân bản, R đổi hướng, Delete xóa vật đang chọn, G bật/tắt bám tâm ô, Esc hủy.'),liveCanvas,propStatus,liveStatus);
  let liveTimer,liveKey='',liveRevision=0,liveBuildBusy=false,liveBuildPending=false;
  queueLivePreview=(force=false)=>{
   if(is3D||!ov.isConnected||wideOutline.matches&&box.dataset.page!=='preview'||surface?.finish!==false&&layerControls.some(row=>row.loading))return;
@@ -1733,7 +1761,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
     gesture=null;liveView=view;
     refreshPropPicker(view);
     if(!view.M.ents.some(e=>e.id===selectedProp)){
-     selectedProp=null;duplicate.disabled=turnProp.disabled=true;
+     selectedProp=null;duplicate.disabled=turnProp.disabled=removeProp.disabled=true;
     }
     redrawLive();
     liveCanvas.hidden=false;
