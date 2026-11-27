@@ -3091,20 +3091,25 @@ export function init2D(root,A){
   }
   function makePaintLookup(source=sheets){
     const profiles=new Map();
-    return value=>{
-      if(profiles.has(value))return profiles.get(value);
+    return (value,layer=2)=>{
+      if(!value)return null;
+      const key=value+':'+layer;
+      if(profiles.has(key))return profiles.get(key);
       const {sid,idx,f}=dec(value),sheet=source[sid];
       let profile=null;
-      if(sheet?.img&&!sheet.iso&&sheet===sheets[sid]){
-        const info=constructionTile(sid,idx,0);
-        const family=paintFamily(info.source,info.type,info.behavior);
-        if(idx===0&&sheet.tw===64&&/^Đá Xoáy · cổng, cột, rương/.test(sheet.name)&&info.behavior==='Chặn đường'){
-          profile=daXoayArchProfiles(f);
-        }else if(family){
-          profile=makePaintProfile(family,tileContact(sheet,idx,f).contact);
+      if(sheet?.img){
+        const info=sheet===sheets[sid]?constructionTile(sid,idx,0):{source:sheet.name};
+        if(!roofTextureDirection(info.source,true)){
+          const family=paintFamily(info.source,info.type,'Chặn đường')||'solid';
+          if(idx===0&&sheet.tw===64&&/^Đá Xoáy · cổng, cột, rương/.test(sheet.name))
+            profile=daXoayArchProfiles(f);
+          else{
+            const contact=!sheet.iso&&sheet===sheets[sid]?tileContact(sheet,idx,f).contact:null;
+            profile=makePaintProfile(family,contact||{u:.5,v:.87,width:.38});
+          }
         }
       }
-      profiles.set(value,profile);
+      profiles.set(key,profile);
       return profile;
     };
   }
@@ -3302,7 +3307,7 @@ export function init2D(root,A){
           x:x-.5,y:y-.5,placedProp:true,tile:{sid:art?.sid??rock,idx:art?.a.i??0},
           sc:(kind==='rock'?3.1:tree?2.85*.75/(198/336):.65*.75/(110/296))*(.93+shade*.14),
           bodyHeight:kind==='rock'?1.9:outlineHeight(tree?'Tùng':'corn','props'),oy:art?.a.oy||0,
-          walk:!tree,col:tree?[{k:'circle',x:0,y:0,r:.20}]:[],surfaceGenerated:true});
+          walk:false,col:tree?[{k:'circle',x:0,y:0,r:.20}]:[],surfaceGenerated:true});
       }
     }
     if(spec.finish!==false&&plan.houseLots.length){
@@ -3343,7 +3348,7 @@ export function init2D(root,A){
     const [gx,gy]=plan.goal;
     const obstacle=Uint8Array.from(m.blk);
     // The generated lots and tree trunks are excluded from the route search, leaving their nearby paths open.
-    for(const {x,y,kind} of plan.trees)if(kind==='tree')obstacle[y*m.w+x]=1;
+    for(const {x,y} of plan.trees)obstacle[y*m.w+x]=1;
     for(const {x,y} of plan.houseLots)for(let dy=0;dy<3;dy++)for(let dx=0;dx<2;dx++)obstacle[(y+dy)*m.w+x+dx]=1;
     obstacle[entry.y*m.w+entry.x]=0;
     const route=(m.ents.some(e=>!e.surfaceGenerated&&!e.walk&&e.t==='deco')?

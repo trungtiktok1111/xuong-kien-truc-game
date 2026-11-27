@@ -63,6 +63,48 @@ export function zPath(ctx,z,T){
   const P=zPts(z);ctx.beginPath();P.forEach((p,i)=>{const q=T(p[0],p[1]);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});if(z.k!=='line'||z.closed)ctx.closePath();}
 
 // vùng chặn tự suy ra từ chân (nền) của từng vật cảnh: e.zb=[dx,dy,w,h] so với góc trước (x+1,y+1)
-export function decoZones(ents){const out=builtWallZones(ents||[]);for(const e of ents||[]){if(e.gateAssembly)out.push(...gateZones(e));if(e.t!=='deco'||e.walk||(e.door&&e.door.st==='mo')||(!e.zb&&!(e.col&&e.col.length)))continue;const pad=e.surfaceGenerated&&e.id?.startsWith('surface-tree-')&&Number.isFinite(e.sc)?e.sc*80/(336*1.5):0;
-const pieces=pad?[{k:'rect',x:-pad/2,y:-pad/2,w:pad,h:pad}]:e.col;
-if(pieces?.length){const X=e.x+1,Y=e.y+1;pieces.forEach((c,i)=>{const id='dz'+e.id+'c'+i;if(c.k==='circle')out.push({id,k:'ell',x:X+c.x-c.r,y:Y+c.y-c.r,w:2*c.r,h:2*c.r,rot:0,deco:e.id});else if(c.k==='rect')out.push({id,k:'rect',x:X+c.x,y:Y+c.y,w:c.w,h:c.h,rot:0,deco:e.id});else if(c.k==='poly')out.push({id,k:'poly',pts:c.pts.map(q=>[X+q[0],Y+q[1]]),th:0,closed:true,deco:e.id});else if(c.k==='seg')out.push({id,k:'line',pts:[[X+c.a[0],Y+c.a[1]],[X+c.b[0],Y+c.b[1]]],th:c.th||.25,closed:false,deco:e.id});});continue;}if(e.zps&&e.zps.length){e.zps.forEach((P,i)=>out.push({id:'dz'+e.id+'_'+i,k:'poly',pts:P.map(q=>[e.x+1+q[0],e.y+1+q[1]]),th:0,closed:true,deco:e.id}));continue;}if(e.zp&&e.zp.length>2){out.push({id:'dz'+e.id,k:'poly',pts:e.zp.map(q=>[e.x+1+q[0],e.y+1+q[1]]),th:0,closed:true,deco:e.id});continue;}const X=e.x+1+e.zb[0],Y=e.y+1+e.zb[1];out.push({id:'dz'+e.id,k:'rect',x:X,y:Y,w:e.zb[2],h:e.zb[3],rot:0,deco:e.id});}return out;}
+function rockFootprint(entity){
+  if(!entity.surfaceGenerated||!/^surface-rock-/.test(entity.id||''))return null;
+  // Ground-contact polygon in the 96 px rock frame, relative to its 49,87 anchor.
+  const scale=(entity.sc||3.1)/(.75*96);
+  return [[6,83],[47,65],[92,82],[59,96],[22,95]].map(([x,y])=>{
+    const dx=x-49,dy=y-87;
+    return [(dy+dx/2)*scale,(dy-dx/2)*scale];
+  });
+}
+
+export function decoZones(ents=[]){
+  const out=builtWallZones(ents);
+  for(const e of ents){
+    if(e.gateAssembly)out.push(...gateZones(e));
+    if(e.t!=='deco'||e.flat||e.sceneLayer===0||e.sceneLayer===1||
+      e.wallLine||e.gateAssembly||e.roofDirection||e.roofSurface||e.housePart?.roof||e.door?.st==='mo')continue;
+    const X=e.x+1,Y=e.y+1,id='dz'+e.id;
+    const addPoly=(points,index=0)=>out.push({id:id+'p'+index,k:'poly',
+      pts:points.map(([x,y])=>[X+x,Y+y]),th:0,closed:true,deco:e.id});
+    const rock=rockFootprint(e);
+    if(rock){addPoly(rock);continue;}
+    const pad=e.surfaceGenerated&&e.id?.startsWith('surface-tree-')&&Number.isFinite(e.sc)?e.sc*80/(336*1.5):0;
+    const pieces=pad?[{k:'rect',x:-pad/2,y:-pad/2,w:pad,h:pad}]:e.col;
+    if(pieces?.length){
+      pieces.forEach((part,index)=>{
+        const key=id+'c'+index;
+        if(part.k==='circle')out.push({id:key,k:'ell',x:X+part.x-part.r,y:Y+part.y-part.r,w:2*part.r,h:2*part.r,rot:0,deco:e.id});
+        else if(part.k==='rect')out.push({id:key,k:'rect',x:X+part.x,y:Y+part.y,w:part.w,h:part.h,rot:0,deco:e.id});
+        else if(part.k==='poly')addPoly(part.pts,index);
+        else if(part.k==='seg')out.push({id:key,k:'line',pts:[[X+part.a[0],Y+part.a[1]],[X+part.b[0],Y+part.b[1]]],th:part.th||.25,closed:false,deco:e.id});
+      });
+    }else if(e.zps?.length)e.zps.forEach(addPoly);
+    else if(e.zp?.length>2)addPoly(e.zp);
+    else if(e.zb){
+      const [x,y,w,h]=e.zb;
+      out.push({id,k:'rect',x:X+x,y:Y+y,w,h,rot:0,deco:e.id});
+    }else if(e.tile&&!e.wallId){
+      const art=e.spriteBounds;
+      const width=art?art[2]-art[0]:.4;
+      const radius=Math.min(2,Math.max(.09,width*(e.sc||1)*.29));
+      out.push({id,k:'ell',x:X-radius,y:Y-radius,w:2*radius,h:2*radius,rot:0,deco:e.id,estimated:true});
+    }
+  }
+  return out;
+}
