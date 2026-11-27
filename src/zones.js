@@ -98,7 +98,7 @@ export function decoZones(ents=[]){
       continue;
     }
     const name=[e.name,e.assetSource,e.assetSheet].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[đĐ]/g,'d');
-    if(e.artBase?.length===4&&/(?:stair|stone.?step|\bsteps?\b|\bbac[ _-]*(?:thang|da)|\bcau[ _-]*thang)/i.test(name)){
+    if(e.artBase?.length===4&&/(?:stair|stone.?step|\bsteps?\b|\bbac[ _-]*(?:thang|them|da)|\bda[ _-]*bac|\bcau[ _-]*thang)/i.test(name)){
       addPoly(e.artBase.map(([u,v])=>fromSprite(e,u,v)));
       continue;
     }
