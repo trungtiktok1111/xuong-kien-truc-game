@@ -783,7 +783,7 @@ export function init2D(root,A){
   window.__kb2d=e=>{const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(!M||!cv.offsetParent)return;
     if(desktop()&&document.activeElement!==cv)return;
     const k=(e.key||'').toLowerCase(),m=e.ctrlKey||e.metaKey;
-    if(tool==='inventory'&&k==='escape'&&inventoryMoving){inventoryMoving=false;draw();dirty=true;e.preventDefault();return;}
+    if(tool==='inventory'&&inventoryShortcut(k,e)){e.preventDefault();return;}
     if(desktop()&&!m&&!e.altKey){
       if(activeTransform()){
         if(k==='shift'&&lastPt){lastPt.snap=true;dirty=true;}
@@ -1750,7 +1750,7 @@ export function init2D(root,A){
     const guide=guideFor('2d',tab==='tools'?tool:tab);
     return guide?[guide]:[];
   }
-  let inventoryGroup='',inventoryId='',inventoryMoving=false,inventoryItem=null;
+  let inventoryGroup='',inventoryId='',inventoryMoving=false,inventoryItem=null,inventoryQuery='';
 
   function plankIcon(){
     const c=el('canvas',{width:25,height:15,'aria-hidden':'true'});
@@ -1861,12 +1861,11 @@ export function init2D(root,A){
       const raw=s2g(p.x,p.y);
       const wallHit=inventoryItem.e.wallId?visibleWallAt(p):null;
       const point=wallHit?.point||[raw.x,raw.y];
-      moveInventory(inventoryItem,...point);
+      moveInventory(inventoryItem,...point,inventoryMoving==='copy');
       return;
     }
-    const group=inventoryGroups().find(g=>g.key===inventoryGroup);
-    if(!group)return;
-    const ids=new Map(group.items.map(item=>[item.id,item]));
+    const items=inventoryGroups().flatMap(group=>group.items);
+    const ids=new Map(items.map(item=>[item.id,item]));
     let chosen;
     for(let i=isoHB.length-1;i>=0;i--){
       const {e,r}=isoHB[i],item=ids.get(e.id);
@@ -1875,8 +1874,8 @@ export function init2D(root,A){
     }
     const item=chosen||ids.get(wallAtScreen(p)?.id)||
       [3,2].map(layer=>legacyPropAt(p,layer)).filter(Boolean)
-        .map(tile=>group.items.find(item=>item.cell?.layer===tile.layer&&item.cell.index===tile.i)).find(Boolean);
-    if(item){inventoryId=item.id;draw();dirty=true;}
+        .map(tile=>items.find(item=>item.cell?.layer===tile.layer&&item.cell.index===tile.i)).find(Boolean);
+    if(item){inventoryGroup=inventoryKey(item.e);inventoryId=item.id;inventoryQuery='';draw();dirty=true;}
   }
   function commitInventory(next){
     const issue=structureError(M,next);
@@ -1890,7 +1889,7 @@ export function init2D(root,A){
     map.ents.push(piece);
     return piece;
   }
-  function moveInventory(item,x,y){
+  function moveInventory(item,x,y,copy=false){
     if(!Number.isFinite(x)||!Number.isFinite(y)||!inb(x,y)){toast('Chọn tọa độ trong bản đồ.');return;}
     const {e,cell}=item;
     const position=(value,limit)=>e.placedProp?Math.min(limit-.001,Math.round(value*1000)/1000)-1:Math.floor(value);
@@ -1901,9 +1900,10 @@ export function init2D(root,A){
     if(cell&&!e.placedProp){
       const tiles=next.layers[cell.layer],index=ny*M.w+nx;
       if(tiles[index]){toast('Ô đích đã có một mảnh cùng lớp.');return;}
-      tiles[cell.index]=0;tiles[index]=cell.value;id='paint:'+cell.layer+':'+index;
+      if(!copy)tiles[cell.index]=0;tiles[index]=cell.value;id='paint:'+cell.layer+':'+index;
     }else{
-      const piece=readInventoryPiece(next,item);
+      const piece=copy?{...clone(e),id:newId()}:readInventoryPiece(next,item);
+      if(copy){delete piece.legacyIndex;next.ents.push(piece);id=piece.id;}
       if(e.wallLine&&M.ents.some(q=>q.wallId===e.id)){
         toast('Tuyến tường đang gắn cổng. Hãy tháo cổng trước khi di chuyển.');return;
       }
@@ -1936,18 +1936,68 @@ export function init2D(root,A){
       draw();
     }
   }
+  function inventoryCanCopy({e}){return e.t==='deco'&&!e.wallLine&&!e.wallId&&!e.gateAssembly&&!e.housePart;}
+  function startInventoryAction(mode){
+    inventoryMoving=inventoryMoving===mode?false:mode;
+    draw();dirty=true;cv.focus({preventScroll:true});
+  }
+  function inventoryShortcut(key,event){
+    if(event.ctrlKey||event.metaKey||event.altKey)return false;
+    if(key==='escape'&&(inventoryMoving||inventoryId)){
+      if(!inventoryMoving)inventoryGroup=inventoryId='';
+      inventoryMoving=false;draw();dirty=true;return true;
+    }
+    const item=inventoryItem;
+    if(!item)return false;
+    if(key==='delete'){if(!event.repeat&&item.e.t!=='start')removeInventory(item);return true;}
+    if(key==='d'){if(!event.repeat&&inventoryCanCopy(item))startInventoryAction('copy');return true;}
+    if(key==='m'){if(!event.repeat)startInventoryAction('move');return true;}
+    if(key==='enter'){if(!event.repeat)body.querySelector('.inventory-controls input')?.focus();return true;}
+    if(key==='t'&&item.e.placedProp&&inventoryCanCopy(item)){
+      if(!event.repeat){
+        const next=clone(M),piece=readInventoryPiece(next,item);
+        piece.propProjection??=ANGQ()?'angle':ISOQ()?'iso':'top';
+        turnProp(piece);
+        if(commitInventory(next)){inventoryGroup=inventoryKey(piece);draw();}
+      }
+      return true;
+    }
+    const delta={arrowleft:[-1,0],arrowright:[1,0],arrowup:[0,-1],arrowdown:[0,1]}[key];
+    if(!delta||event.shiftKey)return false;
+    const [x,y]=inventoryPoint(item.e);
+    moveInventory(item,x+delta[0],y+delta[1]);
+    return true;
+  }
+  function inventoryCard(item,label,selected,action){
+    const {e,cell}=item,thumb=el('canvas',{width:56,height:56,'aria-hidden':'true'});
+    const g=thumb.getContext('2d');
+    if(e.tile&&sheets[e.tile.sid]?.img)drawTile(g,cell?.value??enc(e.tile.sid,e.tile.idx,e.spriteFlip||0),0,0,56);
+    else if(e.wallLine){g.fillStyle='#a99272';g.fillRect(7,17,42,24);}
+    else{g.font='28px system-ui';g.textAlign='center';g.fillText(OT[e.t]?.[0]||'◆',28,38);}
+    return el('button',{type:'button',class:'build-material',title:label,'aria-label':label,
+      'aria-pressed':String(selected),onclick:action},thumb,el('span',{},label));
+  }
   function drawInventory(){
     const groups=M?inventoryGroups():[],group=groups.find(g=>g.key===inventoryGroup);
     inventoryItem=group?.items.find(item=>item.id===inventoryId)||(group?.items.length===1?group.items[0]:null);
     const title=el('h3',{},'Vật phẩm trong màn');
     body.append(title);
     if(!groups.length){body.append(el('p',{class:'hint'},'Màn này chưa có vật phẩm.'));return;}
-    const choose=el('select',{class:'num inventory-select','aria-label':'Loại vật phẩm',onchange:()=>{
-      inventoryGroup=choose.value;inventoryId='';inventoryMoving=false;draw();dirty=true;
-      if(inventoryItem)centerInventory(inventoryItem);
-    }},el('option',{value:''},'Chọn loại vật phẩm'),groups.map(g=>el('option',{value:g.key},g.label+' · '+g.items.length)));
-    choose.value=group?.key||'';
-    body.append(choose);
+    const gallery=el('div',{class:'build-materials'});
+    const query=el('input',{class:'num inventory-select',type:'search',placeholder:'Tìm vật đã đặt…','aria-label':'Tìm vật đã đặt',
+      value:inventoryQuery,oninput:()=>{inventoryQuery=query.value;showGroups();}});
+    function showGroups(){
+      const term=normSearch(inventoryQuery);
+      const visible=groups.filter(g=>normSearch(g.label).includes(term));
+      gallery.replaceChildren(...visible.map(g=>inventoryCard(g.items[0],g.label+' · '+g.items.length,g.key===inventoryGroup,()=>{
+        inventoryGroup=g.key;inventoryId=g.items[0].id;inventoryMoving=false;draw();dirty=true;
+        if(inventoryItem)centerInventory(inventoryItem);
+        cv.focus({preventScroll:true});
+      })));
+      if(!visible.length)gallery.textContent='Không tìm thấy vật phẩm.';
+    }
+    body.append(query,gallery);
+    showGroups();
     if(!group)return;
     const items=group.items;
     if(items[0].e.roofDirection){
@@ -1960,12 +2010,10 @@ export function init2D(root,A){
       }},el('label',{},'Độ dày (ô) ',input),el('button',{type:'submit',class:'b'},'Áp dụng cho '+items.length+' tấm')));
     }
     const label=(item,index)=>entityName(item.e)+' #'+(index+1)+' · '+xy(inventoryPoint(item.e));
-    const select=el('select',{class:'num inventory-select','aria-label':'Vật phẩm cụ thể',onchange:()=>{
-      inventoryId=select.value;inventoryMoving=false;draw();dirty=true;
-      if(inventoryItem)centerInventory(inventoryItem);
-    }},el('option',{value:''},'Chọn một vật phẩm'),items.map((item,index)=>el('option',{value:item.id},label(item,index))));
-    select.value=inventoryItem?.id||'';
-    body.append(select);
+    body.append(el('p',{class:'hint'},group.label+' · '+items.length+' vật đã đặt'),
+      el('div',{class:'build-materials'},...items.map((item,index)=>inventoryCard(item,label(item,index),item.id===inventoryItem?.id,()=>{
+        inventoryId=item.id;inventoryMoving=false;draw();dirty=true;centerInventory(item);cv.focus({preventScroll:true});
+      }))));
     if(!inventoryItem)return;
     const item=inventoryItem,[x,y]=inventoryPoint(item.e);
     const coordinate=(axis,value)=>el('input',{class:'num',type:'number',step:'any',required:'',value:+value.toFixed(3),'aria-label':'Tọa độ '+axis});
@@ -1973,11 +2021,15 @@ export function init2D(root,A){
     body.append(el('form',{class:'row inventory-controls',onsubmit:event=>{
       event.preventDefault();moveInventory(item,xInput.valueAsNumber,yInput.valueAsNumber);
     }},el('label',{},'X ',xInput),el('label',{},'Y ',yInput),el('button',{type:'submit',class:'b'},'Đặt tọa độ')),
-    el('div',{class:'row inventory-controls'},btn(inventoryMoving?'Hủy di chuyển':'Di chuyển trên bản đồ',()=>{
-      inventoryMoving=!inventoryMoving;draw();dirty=true;cv.focus({preventScroll:true});
-    },inventoryMoving?'on':''),btn('Đưa vào giữa khung',()=>{centerInventory(item);dirty=true;}),
-    item.e.t==='start'?null:btn('Xóa vật phẩm',()=>removeInventory(item))),
-    inventoryMoving?el('p',{class:'hint',role:'status'},'Bấm vị trí mới cho điểm neo của vật phẩm. Esc để hủy.'):null);
+    el('div',{class:'row inventory-controls'},
+      btn('Di chuyển · M',()=>startInventoryAction('move'),inventoryMoving==='move'?'on':''),
+      inventoryCanCopy(item)?btn('Nhân bản · D',()=>startInventoryAction('copy'),inventoryMoving==='copy'?'on':''):null,
+      item.e.placedProp&&inventoryCanCopy(item)?btn('Đổi hướng · T',()=>{inventoryShortcut('t',{});cv.focus({preventScroll:true});}):null,
+      btn('Đưa vào giữa khung',()=>{centerInventory(item);dirty=true;cv.focus({preventScroll:true});}),
+      item.e.t==='start'?null:btn('Xóa · Delete',()=>{removeInventory(item);cv.focus({preventScroll:true});})),
+    el('p',{class:'hint',role:'status'},inventoryMoving==='copy'?'Bấm bản đồ để đặt bản sao. Esc hủy.':
+      inventoryMoving?'Bấm bản đồ để đặt điểm neo mới. Esc hủy.':'← ↑ → ↓ dịch theo ô · Enter sửa tọa độ · Ctrl+Z hoàn tác.'));
+
   }
   function draw(){updateDesktop();[...tabs.querySelectorAll('button[data-t]')].forEach(b=>b.classList.toggle('on',b.dataset.t===tab));body.innerHTML='';
     body.append(...drawGuides());
