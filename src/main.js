@@ -1,5 +1,5 @@
 import {toggleShortcutHelp} from './editorHelp.js';
-import {el,toast} from './util.js';
+import {el,toast,idbGet} from './util.js';
 import {openOutlineEditor} from './outlineEditor.js';
 import {openStudio,runStudio,saveProjectFile} from './studio.js';
 import {$,SELF,guessTile} from './util.js';window.__guess=guessTile;import('./anim.js').then(x=>{window.__fg=x.findGrid;});
@@ -50,6 +50,98 @@ $('#zipscenebtn').onclick=async()=>{go('2d');await e2.ready;e2.showStockScenes()
 $('#studiobtn').onclick=()=>{go('2d');if(e2.map())openStudio(e2);};
 function shortcutHelp(){toggleShortcutHelp($(cur==='2d'?'#pn2':'#pn3'));}
 $('#helpbtn').onclick=shortcutHelp;
+const searchButton=el('button',{type:'button',class:'tabbtn',title:'Tìm nhanh · Ctrl+K',onclick:openQuickSearch},'⌕ Tìm nhanh');
+$('#bar h1').after(searchButton);
+const searchItems=[
+ ['Dựng cảnh 2D','bản đồ nền vật phẩm','#bar [data-v="2d"]'],
+ ['Dựng cảnh 3D','mô hình không gian','#bar [data-v="3d"]'],
+ ['Đường Bao','mặt bằng cảnh ráp vật liệu mảnh ghép quản lý ZIP','#outlinebtn'],
+ ['Màn mẫu','bố cục mẫu địa hình hầm ngục','#levelbtn'],
+ ['Cảnh ZIP','nhập cảnh thư viện gói tài nguyên','#zipscenebtn'],
+ ['Dự án game','lưu bản thiết kế tệp dự án','#studiobtn'],
+ ['Chơi thử','chạy game di chuyển','#playbtn'],
+ ['Kiểm tra bản đồ','va chạm lối đi','#chkbtn'],
+ ['Phím tắt','hướng dẫn điều khiển','#helpbtn'],
+ ['Xuất bản đồ và game','tải xuống ảnh PNG xuất file','#relbtn'],
+ ['Dung lượng app','bộ nhớ lưu trữ giới hạn quota dữ liệu ZIP RAM nặng lag',openStorageStatus]
+];
+const normalizeFind=value=>value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replaceAll('đ','d');
+function toolDialog(title){
+  const dialog=el('dialog',{style:'width:min(540px,92vw);max-height:80vh;box-sizing:border-box;background:#192834;color:#fff;border:1px solid #567180;border-radius:10px;padding:16px'});
+  dialog.append(el('div',{class:'row'},el('strong',{style:'flex:1'},title),
+    el('button',{type:'button',class:'tabbtn',onclick:()=>dialog.close()},'Đóng')));
+  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+  document.body.append(dialog);
+  return dialog;
+}
+let quickSearch=null;
+function openQuickSearch(){
+  if(quickSearch?.open){quickSearch.querySelector('input').focus();return;}
+  const dialog=toolDialog('Tìm nhanh trong app');
+  quickSearch=dialog;
+  const input=el('input',{type:'search',placeholder:'Ví dụ: Đường Bao, ZIP, dung lượng…',
+    'aria-label':'Tìm mục trong ứng dụng',style:'width:100%;box-sizing:border-box;margin:10px 0;padding:8px'});
+  const results=el('div',{style:'display:grid;gap:5px'});
+  function render(){
+    const words=normalizeFind(input.value).trim().split(/\s+/).filter(Boolean);
+    const matches=searchItems.filter(([label,tags])=>words.every(word=>normalizeFind(label+' '+tags).includes(word)));
+    results.replaceChildren(...matches.map(([label,,action])=>el('button',{
+      type:'button',class:'tabbtn',style:'text-align:left;white-space:normal',onclick:()=>{
+        dialog.close();
+        if(typeof action==='function')action();
+        else $(action)?.click();
+      }},label)));
+    if(!matches.length)results.append(el('p',{class:'hint'},'Không tìm thấy mục phù hợp.'));
+  }
+  input.oninput=render;
+  dialog.addEventListener('keydown',event=>{
+    if(event.target===input&&event.key==='Enter'){
+      event.preventDefault();results.querySelector('button')?.click();
+    }else if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+      const buttons=[...results.querySelectorAll('button')];
+      if(!buttons.length)return;
+      event.preventDefault();
+      const index=buttons.indexOf(document.activeElement);
+      const next=event.key==='ArrowDown'?Math.min(buttons.length-1,index+1):index-1;
+      (next<0?input:buttons[next])?.focus();
+    }
+  });
+  render();dialog.append(input,results);dialog.showModal();input.focus();
+}
+async function openStorageStatus(){
+  const dialog=toolDialog('Dung lượng app');
+  const content=el('div',{'aria-live':'polite'},el('p',{},'Đang đọc dung lượng…'));
+  dialog.append(content);dialog.showModal();
+  const bytes=value=>Number.isFinite(value)?new Intl.NumberFormat('vi-VN',{maximumFractionDigits:2})
+    .format(value/(value>=1073741824?1073741824:1048576))+(value>=1073741824?' GiB':' MiB'):'Không có số liệu';
+  const [estimate,zipIndex]=await Promise.all([
+    Promise.resolve().then(()=>navigator.storage?.estimate?.()).catch(()=>null),
+    idbGet('outline-zip-library-index-v1')
+  ]);
+  if(!dialog.isConnected)return;
+  const zipSizes=Array.isArray(zipIndex)?zipIndex.map(id=>Number(String(id).split('|').at(-2))).filter(n=>Number.isFinite(n)&&n>=0):[];
+  const use=estimate?.usage,limit=estimate?.quota;
+  const rows=[
+    ['Dữ liệu trang đang lưu',bytes(use)],
+    ['Hạn mức trình duyệt ước tính',bytes(limit)],
+    ['Dung lượng còn lại',bytes(Number.isFinite(use)&&Number.isFinite(limit)?Math.max(0,limit-use):NaN)],
+    ['ZIP trong kho Đường Bao (gồm gói giữ cho thiết kế)',Array.isArray(zipIndex)?zipSizes.length+' gói · '+bytes(zipSizes.reduce((sum,size)=>sum+size,0)):'Chưa có danh mục ZIP']
+  ];
+  const table=el('dl',{style:'display:grid;grid-template-columns:1fr auto;gap:8px;margin:14px 0'},
+    ...rows.flatMap(([label,value])=>[el('dt',{},label),el('dd',{style:'margin:0;text-align:right'},value)]));
+  const details=[];
+  if(Number.isFinite(use)&&limit>0){
+    const percent=100*use/limit;
+    details.push(el('p',{},'Đã dùng '+new Intl.NumberFormat('vi-VN',{maximumFractionDigits:2}).format(percent)+'% hạn mức.'));
+  }
+  content.replaceChildren(...details,table,el('p',{class:'hint'},'Số liệu do trình duyệt ước tính cho trang này. Hạn mức có thể thay đổi. Dung lượng lưu khác với RAM và không đo độ mượt khi kéo hoặc vẽ.'));
+}
+document.addEventListener('keydown',event=>{
+  if(event.defaultPrevented||!(event.ctrlKey||event.metaKey)||event.altKey||event.key.toLowerCase()!=='k')return;
+  if(document.querySelector('dialog[open]')&&!quickSearch?.open)return;
+  if(event.target?.closest?.('input,textarea,[contenteditable="true"]')&&!quickSearch?.open)return;
+  event.preventDefault();openQuickSearch();
+});
 document.addEventListener('keydown',e=>{
   if(document.activeElement!==$('#cv2')||cur!=='2d'||e.defaultPrevented)return;
   if(e.key==='F1'){e.preventDefault();shortcutHelp();}
