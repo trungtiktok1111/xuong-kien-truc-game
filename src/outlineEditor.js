@@ -505,7 +505,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   if(drag)canvas.setPointerCapture?.(e.pointerId);
   draw();
  };
- canvas.onpointermove=e=>{
+ function moveOnPlan(e){
   cursor=point(e);
   if(is3D&&mode==='gate'&&e.buttons===0){
    const p=point(e);gatePreview=hitGate(p);
@@ -532,7 +532,19 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   }else pending=[drag.start,p];
   draw();
  };
+ let planPointer=null,planFrame=0;
+ function flushPlanPointer(){
+  if(planFrame)cancelAnimationFrame(planFrame);
+  planFrame=0;
+  const latest=planPointer;planPointer=null;
+  if(latest&&ov.isConnected)moveOnPlan(latest);
+ }
+ canvas.onpointermove=e=>{
+  planPointer=e;
+  if(!planFrame)planFrame=requestAnimationFrame(flushPlanPointer);
+ };
  canvas.onpointerup=e=>{
+  flushPlanPointer();
   if(pan){pan=null;return;}
   const p=point(e),d=drag;drag=null;
   if(!d)return;
@@ -554,7 +566,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   pending=[];const loop=dragLoop(d.start,p);
   if(loop.length)add(mode==='corridor'?cropOutline([loop],[0,0],[W,H]):[loop],mode==='corridor'?'add':operation.value);else draw();
  };
- canvas.onpointerleave=()=>{cursor=null;gatePreview=null;if(placement)previewAt=null;draw();};
+ canvas.onpointerleave=()=>{planPointer=null;cursor=null;gatePreview=null;if(placement)previewAt=null;draw();};
  canvas.onwheel=e=>{e.preventDefault();zoom(e.deltaY<0?1.25:.8,...screen(e));if(placement)previewAt=point(e);draw();};
  canvas.onpointercancel=()=>{pan=null;if(drag?.old)loops=drag.old;drag=null;pending=[];draw();};
  box.onkeydown=e=>{
@@ -968,6 +980,8 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  }
  function closeOutline(){
   layoutObserver.disconnect();
+  cancelAnimationFrame(planFrame);cancelAnimationFrame(hoverFrame);
+  clearTimeout(liveTimer);liveRevision++;
   stopSequence();for(const row of layerControls)releaseGallery(row);
   ov.remove();
  }
@@ -1485,9 +1499,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   document.body.append(dialog);dialog.showModal();count.select();
  }
  const liveBitmap=document.createElement('canvas');
+ const lightDrag=el('input',{type:'checkbox',checked:''});
+ lightDrag.checked=true;
  function redrawLive(guidesOnly=false){
   if(!liveView)return;
-  const parts=gesture?.parts;
+  const parts=lightDrag.checked?null:gesture?.parts;
   const preview=parts&&!gesture.problem?{...liveView,M:{...liveView.M,
    ents:liveView.M.ents.map(entity=>parts.find(part=>part.id===entity.id)||entity)}}:liveView;
   if(guidesOnly!==true||!liveProjection||liveBitmap.width!==liveCanvas.width||liveBitmap.height!==liveCanvas.height){
@@ -1602,10 +1618,11 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   const [x,y]=liveProjection.unproject(...point),{source,dx,dy}=gesture;
   const snap=value=>snapProps.checked?Math.floor(value)+.5:Math.round(value*100)/100;
   const candidate={...source,x:snap(x+dx)-1,y:snap(y+dy)-1};
+  if(gesture.candidate?.x===candidate.x&&gesture.candidate?.y===candidate.y){redrawLive(true);return;}
   gesture.candidate=candidate;
   Object.assign(gesture,propChange(source,candidate));
   propStatus.textContent=gesture.problem||'Điểm neo '+(candidate.x+1).toFixed(2)+' × '+(candidate.y+1).toFixed(2)+' ô';
-  redrawLive();
+  redrawLive(lightDrag.checked);
  }
  liveCanvas.addEventListener('wheel',e=>{
   if(!liveView)return;
@@ -1633,18 +1650,22 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  liveCanvas.ondblclick=e=>{if(!duplicate.disabled){e.preventDefault();openCopy();}};
  let hoverFrame=0;
  liveCanvas.onpointerleave=()=>{guidePointer=null;if(!gesture)redrawLive(true);};
- liveCanvas.onpointermove=e=>{
-  guidePointer=livePoint(e);
-  if(!gesture||!liveProjection){
-   if(!hoverFrame)hoverFrame=requestAnimationFrame(()=>{hoverFrame=0;if(ov.isConnected)redrawLive(true);});
-   return;
-  }
+ function flushLivePointer(){
+  if(hoverFrame)cancelAnimationFrame(hoverFrame);
+  hoverFrame=0;
+  if(!ov.isConnected)return;
+  if(!gesture||!liveProjection||!guidePointer){redrawLive(true);return;}
   const point=guidePointer,dx=point[0]-gesture.point[0],dy=point[1]-gesture.point[1];
   if(gesture.pan){camera.x=gesture.pan[0]+dx;camera.y=gesture.pan[1]+dy;redrawLive();}
   else if(gesture.candidate||Math.hypot(dx,dy)>3)aimProp(point);
+ }
+ liveCanvas.onpointermove=e=>{
+  guidePointer=livePoint(e);
+  if(!hoverFrame)hoverFrame=requestAnimationFrame(flushLivePointer);
  };
  liveCanvas.onpointerup=()=>{
   if(!gesture)return;
+  if(hoverFrame)flushLivePointer();
   const {candidate,problem,parts}=gesture;
   gesture=null;
   if(candidate&&!problem)dropProps(parts,candidate);
@@ -1689,24 +1710,26 @@ export function openOutlineEditor(editor,initialTab='shapes'){
  const liveTools=el('div',{class:'row'},el('button',{type:'button',class:'b','aria-label':'Thu nhỏ cảnh ráp',onclick:()=>zoomLive(1/1.25)},'−'),zoomValue,
   el('button',{type:'button',class:'b','aria-label':'Phóng to cảnh ráp',onclick:()=>zoomLive(1.25)},'+'),
   B('Vừa khung',fitLive),
-  el('label',{},'Chọn vật ',propPicker),duplicate,turnProp,el('label',{},snapProps,' Bám tâm ô'));
+  el('label',{},'Chọn vật ',propPicker),duplicate,turnProp,el('label',{},snapProps,' Bám tâm ô'),el('label',{title:'Khi kéo, chỉ vẽ khung chân vật và đường dóng. Hình cập nhật khi thả.'},lightDrag,' Kéo nhẹ'));
  const livePanel=is3D?null:el('section',{class:'outline-live-view','aria-label':'Xem trước cảnh ráp'},
   el('strong',{},'Xem trước cảnh ráp'),liveTools,
   el('p',{class:'hint'},'Cuộn để thu phóng. Kéo nền để di chuyển khung nhìn. Bấm vật để chọn, kéo để đổi vị trí.'),el('p',{class:'hint'},'Phím tắt khi bấm vào cảnh: +/− thu phóng, 0 vừa khung, mũi tên dịch vật theo trục lưới, Shift + mũi tên dịch khung nhìn, D hoặc nhấp đúp vào vật để nhân bản, R đổi hướng, G bật/tắt bám tâm ô, Esc hủy.'),liveCanvas,propStatus,liveStatus);
- let liveTimer,liveKey='',liveRevision=0;
+ let liveTimer,liveKey='',liveRevision=0,liveBuildBusy=false,liveBuildPending=false;
  queueLivePreview=(force=false)=>{
-  if(is3D||!ov.isConnected||surface?.finish!==false&&layerControls.some(row=>row.loading))return;
+  if(is3D||!ov.isConnected||wideOutline.matches&&box.dataset.page!=='preview'||surface?.finish!==false&&layerControls.some(row=>row.loading))return;
   const opts=surface?.finish===false?null:materials(true);
   const key=JSON.stringify([W,H,loops,origin,stamps,levelDraft?.id,front.value,rear.value,thickness.value,slabDepth(),collision.checked,surface,propEdits,opts]);
   if(!force&&key===liveKey)return;
+  if(liveBuildBusy){liveBuildPending=true;return;}
   liveKey=key;clearTimeout(liveTimer);clearTimeout(sequenceTimer);
   const revision=++liveRevision;
   if(!loops.length){liveCanvas.hidden=true;liveStatus.textContent='Vẽ mặt bằng hoặc chọn một màn mẫu.';return;}
   liveStatus.textContent='Đang ráp bản xem trước…';
   liveTimer=setTimeout(async()=>{
+   liveBuildBusy=true;
    try{
     const view=await editor.liveOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,opts,collision.checked);
-    if(revision!==liveRevision||!ov.isConnected)return;
+    if(revision!==liveRevision||!ov.isConnected||liveBuildPending)return;
     gesture=null;liveView=view;
     refreshPropPicker(view);
     if(!view.M.ents.some(e=>e.id===selectedProp)){
@@ -1726,6 +1749,9 @@ export function openOutlineEditor(editor,initialTab='shapes'){
    }catch(error){
     if(revision!==liveRevision||!ov.isConnected)return;
     stopSequence();liveStatus.textContent=error.message;
+   }finally{
+    liveBuildBusy=false;
+    if(liveBuildPending){liveBuildPending=false;queueLivePreview(true);}
    }
   },160);
  };
@@ -1757,6 +1783,7 @@ export function openOutlineEditor(editor,initialTab='shapes'){
   box.dataset.page=page;
   for(const [name,button] of workspaceTabs)button.setAttribute('aria-pressed',String(name===page));
   if(page==='preview')queueLivePreview();
+  else if(wideOutline.matches){clearTimeout(liveTimer);liveRevision++;liveKey='';stopSequence();}
  }
  for(const [page,label] of [['plan','Mặt bằng'],...(!is3D?[['preview','Cảnh ráp']]:[]),['settings','Thiết lập']]){
   workspaceTabs.set(page,B(label,()=>switchWorkspace(page)));
