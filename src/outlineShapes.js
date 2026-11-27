@@ -82,6 +82,59 @@ for(const shape of outlineShapes){
 }
 outlineShapes.push(...extraShapes.map(shape=>({...shape,square:true})));
 
+const regularRoom=(id,name,sides,angle)=>({
+ id,name,group:'Phòng',square:true,loops:[radial(sides,()=>.44,angle)]
+});
+const room=(id,name,loops)=>({id,name,group:'Phòng',square:true,loops});
+const route=(id,name,loops)=>({id,name,group:'Lối đi',square:true,loops});
+const angle=Math.PI;
+const arc=(start,end,r)=>Array.from({length:49},(_,i)=>{
+ const t=start+(end-start)*i/48;return [.5+Math.cos(t)*r,.5+Math.sin(t)*r];
+});
+const stairs=([first,...rest],width)=>{
+ let previous=first;
+ return join(...rest.map(next=>{const strip=corridorLoop(previous,next,width);previous=next;return strip;}));
+};
+const meander=(()=>{
+ const edge=sign=>Array.from({length:81},(_,i)=>{
+  const t=i/80,phase=4*Math.PI*t;
+  return [.09+.82*t,.5+.22*Math.sin(phase)+sign*.055];
+ });
+ return [...edge(1),...edge(-1).reverse()];
+})();
+outlineShapes.push(
+ room('oval','Phòng bầu dục',[ellipseLoop(.5,.5,.32,.44)]),
+ regularRoom('triangle','Tam giác đều',3),
+ room('triangle-right','Tam giác vuông',poly([.12,.10],[.88,.88],[.12,.88])),
+ room('triangle-scalene','Tam giác lệch',poly([.09,.81],[.64,.81],[.89,.17])),
+ room('square','Phòng vuông',[rect(.08,.08,.92,.92)]),
+ room('trapezoid','Hình thang',poly([.28,.16],[.72,.16],[.92,.84],[.08,.84])),
+ room('parallelogram','Hình bình hành',poly([.30,.21],[.92,.21],[.70,.79],[.08,.79])),
+ room('rhombus','Hình thoi',poly([.5,.15],[.94,.5],[.5,.85],[.06,.5])),
+ room('kite','Hình cánh diều',poly([.5,.06],[.82,.36],[.5,.94],[.18,.36])),
+ regularRoom('pentagon','Ngũ giác',5),
+ regularRoom('hexagon','Lục giác',6,0),
+ regularRoom('heptagon','Thất giác',7),
+ regularRoom('nonagon','Cửu giác',9),
+ regularRoom('decagon','Thập giác',10,0),
+ room('three-quarter-disk','Hình tròn khuyết một phần tư',[[[.5,.5],...arc(0,1.5*angle,.43)]]),
+ room('arrow','Hình mũi tên',poly([.08,.35],[.53,.35],[.53,.15],[.94,.50],
+  [.53,.85],[.53,.65],[.08,.65])),
+ room('semicircle','Bán nguyệt',[arc(-angle/2,angle/2,.43)]),
+ room('five-star','Sao năm cánh',[radial(10,i=>i%2?.20:.44)]),
+ room('heart','Hình trái tim',[Array.from({length:80},(_,i)=>{
+  const t=i*2*Math.PI/80;
+  const x=16*Math.sin(t)**3,y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
+  return [.5+x*.025,.47-y*.025];
+ })]),
+ route('arc-quarter','Lối cong 90°',[windingBand(Math.PI,1.5*Math.PI,()=>.35,.075)]),
+ route('arc-half','Lối cong 180°',[windingBand(Math.PI,2*Math.PI,()=>.36,.075)]),
+ route('offset-corridor','Lối bậc thang',stairs([[.12,.8],[.37,.8],[.37,.5],[.63,.5],[.63,.2],[.88,.2]],.06)),
+ route('switchback','Lối gấp chữ W',stairs([[.09,.25],[.29,.75],[.5,.25],[.71,.75],[.91,.25]],.055)),
+ route('meandering-corridor','Lối ngoằn ngoèo hai nhịp',[meander]),
+ route('t-junction','Ngã ba chữ T',join(rect(.10,.20,.90,.37),rect(.41,.28,.59,.89)))
+);
+
 export function fitShape(shape,w,h,factor=1){
  const a=(shape.square?Math.min(w,h):w)*factor,b=(shape.square?Math.min(w,h):h)*factor;
  return shape.loops.map(loop=>loop.map(([x,y])=>[(w-a)/2+x*a,(h-b)/2+y*b]));

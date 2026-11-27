@@ -1,3 +1,4 @@
+import {stonePavingSheets} from './stonePaving.js';
 import {applyOutlinePropEdits} from './outlinePropPlacement.js';
 import {drawSurfaceTerrain,surfaceTerrainTile} from './surfaceContours.js';
 import {outlineHeight} from './outlineAnchors.js';
@@ -1682,7 +1683,15 @@ export function init2D(root,A){
     const query=el('input',{type:'search',class:'build-search',placeholder:'Tìm mảnh…','aria-label':'Tìm mảnh dựng cảnh',
       value:buildQuery,oninput:e=>{buildQuery=e.target.value;buildPages.set(layer,0);page=0;renderCards();}});
     query.disabled=!groups.size;
-    panel.append(el('div',{class:'build-filters'},browser,query),results,
+    const pavingButton=layer===0?btn('Mẫu đá tự khớp mạch',async()=>{
+      pavingButton.disabled=true;
+      try{
+        const sid=await installStonePaving();
+        buildSources.set(0,sid);buildPages.set(0,0);buildQuery='';draw();
+      }catch(error){pavingButton.disabled=false;toast(error.message);}
+    }):null;
+    panel.append(el('div',{class:'build-filters'},browser,query),
+      ...(pavingButton?[pavingButton]:[]),results,
       el('details',{...(buildOptionsOpen?{open:''}:{}),ontoggle:e=>{buildOptionsOpen=e.currentTarget.open;}},el('summary',{},'Cách đặt và tùy chọn'),
         el('div',{class:'row'},
           btn('Từng mảnh · B',()=>useTool('draw'),tool==='draw'?'on':''),
@@ -3211,6 +3220,19 @@ export function init2D(root,A){
   function validateMapOutline(outline,w,h){
     if(!validOutline(outline.loops,w,h)||outline.thickness!=null&&(!Number.isFinite(outline.thickness)||outline.thickness<WALL_MIN_THICKNESS||outline.thickness>WALL_MAX_THICKNESS)||![outline.front,outline.rear].every(n=>Number.isFinite(n)&&n>=0&&n<=4))
       throw Error('Thông số đường bao không hợp lệ.');
+  }
+  async function installStonePaving(){
+    const original={name:'Đá Xoáy · phiến đá',url:LEGACY_STONE_ATLAS,tw:16,margin:0};
+    await loadSheet(original);
+    if(!original.img)throw Error('Không tải được mẫu đá gốc.');
+    const atlas=stonePavingSheets(original.img),indices=[];
+    for(const sheet of atlas){
+      const sid=await loadBuiltinSheet(sheet,sheets);
+      sheets[sid].phaseBrush=sheet.phaseBrush;
+      indices.push(sid);
+    }
+    after();
+    return indices[0];
   }
   async function stoneTile(target){
     let sid=target.findIndex(sh=>sh.url===OUTLINE_STONE.url&&sh.img);
