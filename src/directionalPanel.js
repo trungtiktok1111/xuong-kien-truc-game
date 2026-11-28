@@ -40,12 +40,13 @@ export function directionalPanel(editor){
  canvas.ondragend=()=>editor.endMaterialDrag();
  const input=el('input',{type:'file',accept:'.zip',multiple:'','aria-label':'Nhập ZIP hoạt ảnh 8 hướng'});
  input.onchange=async()=>{
-  const files=[...input.files];input.value='';available.replaceChildren();
+  const files=[...input.files];available.replaceChildren();
+  const names=files.map(file=>file.name).join(', ');
   status.textContent='Đang đọc ZIP…';
   try{
    const groups=[];
    for(const file of files)groups.push(...readDirectionalZip(new Uint8Array(await file.arrayBuffer())));
-   status.textContent=groups.length?groups.length+' bộ trong ZIP. Bấm tên bộ để nạp.':'Chưa nhận diện được sprite sheet 8 hướng.';
+   status.textContent=names+' · '+(groups.length?groups.length+' bộ. Bấm tên bộ để nạp.':'Chưa thấy bảng PNG 8 hướng hoặc đủ 8 dải PNG có tên hướng.');
    for(const group of groups){
     const pick=button(group.name,async()=>{
      const map=editor.map();pick.disabled=true;

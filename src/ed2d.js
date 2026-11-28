@@ -354,6 +354,7 @@ export function init2D(root,A){
       cx.globalAlpha=1;cx.strokeStyle='#3ddc84';cx.lineWidth=2;cx.setLineDash([5,3]);pathQ(o.x,o.y,clip.w,clip.h);cx.stroke();cx.setLineDash([]);}
     if(hov&&!object&&tool!=='paste'&&tool!=='obj'&&tool!=='wall'){cx.strokeStyle='#ffd24a';cx.lineWidth=2;const ww=(tool==='draw'?stamp.w:1),hh=(tool==='draw'?stamp.h:1);pathQ(hov.x,hov.y,ww,hh);cx.stroke();}
     if(sel||drag&&drag.rect){const r=sel||drag.rect;const x0=Math.min(r.x0,r.x1),y0=Math.min(r.y0,r.y1),x1=Math.max(r.x0,r.x1),y1=Math.max(r.y0,r.y1);cx.setLineDash([6,4]);cx.strokeStyle='#4fd1ff';cx.lineWidth=2;pathQ(x0,y0,x1-x0+1,y1-y0+1);cx.stroke();cx.setLineDash([]);}
+    drawMaterialAnchor();
   }
   let animationMap,animationRevision,sceneAnimated=false,lastAnimation=0;
   (function loop(time=0){
@@ -3910,19 +3911,44 @@ export function init2D(root,A){
     if(file)return (await readOutlineFile(file,style)).materials;
     throw Error('Hãy chọn lại hoặc thêm lại tệp ZIP của lớp này.');
   }
-  let materialDrag=null;
+  let materialDrag=null,materialAnchor=null;
+  function setMaterialAnchor(at){
+    materialAnchor=at&&{...at,mapIndex:curMap};
+    dirty=true;
+  }
+  function materialDropPoint(event,batch){
+    const p=pos(event),at=s2g(p.x,p.y);
+    return batch.animation?{x:Math.floor(at.x)+.5,y:Math.floor(at.y)+.5}:at;
+  }
+  function drawMaterialAnchor(){
+    if(!materialAnchor||materialAnchor.mapIndex!==curMap)return;
+    const {x,y}=materialAnchor;
+    const [px,py]=g2s(x,y),valid=inb(x,y)&&ruleCtx().floor(x,y,0);
+    if(px<0||px>cv.clientWidth||py<0||py>cv.clientHeight)return;
+    cx.save();
+    const color=valid?'#ffdc72':'#ff948f';
+    cx.lineWidth=2;cx.strokeStyle=color;
+    cx.beginPath();cx.moveTo(px-9,py);cx.lineTo(px+9,py);
+    cx.moveTo(px,py-9);cx.lineTo(px,py+9);cx.stroke();
+    drawMapName('Điểm neo · X '+coord.format(x)+' · Y '+coord.format(y),[px-8,Math.max(25,py-11),px+8],color);
+    cx.restore();
+  }
+  cv.addEventListener('pointerdown',()=>{if(materialAnchor)setMaterialAnchor(null);},true);
   cv.addEventListener('dragover',event=>{
-    if(materialDrag){event.preventDefault();event.dataTransfer.dropEffect='copy';}
+    if(!materialDrag)return;
+    event.preventDefault();event.dataTransfer.dropEffect='copy';
+    setMaterialAnchor(materialDropPoint(event,materialDrag));
   });
+  cv.addEventListener('dragleave',()=>{if(materialDrag)setMaterialAnchor(null);});
   cv.addEventListener('drop',event=>{
     const batch=materialDrag;
     if(!batch)return;
-    event.preventDefault();materialDrag=null;
-    const p=pos(event),at=s2g(p.x,p.y);
+    event.preventDefault();materialDrag=null;setMaterialAnchor(null);
+    const at=materialDropPoint(event,batch);
     void placeMaterialBatch(batch,at).catch(error=>toast(error.message));
   });
   function startMaterialDrag(event,batch){
-    materialDrag=batch;
+    materialDrag=batch;setMaterialAnchor(null);
     event.dataTransfer.setData('application/x-xuong-material','1');
     event.dataTransfer.effectAllowed='copy';
   }
@@ -3970,6 +3996,7 @@ export function init2D(root,A){
       const previousLength=sheets.length;
       sheets.push(...prepared.slice(previousLength));
       if(!commitInventory(next)){sheets.length=previousLength;return;}
+      if(!materialDrag)setMaterialAnchor(at);
       draw();cv.focus({preventScroll:true});
     });
     placementQueue=job.catch(()=>{});
@@ -4216,6 +4243,6 @@ export function init2D(root,A){
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
     .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
-  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){materialDrag=null;},installDirectionalSet,setAnimatedHero,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){if(materialDrag){materialDrag=null;setMaterialAnchor(null);}},installDirectionalSet,setAnimatedHero,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
   return api;
 }
