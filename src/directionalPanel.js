@@ -10,19 +10,19 @@ export function directionalPanel(editor){
  const status=el('p',{class:'hint',role:'status'}),library=el('div',{class:'row'});
  const role=el('select',{'aria-label':'Vai trò nhân vật'},Object.entries(characterRoles)
   .map(([id,option])=>el('option',{value:id},option.label)));
- const applyRole=button('Dùng làm nhân vật chính',()=>{
-  if(role.value==='hero')editor.setAnimatedHero(selected.id);
-  else{
-   editor.armCharacterPlacement(placement());
-   status.textContent='Bấm lên sàn để đặt '+characterRoles[role.value].label.toLowerCase()+'. Esc để hủy.';
-  }
+ const applyRole=button('Đặt nhân vật chính lên bản đồ',()=>{
+  editor.armCharacterPlacement(placement());
+  status.textContent=role.value==='hero'?'Bấm ô sàn để chọn nơi xuất phát. Esc để hủy.':
+   'Bấm lên sàn để đặt '+characterRoles[role.value].label.toLowerCase()+'. Esc để hủy.';
  });
  const canvas=el('canvas',{width:96,height:96,draggable:'true','aria-label':'Kéo hoạt ảnh vào bản đồ'});
  const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;
  let selected,epoch=0,raf=0,anchor=4;
  const size=el('input',{class:'num',type:'number',min:10,max:400,step:1,required:''});
+ const anchors=baseAnchorPicker(index=>{anchor=index;});
+ anchors.hidden=true;
  const preview=el('div',{hidden:''},el('label',{},'Vai trò nhân vật ',role),applyRole,canvas,
-  baseAnchorPicker(index=>{anchor=index;}),
+  anchors,
   el('form',{class:'row',onsubmit:event=>{
    event.preventDefault();editor.setAnimationScale(selected.id,size.valueAsNumber/100);
    selected=editor.map().cfg.anims.find(set=>set.id===selected.id);
@@ -48,7 +48,7 @@ export function directionalPanel(editor){
   const sets=(editor.map().cfg.anims||[]).filter(set=>Object.values(set.st||{}).some(clip=>clip.n>0));
   library.replaceChildren(...sets.map(set=>button(set.name,()=>show(set))));
  }
- role.onchange=()=>{applyRole.textContent=role.value==='hero'?'Dùng làm nhân vật chính':'Đặt vào màn';};
+ role.onchange=()=>{anchors.hidden=role.value==='hero';applyRole.textContent=role.value==='hero'?'Đặt nhân vật chính lên bản đồ':'Đặt vào màn';};
  function placement(){
   return {animation:selected,anchor,role:role.value};
  }

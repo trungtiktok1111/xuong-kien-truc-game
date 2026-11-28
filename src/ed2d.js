@@ -115,12 +115,14 @@ export function init2D(root,A){
     if(t==='goal'){b.tile=null;}
     if(t==='door'){Object.assign(b,{name:'Cửa',tile:null,to:Math.min(MAPS.length-1,curMap+1)===curMap?0:curMap+1,tx:null,ty:null});}
     return b;}
+  const entityAnimation=e=>e.t==='start'?M.cfg.heroAnim:e.anim;
   function drawEnts(z){isoHB=[];if(vis[2])for(const wall of builtWallFaces(renderWallEnts(),true))drawGateWall(wall);for(const e of M.ents){
       if(e.wallLine)continue;
       if(e.placedProp){if(vis[sceneEntityLayer(e)]){for(const wall of gateWalls(e,true))drawGateWall(wall);drawIndependentProp(e);}continue;}
       const X=view.x+e.x*CELL*z,Y=view.y+e.y*CELL*z,S=CELL*z,col=OT[e.t][2];
       const [px,py]=g2s(e.x+.5,e.y+.5),size=S*(e.visualScale??1);
-      const animated=e.anim&&isoAN()?.drawChar(cx,{x:0,y:0},e.anim,px,py,S,performance.now()/1000,
+      const anim=entityAnimation(e);
+      const animated=anim&&isoAN()?.drawChar(cx,{x:0,y:0},anim,px,py,S,performance.now()/1000,
         {grounded:true,scale:e.visualScale});
       if(!animated&&e.tile&&e.t!=='deco'){drawTile(cx,enc(e.tile.sid,e.tile.idx),px-size/2,py-size/2,size);}
       else if(!animated){cx.fillStyle='#0008';cx.fillRect(X+1,Y+1,S-2,S-2);if(S>=14){cx.font='bold '+Math.max(8,S*.32)+'px system-ui';cx.textAlign='center';cx.textBaseline='middle';cx.fillStyle='#fff';cx.fillText((e.name||OT[e.t][1]).slice(0,4),X+S/2,Y+S/2+1);}}
@@ -222,10 +224,10 @@ export function init2D(root,A){
         isoHB.push({e,r:[rx+ws*.25,ry+ws*.3,rx+ws*.75,ry+ws],f:[e.x+1+zb[0],e.y+1+zb[1],e.x+1+zb[0]+zb[2],e.y+1+zb[1]+zb[3]]});continue;}
       const p=g2s(e.x+.5,e.y+.5),col=OT[e.t][2],sz=S*1.5*(e.visualScale??1);
       cx.lineWidth=sel?3:1.5;cx.strokeStyle=col;pathQ(e.x,e.y,1,1);cx.stroke();
-      if(e.tile){tileG0(enc(e.tile.sid,e.tile.idx),p[0]-sz/2,p[1]-sz*.85,sz);}
-      else{let ok=false;if(e.anim){try{const A=isoAN();if(A){ok=A.drawChar(cx,{x:0,y:0},e.anim,p[0],p[1],sc,performance.now()/1000,{iso:true,grounded:true,scale:e.visualScale});}}catch(_){}}
+      if(e.tile&&!entityAnimation(e)){tileG0(enc(e.tile.sid,e.tile.idx),p[0]-sz/2,p[1]-sz*.85,sz);}
+      else{let ok=false;const anim=entityAnimation(e);if(anim){try{const A=isoAN();if(A){ok=A.drawChar(cx,{x:0,y:0},anim,p[0],p[1],sc,performance.now()/1000,{iso:true,grounded:true,scale:e.visualScale});}}catch(_){}}
         if(!ok){cx.fillStyle=col+'55';pathQ(e.x,e.y,1,1);cx.fill();}
-        if(view.z>=.9){cx.font='bold '+Math.max(9,S*.5)+'px system-ui';cx.textAlign='center';cx.textBaseline='alphabetic';const t=e.name||OT[e.t][1],w=cx.measureText(t).width+6;cx.fillStyle='#000b';cx.fillRect(p[0]-w/2,p[1]-sz*.95-2,w,Math.max(11,S*.5)+4);cx.fillStyle=col;cx.fillText(t,p[0],p[1]-sz*.95+Math.max(9,S*.5)-1);}}
+        if(view.z>=.9){cx.font='bold '+Math.max(9,S*.5)+'px system-ui';cx.textAlign='center';cx.textBaseline='alphabetic';const t=entityName(e),w=cx.measureText(t).width+6;cx.fillStyle='#000b';cx.fillRect(p[0]-w/2,p[1]-sz*.95-2,w,Math.max(11,S*.5)+4);cx.fillStyle=col;cx.fillText(t,p[0],p[1]-sz*.95+Math.max(9,S*.5)-1);}}
       isoHB.push({e,r:[p[0]-sz/2,p[1]-sz*.85,p[0]+sz/2,p[1]+S*.1],f:[e.x,e.y,e.x+1,e.y+1]});}
     for(const g of B.OV){const k2=sc*.95/B.CQ,wp=AG?g.c.width*2*S/B.CQ:g.c.width*k2,hp=AG?g.c.height*2*S*ANG_R/B.CQ:g.c.height*k2,p=g2s(g.xc,g.yb);cx.imageSmoothingEnabled=true;cx.drawImage(g.c,p[0]-wp/2,p[1]-hp,wp,hp);cx.imageSmoothingEnabled=false;}
     for(const c of COV){const sh=sheets[c.cv.sid];if(!sh||!sh.img)continue;const sx=(c.cv.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(c.cv.idx/sh.cols)*(sh.tw+sh.margin);cx.imageSmoothingEnabled=true;cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,c.rx,c.ry,c.ws,c.ws);cx.imageSmoothingEnabled=false;}
@@ -290,6 +292,10 @@ export function init2D(root,A){
     cx.fillStyle=color;cx.fillText(name,x,y,width-10);cx.restore();
   }
   function entityName(e){
+    if(e.t==='start'){
+      const hero=M.cfg.anims?.find(set=>set.id===M.cfg.heroAnim);
+      if(hero)return hero.name+' · Xuất phát';
+    }
     const name=e.name?.trim();
     if(name&&(!/^Mảnh \d+$/.test(name)||!e.tile))return name;
     const sh=e.tile&&sheets[e.tile.sid];
@@ -369,7 +375,7 @@ export function init2D(root,A){
       animationMap=M;animationRevision=buildRevision;
       const sets=new Map((M?.cfg.anims||[]).map(set=>[set.id,set]));
       sceneAnimated=!!M?.ents.some(e=>{
-        const set=sets.get(e.anim);
+        const set=sets.get(entityAnimation(e));
         return set?.st.idle?.n>1;
       });
     }
@@ -3965,9 +3971,9 @@ export function init2D(root,A){
     materialAnchor=at&&{...at,batch,mapIndex:curMap};
     dirty=true;
   }
-  function materialDropPoint(event){
+  function materialDropPoint(event,batch){
     const p=pos(event),at=s2g(p.x,p.y);
-    return at;
+    return batch?.role==='hero'?{x:Math.floor(at.x)+.5,y:Math.floor(at.y)+.5}:at;
   }
   function drawMaterialAnchor(){
     if(!materialAnchor||materialAnchor.mapIndex!==curMap)return;
@@ -3978,7 +3984,7 @@ export function init2D(root,A){
     const color=valid?'#ffdc72':'#ff948f';
     cx.lineWidth=2;cx.strokeStyle=color;
     const batch=materialAnchor.batch;
-    const index=batch?.anchor??4;
+    const index=batch?.role==='hero'?4:(batch?.anchor??4);
     const bounds=batch?.bounds||[-.18,-.18,.18,.18];
     const points=baseAnchorPoints(bounds),[ox,oy]=points[index];
     drawBaseAnchorPoints(points.map(([u,v])=>[x+u-ox,y+v-oy]),index,color);
@@ -3992,11 +3998,13 @@ export function init2D(root,A){
     characterPlacement=null;
     if(map!==M)return;
     event.preventDefault();event.stopImmediatePropagation();
-    if(batch.role==='hero')setAnimatedHero(batch.animation.id);
-    else void placeMaterialBatch(batch,materialDropPoint(event)).catch(error=>toast(error.message));
+    void placeMaterialBatch(batch,materialDropPoint(event,batch)).catch(error=>{
+      if(batch.role==='hero'&&M===map&&!characterPlacement)characterPlacement={batch,map};
+      toast(error.message);
+    });
   },true);
   cv.addEventListener('pointermove',event=>{
-    if(characterPlacement?.map===M)setMaterialAnchor(materialDropPoint(event),characterPlacement.batch);
+    if(characterPlacement?.map===M)setMaterialAnchor(materialDropPoint(event,characterPlacement.batch),characterPlacement.batch);
   });
   cv.addEventListener('pointerleave',()=>{if(characterPlacement)setMaterialAnchor(null);});
   cv.addEventListener('keydown',event=>{
@@ -4011,15 +4019,14 @@ export function init2D(root,A){
   cv.addEventListener('dragover',event=>{
     if(!materialDrag)return;
     event.preventDefault();event.dataTransfer.dropEffect='copy';
-    setMaterialAnchor(materialDropPoint(event));
+    setMaterialAnchor(materialDropPoint(event,materialDrag));
   });
   cv.addEventListener('dragleave',()=>{if(materialDrag)setMaterialAnchor(null);});
   cv.addEventListener('drop',event=>{
     const batch=materialDrag;
     if(!batch)return;
     event.preventDefault();materialDrag=null;setMaterialAnchor(null);
-    if(batch.animation&&batch.role==='hero'){setAnimatedHero(batch.animation.id);return;}
-    const at=materialDropPoint(event);
+    const at=materialDropPoint(event,batch);
     void placeMaterialBatch(batch,at).catch(error=>toast(error.message));
   });
   function startMaterialDrag(event,batch){
@@ -4080,13 +4087,24 @@ export function init2D(root,A){
       const floor=ruleCtx().floor;
       const entries=batch.animation?null:await batch.parts;
       const bounds=batch.bounds||(entries?inventoryFootBounds(entries.flatMap(({e})=>propFootprint(e))):[-.18,-.18,.18,.18]);
-      const [ox,oy]=baseAnchorPoints(bounds)[batch.anchor??4],x=at.x-ox,y=at.y-oy;
+      const [ox,oy]=baseAnchorPoints(bounds)[batch.role==='hero'?4:(batch.anchor??4)],x=at.x-ox,y=at.y-oy;
       if(batch.animation){
         if(!map.cfg.anims?.some(set=>set.id===batch.animation.id))throw Error('Bộ hoạt ảnh chưa có trong màn.');
-        if(!floor(x,y,.22))throw Error('Hãy đặt hoạt ảnh trên sàn.');
-        const role=characterRoles[batch.role]||characterRoles.villager;
-        parts.push({...newEnt(role.type,x-.5,y-.5),...role.stats,name:batch.animation.name,anim:batch.animation.id,
-          characterRole:batch.role,tile:null,text:role.text});
+        if(batch.role==='hero'){
+          if(!floor(x,y,.28)||!linkWalkability(map,currentPaintZones()).free(x,y)){
+            throw Error('Chọn ô sàn đi được để đặt nhân vật chính.');
+          }
+          const start=next.ents.find(e=>e.t==='start');
+          const position={x:x-.5,y:y-.5};
+          if(start)Object.assign(start,position);
+          else next.ents.push(newEnt('start',position.x,position.y));
+          next.cfg.heroAnim=batch.animation.id;
+        }else{
+          if(!floor(x,y,.22))throw Error('Hãy đặt hoạt ảnh trên sàn.');
+          const role=characterRoles[batch.role]||characterRoles.villager;
+          parts.push({...newEnt(role.type,x-.5,y-.5),...role.stats,name:batch.animation.name,anim:batch.animation.id,
+            characterRole:batch.role,tile:null,text:role.text});
+        }
       }else for(const {e,sheet} of entries){
         const sid=await loadBuiltinSheet(sheet,prepared);
         if(!floor(e.x+x+1,e.y+y+1,0))throw Error('Một phần cụm nằm ngoài sàn.');
@@ -4097,7 +4115,8 @@ export function init2D(root,A){
       const previousLength=sheets.length;
       sheets.push(...prepared.slice(previousLength));
       if(!commitInventory(next)){sheets.length=previousLength;return;}
-      if(!materialDrag)setMaterialAnchor(at,batch);
+      if(!materialDrag&&!characterPlacement)setMaterialAnchor(at,batch);
+      if(batch.role==='hero')toast('Đã đặt nhân vật chính. Bấm Chơi để thử từ ô này.');
       draw();cv.focus({preventScroll:true});
     });
     placementQueue=job.catch(()=>{});
@@ -4137,10 +4156,6 @@ export function init2D(root,A){
     const set=M.cfg.anims?.find(set=>set.id===id);
     if(!set)return;
     pushUndo();set.visualScale=scale;anK='';after();dirty=true;
-  }
-  function setAnimatedHero(id){
-    if(!M.cfg.anims?.some(set=>set.id===id))return;
-    pushUndo();M.cfg.heroAnim=id;after();draw();toast('Đã chọn hoạt ảnh cho nhân vật chính.');
   }
   async function outlineLayerChoices(role,source,files,style){
     const pack=await outlineLayerPack(source,files,style);
@@ -4372,6 +4387,6 @@ export function init2D(root,A){
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
     .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
-  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){if(materialDrag){materialDrag=null;setMaterialAnchor(null);}},installDirectionalSet,armCharacterPlacement,setAnimatedHero,setAnimationScale,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){if(materialDrag){materialDrag=null;setMaterialAnchor(null);}},installDirectionalSet,armCharacterPlacement,setAnimationScale,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
   return api;
 }

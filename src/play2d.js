@@ -406,7 +406,7 @@ export function play2D(o){
       if(n.p){if(P.inv>0&&Math.floor(t*14)%2)continue;
         cx.save();
         if(P.crouching){const y=oy+P.y*s;cx.translate(0,y);cx.scale(1,playerSize.crouching/playerSize.standing);cx.translate(0,-y);}
-        if(CF.outlineHero&&sheets[CF.hero.sid]?.img){
+        if(CF.outlineHero&&!CF.heroAnim&&sheets[CF.hero.sid]?.img){
           const actor={...CF.outlineHero,tile:CF.hero,x:P.x-1,y:P.y-1};
           if(CF.outline?.surface)actor.sc=playerSize.standing*.75/Math.max(.05,tileSpan(sheets[actor.tile.sid],actor.tile.idx));
           drawPlacedProp(cx,actor,sheets[actor.tile.sid],placedPropFrame(actor,()=>[ox+P.x*s,oy+P.y*s],ISO?s:s/.75,ISO?'iso':'top'));
@@ -503,15 +503,15 @@ export function playGame(o){const D=o.M;if(!D.maps||D.maps.length<2)return play2
   };
   const run=(i,sp)=>{
     cur=play2D({M:{...maps[i]},sheets:o.sheets,spawn:sp,canUseDoor:landing,onExit:()=>{stopped=true;o.onExit&&o.onExit();},
-      onTick:q=>{try{localStorage.setItem(key,JSON.stringify({i,x:q.x,y:q.y,hp:q.hp,score:q.score}));}catch(e){}},
+      onTick:q=>{if(o.preview)return;try{localStorage.setItem(key,JSON.stringify({i,x:q.x,y:q.y,hp:q.hp,score:q.score}));}catch(e){}},
       onDoor:d=>{
         const dp=landing(d);
         if(!dp)return;
-        try{localStorage.setItem(key,JSON.stringify({i:d.to,x:dp.x,y:dp.y,hp:d.hp,score:d.score}));}catch(e){}
+        if(!o.preview)try{localStorage.setItem(key,JSON.stringify({i:d.to,x:dp.x,y:dp.y,hp:d.hp,score:d.score}));}catch(e){}
         const c=cur;setTimeout(()=>{c.stop(true);if(!stopped)run(d.to,{...dp,hp:d.hp,score:d.score});},0);
       }});
   };
-  let sv=null;try{sv=JSON.parse(localStorage.getItem(key)||'null');}catch(e){}
+  let sv=null;if(!o.preview)try{sv=JSON.parse(localStorage.getItem(key)||'null');}catch(e){}
   if(sv&&maps[sv.i]){
     const ov=el('div',{style:'position:fixed;inset:0;z-index:300;background:#10161d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#fff;font:700 22px system-ui'});
     const b=(t,f,c)=>el('div',{style:'padding:12px 26px;border-radius:20px;color:#2a1a08;font-size:18px;background:'+c,onclick:()=>{ov.remove();f();}},t);
