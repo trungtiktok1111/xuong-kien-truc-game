@@ -117,8 +117,8 @@ function pngSize(bytes){
 
 function sideAction(name){
  const id=name.toLowerCase();
- const aliases={attack1:'atk',attack6_injump:'atk6',idle1:'idle',hit1:'hit',
-  run_forward:'run',walk_forward:'walk',run_backpedal:'run_back',walk_backpedal:'walk_back',attack_combo:'combo'};
+ const aliases={attack:'atk',attack1:'atk1',attack2:'atk2',attack3:'atk3',attack4:'atk4',attack5:'atk5',attack6:'atk6',attack6_injump:'atk6',attack7:'atk7',attack8:'atk8',idle1:'idle',idle2:'idle',hit1:'hit',hit2:'hit2',
+  run_forward:'run',walk_forward:'walk',run_backpedal:'run_back',walk_backpedal:'walk_back',attack_combo:'atk_combo'};
  return aliases[id]||id.replace(/^attack(?=\d)/,'atk');
 }
 
