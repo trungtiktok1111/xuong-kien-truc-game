@@ -1,7 +1,8 @@
+import {baseAnchorPoints} from './baseAnchors.js';
 import {cropContactFrame} from './cropContact.js';
 import {drawAssemblyGuides} from './assemblyGuides.js';
 import {stonePavingSheets} from './stonePaving.js';
-import {applyOutlinePropEdits,arrangementLayer,canArrangeProp,propFootprint,propPlacement,propGroup,transformPropGroup} from './outlinePropPlacement.js';
+import {applyOutlinePropEdits,arrangementLayer,canArrangeProp,propFootprint,propPlacement,propGroup,transformPropGroup,scaleProp} from './outlinePropPlacement.js';
 import {drawSurfaceTerrain,surfaceTerrainTile} from './surfaceContours.js';
 import {outlineHeight} from './outlineAnchors.js';
 import {surfaceLevelById} from './surfaceLibrary.js';
@@ -116,7 +117,11 @@ export function init2D(root,A){
       if(e.wallLine)continue;
       if(e.placedProp){if(vis[sceneEntityLayer(e)]){for(const wall of gateWalls(e,true))drawGateWall(wall);drawIndependentProp(e);}continue;}
       const X=view.x+e.x*CELL*z,Y=view.y+e.y*CELL*z,S=CELL*z,col=OT[e.t][2];
-      if(e.tile&&e.t!=='deco'){drawTile(cx,enc(e.tile.sid,e.tile.idx),X,Y,S);}else{cx.fillStyle='#0008';cx.fillRect(X+1,Y+1,S-2,S-2);if(S>=14){cx.font='bold '+Math.max(8,S*.32)+'px system-ui';cx.textAlign='center';cx.textBaseline='middle';cx.fillStyle='#fff';cx.fillText((e.name||OT[e.t][1]).slice(0,4),X+S/2,Y+S/2+1);}}
+      const [px,py]=g2s(e.x+.5,e.y+.5),size=S*(e.visualScale??1);
+      const animated=e.anim&&isoAN()?.drawChar(cx,{x:0,y:0},e.anim,px,py,S,performance.now()/1000,
+        {grounded:true,pose:e.animationPose,scale:e.visualScale});
+      if(!animated&&e.tile&&e.t!=='deco'){drawTile(cx,enc(e.tile.sid,e.tile.idx),px-size/2,py-size/2,size);}
+      else if(!animated){cx.fillStyle='#0008';cx.fillRect(X+1,Y+1,S-2,S-2);if(S>=14){cx.font='bold '+Math.max(8,S*.32)+'px system-ui';cx.textAlign='center';cx.textBaseline='middle';cx.fillStyle='#fff';cx.fillText((e.name||OT[e.t][1]).slice(0,4),X+S/2,Y+S/2+1);}}
       cx.strokeStyle=col;cx.lineWidth=e.id===selId?3:1.5;cx.strokeRect(X+1,Y+1,S-2,S-2);
       isoHB.push({e,r:[X,Y,X+S,Y+S],f:[e.x,e.y,e.x+1,e.y+1]});
       if(z>=2.2){cx.font='bold '+Math.max(9,S*.3)+'px system-ui';cx.textAlign='center';cx.textBaseline='alphabetic';cx.fillStyle=col;cx.fillText(OT[e.t][0],X+S*.2,Y+S*.3);}}
@@ -213,10 +218,10 @@ export function init2D(root,A){
         const zb=e.zb||[-(e.fx||1),-(e.fy||1),e.fx||1,e.fy||1],fx=-zb[0],fy=-zb[1];
         if(sel||(cur&&view.z>=.8)){cx.lineWidth=sel?2.5:1;cx.strokeStyle=sel?'#ffd24a':'rgba(217,160,102,.7)';if(e.zp&&e.zp.length>2){const dz=decoZones([e])[0];zPath(cx,dz,g2s);}else pathQ(e.x+1+zb[0],e.y+1+zb[1],zb[2],zb[3]);cx.stroke();if(sel){cx.setLineDash([5,3]);cx.strokeRect(rx+ws*.2,ry+ws*.15,ws*.6,ws*.85);cx.setLineDash([]);}}
         isoHB.push({e,r:[rx+ws*.25,ry+ws*.3,rx+ws*.75,ry+ws],f:[e.x+1+zb[0],e.y+1+zb[1],e.x+1+zb[0]+zb[2],e.y+1+zb[1]+zb[3]]});continue;}
-      const p=g2s(e.x+.5,e.y+.5),col=OT[e.t][2],sz=S*1.5;
+      const p=g2s(e.x+.5,e.y+.5),col=OT[e.t][2],sz=S*1.5*(e.visualScale??1);
       cx.lineWidth=sel?3:1.5;cx.strokeStyle=col;pathQ(e.x,e.y,1,1);cx.stroke();
       if(e.tile){tileG0(enc(e.tile.sid,e.tile.idx),p[0]-sz/2,p[1]-sz*.85,sz);}
-      else{let ok=false;if(e.anim){try{const A=isoAN();if(A){ok=A.drawChar(cx,{x:0,y:0},e.anim,p[0],p[1],sc,performance.now()/1000,{iso:true,grounded:true,pose:e.animationPose});}}catch(_){}}
+      else{let ok=false;if(e.anim){try{const A=isoAN();if(A){ok=A.drawChar(cx,{x:0,y:0},e.anim,p[0],p[1],sc,performance.now()/1000,{iso:true,grounded:true,pose:e.animationPose,scale:e.visualScale});}}catch(_){}}
         if(!ok){cx.fillStyle=col+'55';pathQ(e.x,e.y,1,1);cx.fill();}
         if(view.z>=.9){cx.font='bold '+Math.max(9,S*.5)+'px system-ui';cx.textAlign='center';cx.textBaseline='alphabetic';const t=e.name||OT[e.t][1],w=cx.measureText(t).width+6;cx.fillStyle='#000b';cx.fillRect(p[0]-w/2,p[1]-sz*.95-2,w,Math.max(11,S*.5)+4);cx.fillStyle=col;cx.fillText(t,p[0],p[1]-sz*.95+Math.max(9,S*.5)-1);}}
       isoHB.push({e,r:[p[0]-sz/2,p[1]-sz*.85,p[0]+sz/2,p[1]+S*.1],f:[e.x,e.y,e.x+1,e.y+1]});}
@@ -1953,16 +1958,30 @@ export function init2D(root,A){
         parts:arrange?candidates:null,entities:M.ents,wallEdges});
     }
     if(!item)return;
-    const feet=(candidates||parts).flatMap(e=>propFootprint(withAssetSource(e,M.cfg)));
-    const [l,t,r,b]=inventoryFootBounds(feet);
-    const [x,y]=g2s((l+r)/2,(t+b)/2);
+    const feet=(candidates||parts).flatMap(inventoryFootprint);
+    const bounds=inventoryFootBounds(feet);
     cx.save();
     cx.lineWidth=2;cx.strokeStyle='#ffd879';cx.fillStyle='#ffd87948';
     for(const zone of feet){zPath(cx,zone,g2s);cx.fill();cx.stroke();}
-    cx.beginPath();cx.moveTo(x-8,y);cx.lineTo(x+8,y);cx.moveTo(x,y-8);cx.lineTo(x,y+8);
-    cx.lineWidth=4;cx.strokeStyle='#192834';cx.stroke();
-    cx.lineWidth=2;cx.strokeStyle='#ffd879';cx.stroke();
+    drawBaseAnchorPoints(baseAnchorPoints(bounds),4,'#ffd879');
     cx.restore();
+  }
+  function actorFoot(x,y,scale=1){
+    const radius=.18*scale;
+    return {k:'ell',x:x-radius,y:y-radius,w:2*radius,h:2*radius};
+  }
+  function inventoryFootprint(e){
+    if(e.t==='deco')return propFootprint(withAssetSource(e,M.cfg));
+    const scale=e.visualScale??1,set=M.cfg.anims?.find(set=>set.id===e.anim);
+    return [actorFoot(e.x+.5,e.y+.5,scale*(set?.visualScale??1))];
+  }
+  function drawBaseAnchorPoints(points,active,color){
+    points.forEach(([x,y],i)=>{
+      const [px,py]=g2s(x,y);
+      cx.beginPath();cx.arc(px,py,i===active?4:3,0,2*Math.PI);
+      cx.fillStyle=i===active?color:'#243340';cx.fill();
+      cx.lineWidth=1.25;cx.strokeStyle=i===active?'#243340':color;cx.stroke();
+    });
   }
   function inventoryFootBounds(zones){
     const bounds=zones.map(zBounds);
@@ -2015,10 +2034,25 @@ export function init2D(root,A){
     map.ents.push(piece);
     return piece;
   }
+  function resizeInventory(item,scale){
+    if(!Number.isFinite(scale)||scale<.1||scale>4)return;
+    const next=clone(M),source=readInventoryPiece(next,item);
+    if(!source)return;
+    const group=propGroup(next.ents,source),factor=scale/(source.visualScale??1);
+    const [l,t,r,b]=inventoryFootBounds(group.flatMap(inventoryFootprint));
+    const x=(l+r)/2,y=(t+b)/2;
+    for(const piece of group){
+      if(piece.t==='deco'){
+        Object.assign(piece,scaleProp(piece,factor,x,y),{placedProp:true});
+      }
+      piece.visualScale=scale;
+    }
+    if(commitInventory(next)){inventoryId=source.id;dirty=true;draw();}
+  }
   function moveInventory(item,x,y,copy=false){
     if(!Number.isFinite(x)||!Number.isFinite(y)||!inb(x,y)){toast('Chọn tọa độ trong bản đồ.');return;}
     const {e,cell}=item;
-    const precise=e.placedProp||canArrangeProp(e)&&!cell;
+    const precise=e.placedProp||e.anim||canArrangeProp(e)&&!cell;
     const anchor=e.placedProp?1:0;
     const position=value=>precise?value-anchor:Math.floor(value);
     const nx=position(x),ny=position(y);
@@ -2280,11 +2314,20 @@ export function init2D(root,A){
     }
     if(inventoryItem){
       const e=inventoryItem.e;
-      const [l,t,r,b]=inventoryFootBounds(propGroup(M.ents,e).flatMap(part=>propFootprint(withAssetSource(part,M.cfg))));
+      const [l,t,r,b]=inventoryFootBounds(propGroup(M.ents,e).flatMap(inventoryFootprint));
       body.append(el('p',{class:'hint'},entityName(e)+' · Chân '+coord.format(r-l)+' × '+coord.format(b-t)+
         ' ô · Tâm đáy '+xy([(l+r)/2,(t+b)/2])));
     }
     if(!inventoryItem)return;
+    if(inventoryItem.e.t==='deco'&&!inventoryItem.e.wallId&&!inventoryItem.e.wallLine&&!inventoryItem.e.gateAssembly||
+       ['npc','enemy'].includes(inventoryItem.e.t)){
+      const selected=inventoryItem;
+      const scale=el('input',{class:'num',type:'number',min:10,max:400,step:1,required:'',
+        value:Math.round((selected.e.visualScale??1)*100)});
+      body.append(el('form',{class:'row inventory-controls',onsubmit:event=>{
+        event.preventDefault(); resizeInventory(selected,scale.valueAsNumber/100);
+      }},el('label',{},'Kích thước vật (%) ',scale),el('button',{type:'submit',class:'b'},'Đổi kích thước')));
+    }
     const item=inventoryItem,[x,y]=inventoryPoint(item.e);
     const coordinate=(axis,value)=>el('input',{class:'num',type:'number',step:'any',required:'',value:+value.toFixed(3),'aria-label':'Tọa độ '+axis});
     const xInput=coordinate('X',x),yInput=coordinate('Y',y);
@@ -3913,13 +3956,13 @@ export function init2D(root,A){
   }
   let materialDrag=null,materialAnchor=null;
   let materialDragImage;
-  function setMaterialAnchor(at){
-    materialAnchor=at&&{...at,mapIndex:curMap};
+  function setMaterialAnchor(at,batch=materialDrag){
+    materialAnchor=at&&{...at,batch,mapIndex:curMap};
     dirty=true;
   }
-  function materialDropPoint(event,batch){
+  function materialDropPoint(event){
     const p=pos(event),at=s2g(p.x,p.y);
-    return batch.animation?{x:Math.floor(at.x)+.5,y:Math.floor(at.y)+.5}:at;
+    return at;
   }
   function drawMaterialAnchor(){
     if(!materialAnchor||materialAnchor.mapIndex!==curMap)return;
@@ -3929,8 +3972,11 @@ export function init2D(root,A){
     cx.save();
     const color=valid?'#ffdc72':'#ff948f';
     cx.lineWidth=2;cx.strokeStyle=color;
-    cx.beginPath();cx.moveTo(px-9,py);cx.lineTo(px+9,py);
-    cx.moveTo(px,py-9);cx.lineTo(px,py+9);cx.stroke();
+    const batch=materialAnchor.batch;
+    const index=batch?.anchor??4;
+    const bounds=batch?.bounds||[-.18,-.18,.18,.18];
+    const points=baseAnchorPoints(bounds),[ox,oy]=points[index];
+    drawBaseAnchorPoints(points.map(([u,v])=>[x+u-ox,y+v-oy]),index,color);
     drawMapName('Điểm neo · X '+coord.format(x)+' · Y '+coord.format(y),[px-8,Math.max(25,py-11),px+8],color);
     cx.restore();
   }
@@ -3938,18 +3984,28 @@ export function init2D(root,A){
   cv.addEventListener('dragover',event=>{
     if(!materialDrag)return;
     event.preventDefault();event.dataTransfer.dropEffect='copy';
-    setMaterialAnchor(materialDropPoint(event,materialDrag));
+    setMaterialAnchor(materialDropPoint(event));
   });
   cv.addEventListener('dragleave',()=>{if(materialDrag)setMaterialAnchor(null);});
   cv.addEventListener('drop',event=>{
     const batch=materialDrag;
     if(!batch)return;
     event.preventDefault();materialDrag=null;setMaterialAnchor(null);
-    const at=materialDropPoint(event,batch);
+    const at=materialDropPoint(event);
     void placeMaterialBatch(batch,at).catch(error=>toast(error.message));
   });
   function startMaterialDrag(event,batch){
     materialDrag=batch;setMaterialAnchor(null);
+    if(batch.animation){
+      const scale=batch.animation.visualScale??1;
+      batch.bounds=zBounds(actorFoot(0,0,scale));
+    }else{
+      batch.parts=materialParts(batch);
+      batch.parts.then(parts=>{
+        batch.bounds=inventoryFootBounds(parts.flatMap(({e})=>propFootprint(e)));
+        dirty=true;
+      },()=>{});
+    }
     if(!materialDragImage){
       materialDragImage=Object.assign(document.createElement('canvas'),{width:1,height:1});
       materialDragImage.style.cssText='position:fixed;left:0;top:0;pointer-events:none';
@@ -3960,6 +4016,32 @@ export function init2D(root,A){
     event.dataTransfer.setData('application/x-xuong-material','1');
     event.dataTransfer.effectAllowed='copy';
   }
+  async function materialParts(batch){
+    const parts=[];
+    let right=null;
+    for(const {source,id} of batch.assets){
+      const style={...batch.style,manualScale:batch.scales[source]};
+      const pack=await outlineLayerPack(source,batch.files,style);
+      let item=pack[outlineRoles[batch.role]]?.find(asset=>asset.id===id),sourceSheets=pack.sheets;
+      if(!item&&pack.raw&&batch.role==='props'){
+        const manual=await outlineManualImage(pack.raw,id,'props',{...style,packScale:pack.scale});
+        item=manual.item;sourceSheets=manual.sheets;
+      }
+      if(!item)throw Error('Mẫu này chưa có dữ liệu đặt theo lớp đã chọn.');
+      const group='placed-'+crypto.randomUUID();
+      const chunk=batch.role==='house'?item.ents.map(e=>({...e,x:e.x-item.w/2,y:e.y-item.h/2,housePlacement:true})):
+        [item.create(0,0,group)];
+      const bounds=inventoryFootBounds(chunk.flatMap(propFootprint));
+      const dx=right===null?0:right+.25-bounds[0];
+      right=bounds[2]+dx;
+      for(const [i,e] of chunk.entries()){
+        delete e.outlineAutoProp;delete e.outlineAutoHouse;
+        e.id=group+'-'+i;e.arrangementGroup=group;e.x+=dx;
+        parts.push({e,sheet:sourceSheets[e.tile.sid]});
+      }
+    }
+    return parts;
+  }
   let placementQueue=Promise.resolve();
   function placeMaterialBatch(batch,at){
     const mapIndex=curMap;
@@ -3968,43 +4050,24 @@ export function init2D(root,A){
       if(!inb(at.x,at.y))throw Error('Hãy thả vào trong bản đồ.');
       const map=M,revision=buildRevision,prepared=sheets.slice(),sheetCount=sheets.length,next=clone(map),parts=[];
       const floor=ruleCtx().floor;
+      const entries=batch.animation?null:await batch.parts;
+      const bounds=batch.bounds||(entries?inventoryFootBounds(entries.flatMap(({e})=>propFootprint(e))):[-.18,-.18,.18,.18]);
+      const [ox,oy]=baseAnchorPoints(bounds)[batch.anchor??4],x=at.x-ox,y=at.y-oy;
       if(batch.animation){
-        const x=Math.floor(at.x),y=Math.floor(at.y);
         if(!map.cfg.anims?.some(set=>set.id===batch.animation.id))throw Error('Bộ hoạt ảnh chưa có trong màn.');
-        if(!floor(x+.5,y+.5,.22))throw Error('Hãy đặt hoạt ảnh trên sàn.');
-        parts.push({...newEnt('npc',x,y),name:batch.animation.name,anim:batch.animation.id,animationPose:batch.pose,tile:null,text:''});
-      }else{
-        let right=null;
-        for(const {source,id} of batch.assets){
-          const style={...batch.style,manualScale:batch.scales[source]};
-          const pack=await outlineLayerPack(source,batch.files,style);
-          let item=pack[outlineRoles[batch.role]]?.find(asset=>asset.id===id),sourceSheets=pack.sheets;
-          if(!item&&pack.raw&&batch.role==='props'){
-            const manual=await outlineManualImage(pack.raw,id,'props',{...style,packScale:pack.scale});
-            item=manual.item;sourceSheets=manual.sheets;
-          }
-          if(!item)throw Error('Mẫu này chưa có dữ liệu đặt theo lớp đã chọn.');
-          const group='placed-'+crypto.randomUUID();
-          const chunk=batch.role==='house'?item.ents.map(e=>({...e,x:e.x+at.x-item.w/2,y:e.y+at.y-item.h/2,housePlacement:true})):
-            [item.create(at.x,at.y,group)];
-          const bounds=inventoryFootBounds(chunk.flatMap(propFootprint));
-          const dx=right===null?0:right+.25-bounds[0];
-          right=bounds[2]+dx;
-          for(const [i,e] of chunk.entries()){
-            e.tile={...e.tile,sid:await loadBuiltinSheet(sourceSheets[e.tile.sid],prepared)};
-            delete e.outlineAutoProp;delete e.outlineAutoHouse;
-            e.id=group+'-'+i;e.arrangementGroup=group;e.x+=dx;
-            if(!floor(e.x+1,e.y+1,0))throw Error('Một phần cụm nằm ngoài sàn.');
-            parts.push(e);
-          }
-        }
+        if(!floor(x,y,.22))throw Error('Hãy đặt hoạt ảnh trên sàn.');
+        parts.push({...newEnt('npc',x-.5,y-.5),name:batch.animation.name,anim:batch.animation.id,animationPose:batch.pose,tile:null,text:''});
+      }else for(const {e,sheet} of entries){
+        const sid=await loadBuiltinSheet(sheet,prepared);
+        if(!floor(e.x+x+1,e.y+y+1,0))throw Error('Một phần cụm nằm ngoài sàn.');
+        parts.push({...e,x:e.x+x,y:e.y+y,tile:{...e.tile,sid}});
       }
       if(map!==M||revision!==buildRevision||sheetCount!==sheets.length)throw Error('Màn đang chỉnh đã đổi. Hãy kéo lại.');
       next.ents.push(...parts);
       const previousLength=sheets.length;
       sheets.push(...prepared.slice(previousLength));
       if(!commitInventory(next)){sheets.length=previousLength;return;}
-      if(!materialDrag)setMaterialAnchor(at);
+      if(!materialDrag)setMaterialAnchor(at,batch);
       draw();cv.focus({preventScroll:true});
     });
     placementQueue=job.catch(()=>{});
@@ -4016,6 +4079,12 @@ export function init2D(root,A){
     if(M!==map||sheets.length!==count)throw Error('Màn đang chỉnh đã đổi. Hãy nạp lại.');
     sheets.push(...prepared.slice(count));pushUndo();
     M.cfg.anims=[...(M.cfg.anims||[]),set];anK='';after();draw();
+  }
+  function setAnimationScale(id,scale){
+    if(!Number.isFinite(scale)||scale<.1||scale>4)return;
+    const set=M.cfg.anims?.find(set=>set.id===id);
+    if(!set)return;
+    pushUndo();set.visualScale=scale;anK='';after();dirty=true;
   }
   function setAnimatedHero(id){
     if(!M.cfg.anims?.some(set=>set.id===id))return;
@@ -4251,6 +4320,6 @@ export function init2D(root,A){
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
     .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
-  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){if(materialDrag){materialDrag=null;setMaterialAnchor(null);}},installDirectionalSet,setAnimatedHero,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){if(materialDrag){materialDrag=null;setMaterialAnchor(null);}},installDirectionalSet,setAnimatedHero,setAnimationScale,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
   return api;
 }

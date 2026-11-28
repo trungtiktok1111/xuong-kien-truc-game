@@ -123,3 +123,22 @@ export function applyOutlinePropEdits(view){
   view.M.ents.push(entity);
  }
 }
+
+export function scaleProp(entity,factor,x,y){
+ const e={...entity,x:x+(entity.x+1-x)*factor-1,y:y+(entity.y+1-y)*factor-1,sc:(entity.sc||3)*factor};
+ const pair=point=>point.map(value=>value*factor);
+ for(const key of ['zb','gateArt'])if(e[key])e[key]=pair(e[key]);
+ if(e.zp)e.zp=e.zp.map(pair);
+ if(e.zps)e.zps=e.zps.map(poly=>poly.map(pair));
+ if(e.col)e.col=e.col.map(zone=>{
+  const scaled={...zone};
+  for(const key of ['x','y','w','h','r','th'])if(Number.isFinite(zone[key]))scaled[key]=zone[key]*factor;
+  for(const key of ['a','b'])if(zone[key])scaled[key]=pair(zone[key]);
+  if(zone.pts)scaled.pts=zone.pts.map(pair);
+  return scaled;
+ });
+ for(const key of ['fx','fy','roofThickness','roofBase','roofRise']){
+  if(Number.isFinite(e[key]))e[key]*=factor;
+ }
+ return e;
+}

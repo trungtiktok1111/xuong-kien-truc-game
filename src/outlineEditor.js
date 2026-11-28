@@ -1,3 +1,4 @@
+import {baseAnchorPicker} from './baseAnchors.js';
 import {directionalPanel} from './directionalPanel.js';
 import {drawSurfaceTerrain} from './surfaceContours.js';
 import {surfaceLevels,surfaceLevelById,surfacePieces} from './surfaceLibrary.js';
@@ -1115,7 +1116,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   picker.ontoggle=()=>{if(picker.open)renderGallery(control);else gallery.replaceChildren();};
   control.element=el('div',{class:'outline-stage'},
    el('strong',{},label),el('label',{},'Gói ZIP · thư viện dùng chung',source),allImages,sourceList,scaleLabel,selected,
-   dock&&['props','house'].includes(key)?el('p',{class:'hint'},'Bấm chọn ảnh trong khay rồi kéo một ảnh đã chọn để đặt cả cụm.'):null,picker,
+   dock&&['props','house'].includes(key)?baseAnchorPicker(index=>{control.dragAnchor=index;}):null,picker,
    el('div',{class:'row'},prev,next),el('div',{class:'row'},clear,keep,restore),note);
   control.initialSource=saved.layers?.[key]?.sources?.[0]||saved.layers?.[key]?.source||(key==='character'?'builtin:character':defaultSource);
   control.initialSources=saved.layers?.[key]?.sources||[control.initialSource];
@@ -1247,7 +1248,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
    card.ondragstart=event=>{
     const ids=control.dragIds.has(id)?control.ids.filter(token=>control.dragIds.has(token)):[id];
     const assets=ids.map(splitAssetToken).filter(Boolean);
-    editor.startMaterialDrag(event,{role:control.key,assets,style:surfaceStyle(),files:new Map(outlineZipFiles),
+    editor.startMaterialDrag(event,{role:control.key,anchor:control.dragAnchor??4,assets,style:surfaceStyle(),files:new Map(outlineZipFiles),
      scales:Object.fromEntries(assets.map(({source})=>[source,layerScale(control,source)]))});
    };
    card.ondragend=()=>editor.endMaterialDrag();
