@@ -749,6 +749,16 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  for(const [key,label] of [['select','Chỉnh điểm'],['move','Di chuyển đường'],['polygon','Đa giác'],['rect','Chữ nhật'],['ellipse','Hình elip'],['scan','Quét chọn'],['corridor','Nối hành lang'],['wall','Chọn đoạn tường']]){
   const button=B(label,()=>select(key));modeButtons.set(key,button);toolbar.append(button);
  }
+ function nearestWallRun(p){
+  // Include short curve edges so every visible outline edge remains selectable.
+  const runs=outlineWallRuns({loops,thickness:+thickness.value});
+  let best=null,dist=10/s;
+  for(const run of runs){
+   const a=[run.x+1,run.y+1],dx=run.wallLine.dx,dy=run.wallLine.dy,length=dx*dx+dy*dy;
+   const t=length?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/length)):0;
+   const d=Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);
+   if(d<dist){dist=d;best=run.id;}
+  }
   return best;
  }
  function wallRunEnds(run){
@@ -818,7 +828,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   }
   if(best){selectedWalls.add(best.id);selectedWall=best.id;draw();}
  }
- const wallMaterialSelect=el('select',{'aria-label':'Vật liệu riêng cho đoạn tường'}); const wallScopeSelect=el('select',{'aria-label':'Phạm vi chọn tường'},
+ const wallScopeSelect=el('select',{'aria-label':'Phạm vi chọn tường'},
   el('option',{value:'segment'},'Một đoạn'),el('option',{value:'curve'},'Theo đoạn cong'),
   el('option',{value:'connected'},'Theo đoạn nối liền'),el('option',{value:'shape'},'Theo hình'),
   el('option',{value:'map'},'Toàn bộ bản đồ'));
