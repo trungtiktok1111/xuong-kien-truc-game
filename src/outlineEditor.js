@@ -957,12 +957,13 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   [gridWidth.value,gridHeight.value]=presets.value.split('x');readGrid();presets.value='';
  };
  function widenPlan(){
-  if(surface||levelDraft||propEdits.length||removedWalls.length||Object.keys(wallOverrides).length){
-   gridNote.textContent='Hãy bỏ lớp địa hình/mẫu và các chỉnh sửa tường riêng trước khi kéo rộng để giữ đúng dữ liệu hiện có.';return;
+  if(levelDraft||propEdits.length||removedWalls.length||Object.keys(wallOverrides).length){
+   gridNote.textContent='Bản đồ có chỉnh sửa mẫu, vật thể hoặc tường riêng. Hãy hoàn tất các chỉnh sửa đó trước khi kéo rộng để giữ đúng dữ liệu hiện có.';return;
   }
   const factor=Math.min(2,Math.floor(maxSide/W));
   if(factor<2){gridNote.textContent='Chiều rộng đã chạm giới hạn '+maxSide+' ô.';return;}
   const stretch=([x,y])=>[round(x*factor),y];
+  if(surface?.patches)surface={...surface,patches:surface.patches.map(patch=>({...patch,bounds:[patch.bounds[0]*factor,patch.bounds[1],patch.bounds[2]*factor,patch.bounds[3]]}))};
   record();
   if(pieces.length){
    baseLoops=baseLoops.map(loop=>loop.map(stretch));
