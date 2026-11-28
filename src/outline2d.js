@@ -23,7 +23,7 @@ export function outline2D(data,angle=false,ents=[]){
  }
  const thickness=data.thickness??WALL_THICKNESS;
  let perimeter=0;
- const walls=edges.flatMap(({a,b,loop,i})=>{
+ const walls=edges.flatMap(({a,b,loop,i,li})=>{
   const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,near=inside(angle?mx:mx-.24,my-.24);
   /* cắt cạnh dài thành đoạn ngắn: khóa sắp xếp độ sâu theo từng đoạn, không theo điểm giữa cả cạnh (cạnh dài làm tường đè lên người đứng ở đầu cạnh) */
   const len=Math.hypot(b[0]-a[0],b[1]-a[1]);
@@ -40,7 +40,7 @@ export function outline2D(data,angle=false,ents=[]){
     return Math.abs(ax*by-ay*bx)>.035*Math.hypot(ax,ay)*Math.hypot(bx,by);
    };
    const before=loop[(i+loop.length-1)%loop.length],after=loop[(i+2)%loop.length];
-   out.push({a:p,b:q,k:angle?y:x+y,near,i,thickness,inward,phase:perimeter+j*len/n,
+   out.push({a:p,b:q,k:angle?y:x+y,near,i,loopIndex:li,thickness,inward,phase:perimeter+j*len/n,
     joinStart:j===0&&turn(a,before,b),joinEnd:j===n-1&&turn(b,a,after)});
   }
   perimeter+=len;
@@ -56,13 +56,11 @@ export function outline2D(data,angle=false,ents=[]){
  // wall face be skipped while the floor skirt (drawFloorSlab, which reads the same walls
  // array) still draws there unchanged; `material` lets that one run's face use a
  // different texture than the scene default.
- const allRuns=outlineWallRuns(data);
+ const ownersByEdge=new Map();
+ for(const run of outlineWallRuns(data))for(const edge of run.edgeIndexes||[])
+  ownersByEdge.set(run.loopIndex+':'+edge,run);
  for(const seg of walls){
-  const mid=[(seg.a[0]+seg.b[0])/2,(seg.a[1]+seg.b[1])/2];
-  const owner=allRuns.find(run=>{
-   const {a,length,u:du}=wallSpan(run),x=mid[0]-a[0],y=mid[1]-a[1],d=x*du[0]+y*du[1];
-   return Math.abs(x*du[1]-y*du[0])<=.05&&d>=-.05&&d<=length+.05;
-  });
+  const owner=ownersByEdge.get(seg.loopIndex+':'+seg.i);
   if(!owner)continue;
   if(data.removedWalls?.includes(owner.id))seg.removed=true;
   else{
