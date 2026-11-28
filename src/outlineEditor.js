@@ -138,7 +138,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  let placement=null,previewAt=null,selection=null,levelDraft=null,activeTab=initialTab;
  let cursor=null;
  let gates=structuredClone(map.cfg.outline?.gates||[]),gatePreview=null;
- let selectedWall=null,removedWalls=structuredClone(map.cfg.outline?.removedWalls||[]),wallOverrides=structuredClone(map.cfg.outline?.wallOverrides||{});
+ let selectedWall=null,selectedWalls=new Set(),wallSelectionMode='segment',removedWalls=structuredClone(map.cfg.outline?.removedWalls||[]),wallOverrides=structuredClone(map.cfg.outline?.wallOverrides||{});
  const gateWidth=el('input',{type:'number',min:1.5,max:16,step:.25,value:3,'aria-label':'Bề rộng cổng 3D'});
  const gateDest=el('select',{'aria-label':'Màn đích của cổng 3D'},el('option',{value:''},'Không chuyển màn'),...(editor.sceneChoices?.()||[]).map(m=>el('option',{value:m.id},m.name)));
  const originLevel=outlineLevels.find(level=>level.id===map.cfg.outlineTemplate)||
@@ -298,8 +298,9 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
     const a=[run.x+1,run.y+1],b=[a[0]+run.wallLine.dx,a[1]+run.wallLine.dy];
     c.beginPath();c.moveTo(xp(a[0]),yp(a[1]));c.lineTo(xp(b[0]),yp(b[1]));
     c.save();if(removed)c.setLineDash([4,4]);
-    c.strokeStyle=run.id===selectedWall?'#f9cb6a':removed?'#76dfbd77':'#76dfbd';
-    c.lineWidth=run.id===selectedWall?4:2;c.stroke();c.restore();
+    const selected=selectedWalls.has(run.id)||run.id===selectedWall;
+    c.strokeStyle=selected?'#f9cb6a':removed?'#76dfbd77':'#76dfbd';
+    c.lineWidth=selected?4:2;c.stroke();c.restore();
    }
   }
   if(is3D&&(gates.length||mode==='gate'||mode==='ungate')){
@@ -442,7 +443,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   if(mode==='rect')return [a,[b[0],a[1]],b,[a[0],b[1]]];
   return ellipseLoop((a[0]+b[0])/2,(a[1]+b[1])/2,rx,ry);
  }
- function select(next){pending=[];placement=null;previewAt=null;selection=null;mode=next;gatePreview=null;selectedWall=null;draw();}
+ function select(next){pending=[];placement=null;previewAt=null;selection=null;mode=next;gatePreview=null;selectedWall=null;selectedWalls.clear();draw();}
  function draft(previous=loops){return {base:copy(baseLoops),pieces:copy(pieces),loops:copy(previous),w:W,h:H,level:levelDraft,stamps,origin,gates,surface,propEdits,front:front.value,rear:rear.value,thickness:thickness.value,floorThickness:floorThickness.value,collision:collision.checked,removedWalls:[...removedWalls],wallOverrides:{...wallOverrides}};}
  function record(previous=loops){undo.push(draft(previous));if(undo.length>40)undo.shift();redo.length=0;}
  function travel(from,to){
@@ -630,7 +631,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   if(surface){drag={start:p,surface:true};pending=[p,p];canvas.setPointerCapture?.(e.pointerId);draw();return;}
   if(placement){commitPlacement(p);return;}
   if(mode==='polygon'){pending.push(p);draw();return;}
-  if(mode==='wall'){selectedWall=nearestWallRun(p);draw();return;}
+  if(mode==='wall'){chooseWallSelection(p);draw();return;}
   if(mode==='scan'){drag={start:p,scan:true};selection=[p,p];}
   else if(['ellipse','rect','corridor'].includes(mode)){drag={start:p};pending=[p,p];}
   else{
@@ -718,7 +719,10 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  canvas.onpointercancel=()=>{pan=null;if(drag?.snapshot){({loops,base:baseLoops,pieces}=drag.snapshot);}drag=null;pending=[];draw();};
  box.onkeydown=e=>{
    if(e.target?.matches('input,select,textarea'))return;
-   if(e.key==='Delete'&&pickedPiece&&box.dataset.page!=='preview'){e.preventDefault();removePiece();}
+   if(mode==='wall'&&wallSelectionMode==='extend'&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){
+    e.preventDefault();extendWallSelection(e.key);
+   }
+   else if(e.key==='Delete'&&pickedPiece&&box.dataset.page!=='preview'){e.preventDefault();removePiece();}
    else if(e.key==='Enter'&&mode==='polygon'&&e.target.tagName!=='BUTTON'){e.preventDefault();finish();}
    else if(placement&&!e.ctrlKey&&!e.metaKey&&['q','e'].includes(e.key.toLowerCase())){
     e.preventDefault();rotateBy(e.key.toLowerCase()==='q'?-15:15);
@@ -745,47 +749,129 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  for(const [key,label] of [['select','Chỉnh điểm'],['move','Di chuyển đường'],['polygon','Đa giác'],['rect','Chữ nhật'],['ellipse','Hình elip'],['scan','Quét chọn'],['corridor','Nối hành lang'],['wall','Chọn đoạn tường']]){
   const button=B(label,()=>select(key));modeButtons.set(key,button);toolbar.append(button);
  }
- function nearestWallRun(p){
-  // Unfiltered: a removed run must stay clickable (to restore it), see the matching
-  // note in draw().
-  const runs=outlineWallRuns({loops,thickness:+thickness.value});
-  let best=null,dist=10/s;
-  for(const run of runs){
-   const a=[run.x+1,run.y+1],dx=run.wallLine.dx,dy=run.wallLine.dy,length=dx*dx+dy*dy;
-   const t=length?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/length)):0;
-   const d=Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);
-   if(d<dist){dist=d;best=run.id;}
-  }
   return best;
  }
- const wallMaterialSelect=el('select',{'aria-label':'Vật liệu riêng cho đoạn tường'});
- const wallDeleteButton=B('Xoá đoạn này',()=>{
-  if(!selectedWall)return;
-  if(removedWalls.includes(selectedWall)){record();removedWalls=removedWalls.filter(id=>id!==selectedWall);draw();return;}
-  if((map.ents||[]).some(e=>e.wallId===selectedWall)||gates.some(g=>g.wallId===selectedWall)){toast('Đoạn tường có cổng. Hãy xóa cổng trước.');return;}
-  record();removedWalls=[...removedWalls,selectedWall];draw();
- });
- wallMaterialSelect.onchange=()=>{
-  if(!selectedWall)return;
-  record();wallOverrides={...wallOverrides};
-  if(wallMaterialSelect.value)wallOverrides[selectedWall]=wallMaterialSelect.value;
-  else delete wallOverrides[selectedWall];
+ function wallRunEnds(run){
+  const a=[run.x+1,run.y+1];
+  return [a,[a[0]+run.wallLine.dx,a[1]+run.wallLine.dy]];
+ }
+ function wallPointKey(point){return Math.round(point[0]*10000)+','+Math.round(point[1]*10000);}
+ function connectedWallRuns(start,runs,curvesOnly=false){
+  if(!start)return new Set();
+  const byPoint=new Map();
+  for(const run of runs)for(const end of wallRunEnds(run)){
+   const key=wallPointKey(end);
+   if(!byPoint.has(key))byPoint.set(key,[]);
+   byPoint.get(key).push(run);
+  }
+  const selected=new Set([start.id]),queue=[start];
+  while(queue.length){
+   const current=queue.pop(),ends=wallRunEnds(current);
+   for(const shared of ends)for(const next of byPoint.get(wallPointKey(shared))||[]){
+    if(selected.has(next.id))continue;
+    if(curvesOnly){
+     const otherEnds=wallRunEnds(next),farA=otherEnds.find(point=>wallPointKey(point)!==wallPointKey(shared));
+     const currentEnds=wallRunEnds(current),farB=currentEnds.find(point=>wallPointKey(point)!==wallPointKey(shared));
+     if(!farA||!farB)continue;
+     const va=[farB[0]-shared[0],farB[1]-shared[1]],vb=[farA[0]-shared[0],farA[1]-shared[1]];
+     const la=Math.hypot(...va),lb=Math.hypot(...vb);
+     if(!la||!lb)continue;
+     const angle=Math.acos(Math.max(-1,Math.min(1,(va[0]*vb[0]+va[1]*vb[1])/(la*lb))));
+     const bend=Math.PI-angle;
+     if(bend<Math.PI/180||bend>40*Math.PI/180)continue;
+    }
+    selected.add(next.id);queue.push(next);
+   }
+  }
+  return selected;
+ }
+ function chooseWallSelection(p){
+  const runs=outlineWallRuns({loops,thickness:+thickness.value}),id=nearestWallRun(p);
+  const hit=runs.find(run=>run.id===id);
+  selectedWall=id||null;selectedWalls=new Set();
+  if(!hit)return;
+  if(wallSelectionMode==='map')selectedWalls=new Set(runs.map(run=>run.id));
+  else if(wallSelectionMode==='shape')selectedWalls=new Set(runs.filter(run=>run.loopIndex===hit.loopIndex).map(run=>run.id));
+  else if(wallSelectionMode==='connected'||wallSelectionMode==='curve')
+   selectedWalls=connectedWallRuns(hit,runs,wallSelectionMode==='curve');
+  else selectedWalls.add(hit.id);
+ }
+ function extendWallSelection(key){
+  const directions={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]},dir=directions[key];
+  if(!dir||!selectedWalls.size)return;
+  const runs=outlineWallRuns({loops,thickness:+thickness.value}),selected=runs.filter(run=>selectedWalls.has(run.id));
+  let best=null,bestScore=.15;
+  for(const candidate of runs){
+   if(selectedWalls.has(candidate.id))continue;
+   const ends=wallRunEnds(candidate);
+   for(const current of selected){
+    const currentEnds=wallRunEnds(current);
+    for(const shared of currentEnds)for(const end of ends){
+     if(wallPointKey(shared)!==wallPointKey(end))continue;
+     const far=ends.find(point=>wallPointKey(point)!==wallPointKey(shared));
+     if(!far)continue;
+     const length=Math.hypot(far[0]-shared[0],far[1]-shared[1]);
+     const score=length?((far[0]-shared[0])*dir[0]+(far[1]-shared[1])*dir[1])/length:-1;
+     if(score>bestScore){bestScore=score;best=candidate;}
+    }
+   }
+  }
+  if(best){selectedWalls.add(best.id);selectedWall=best.id;draw();}
+ }
+ const wallMaterialSelect=el('select',{'aria-label':'Vật liệu riêng cho đoạn tường'}); const wallScopeSelect=el('select',{'aria-label':'Phạm vi chọn tường'},
+  el('option',{value:'segment'},'Một đoạn'),el('option',{value:'curve'},'Theo đoạn cong'),
+  el('option',{value:'connected'},'Theo đoạn nối liền'),el('option',{value:'shape'},'Theo hình'),
+  el('option',{value:'map'},'Toàn bộ bản đồ'));
+ wallScopeSelect.value=wallSelectionMode;
+ wallScopeSelect.onchange=()=>{
+  wallSelectionMode=wallScopeSelect.value;selectedWall=null;selectedWalls.clear();
+  if(wallSelectionMode==='map'){
+   const runs=outlineWallRuns({loops,thickness:+thickness.value});
+   selectedWalls=new Set(runs.map(run=>run.id));selectedWall=runs[0]?.id||null;
+  }
   draw();
  };
- const wallControls=el('span',{class:'row',hidden:true},wallDeleteButton,el('label',{},'Vật liệu riêng ',wallMaterialSelect));
+ const wallMaterialSelect=el('select',{'aria-label':'Vật liệu riêng cho đoạn tường'});
+ const wallDeleteButton=B('Chọn đoạn tường',()=>{
+  const ids=[...selectedWalls];if(!ids.length)return;
+  const restore=ids.every(id=>removedWalls.includes(id));
+  if(!restore&&((map.ents||[]).some(e=>ids.includes(e.wallId))||gates.some(g=>ids.includes(g.wallId)))){
+   toast('Có đoạn tường đang gắn cổng. Hãy xóa cổng trước.');return;
+  }
+  record();
+  if(restore)removedWalls=removedWalls.filter(id=>!selectedWalls.has(id));
+  else removedWalls=[...new Set([...removedWalls,...ids])];
+  draw();
+ });
+ wallMaterialSelect.onchange=()=>{
+  const ids=[...selectedWalls],value=wallMaterialSelect.value;
+  if(!ids.length||value==='__mixed')return;
+  record();wallOverrides={...wallOverrides};
+  for(const id of ids){if(value)wallOverrides[id]=value;else delete wallOverrides[id];}
+  draw();
+ };
+ const wallControls=el('span',{class:'row',hidden:true},el('label',{},'Phạm vi chọn ',wallScopeSelect),
+  wallDeleteButton,el('label',{},'Vật liệu riêng ',wallMaterialSelect));
  function refreshWallControls(){
-  const active=mode==='wall'&&selectedWall;
+  const active=mode==='wall',ids=[...selectedWalls];
   wallControls.hidden=!active;
   if(!active)return;
-  const removed=removedWalls.includes(selectedWall);
-  wallDeleteButton.textContent=removed?'Khôi phục đoạn này':'Xoá đoạn này';
+  const allRemoved=ids.length>0&&ids.every(id=>removedWalls.includes(id));
+  wallDeleteButton.disabled=!ids.length;
+  wallDeleteButton.textContent=!ids.length?'Bấm lên tường để chọn':
+   (allRemoved?'Khôi phục ':'Xóa ')+ids.length+' đoạn tường';
+  const values=new Set(ids.map(id=>wallOverrides[id]||''));
   const names=[...new Set([
    ...(map.cfg.outline?.wallMaterials||(map.cfg.outline?.wallMaterial?[map.cfg.outline.wallMaterial]:[])),
-   ...(map.cfg.outline?.wallModules||[]).map(module=>module.sheet).filter(Boolean)
+   ...(map.cfg.outline?.wallModules||[]).map(module=>module.sheet).filter(Boolean),
+   ...[...values].filter(Boolean)
   ])];
-  wallMaterialSelect.replaceChildren(el('option',{value:''},'— mặc định —'),...names.map(name=>el('option',{value:name},name)));
-  wallMaterialSelect.value=wallOverrides[selectedWall]||'';
-  wallMaterialSelect.disabled=removed||!names.length;
+  const mixed=values.size>1;
+  wallMaterialSelect.replaceChildren(
+   ...(mixed?[el('option',{value:'__mixed',disabled:''},'— nhiều vật liệu —')]:[]),
+   el('option',{value:''},'Mặc định'),...names.map(name=>el('option',{value:name},name)));
+  wallMaterialSelect.value=mixed?'__mixed':values.size===1?[...values][0]:'';
+  wallMaterialSelect.disabled=!ids.length||!names.length;
  }
  toolbar.append(B('Khép đường',finish),
   B('Xóa đường đã chọn',()=>{if(removePiece())return;if(picked>=0){record();(pieces.length?baseLoops:loops).splice(picked,1);if(pieces.length)rebuildPieces();picked=-1;draw();}}));
@@ -1054,7 +1140,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   wallModules:!levelDraft?map.cfg.outline?.wallModules:undefined,
   removedWalls:!levelDraft?[...removedWalls]:undefined,wallOverrides:!levelDraft?{...wallOverrides}:undefined,
   ...(is3D?{gates:copy(gates),floorCollision:collision.checked}:{})});
- async function runAction(action,close){
+ async function runAction(action,close,afterClose){
   if(commitBusy||!readGrid())return;
   if(!is3D&&dressing.checked&&layerControls.some(row=>row.loading)){
    showActionStatus('Đợi Xưởng đọc xong gói ZIP trước khi mở hoặc lưu bản đồ.');return;
@@ -1066,23 +1152,26 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   try{
    const result=await action();
    showActionStatus(result?.message||result?.warning||'');
-   if(close&&result!==false)closeOutline();
+   if(close&&result!==false){closeOutline();afterClose?.();}
   }catch(e){showActionStatus(e.message||'Không mở được bản đồ. Hãy thử lại.',true);}
   finally{commitBusy=false;actions.forEach(b=>{b.disabled=false;});updateLinkActions();draw();}
  }
- applyButton=B('Áp dụng vào bản đồ',()=>runAction(async()=>{
+ async function applyCurrentOutline(){
   if(levelDraft){
    const name=map.name||'màn hiện tại';
    if(!await yes('Dùng mẫu “'+levelDraft.name+'” cho “'+name+'”?\nBố cục, ô hình, vật thể và luật của màn này sẽ được thay bằng mẫu. Bạn có thể hoàn tác sau khi áp dụng.'))return false;
    await editor.replaceWithOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,materials());
-   if(!is3D)editor.showAssembly();
    return;
   }
   if(!loops.length&&original.length)throw Error('Hãy tạo đường bao hoặc dùng Bỏ lớp đường bao.');
   if(!loops.length&&W===map.w&&H===map.h)throw Error('Hãy tạo đường bao hoặc đổi số ô.');
   if(loops.length)await editor.applyOutline(outlineData(),collision.checked,W,H,stamps,origin,materials());
   else editor.resizeOutlineGrid(W,H);
-  if(!is3D)editor.showAssembly();
+ }
+ applyButton=B('Áp dụng vào bản đồ',()=>runAction(async()=>{
+  const result=await applyCurrentOutline();
+  if(result!==false&&!is3D)editor.showAssembly();
+  return result;
  },true));
  function createScannedMap(){
   const scan=scanContents();if(!scan)return;
@@ -1673,7 +1762,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  createLabel=B('Tạo màn mới từ hình này',()=>createDraft());
  clearButton=B('Bỏ lớp đường bao',async()=>{if(!map.cfg.outline||!await yes('Bỏ tường bao, mép cong và những cổng gắn vào tường bao của màn hiện tại?'))return;if(editor.clearOutline()!==false)closeOutline();});
  buttons.append(applyButton,createLabel,clearButton,B('Đóng',closeOutline));
- const wideOutline=matchMedia('(min-width:901px) and (pointer:fine)');
+ const wideOutline=matchMedia('(min-width:901px)');
  const workspaceTabs=new Map();
  function switchWorkspace(page){
   box.dataset.page=page;
@@ -1686,7 +1775,11 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  }
  const assemblyLink=is3D?null:B('Ráp Cảnh 2D',async()=>{
   if(commitBusy)return;
-  if((edited||undo.length||redo.length)&&!await yes('Mở Ráp Cảnh 2D trên màn hiện tại và bỏ các thay đổi Đường bao chưa áp dụng?'))return;
+  if(edited||undo.length||redo.length){
+   if(!await yes('Áp dụng đường bao đang chỉnh vào Mặt bằng hiện tại rồi mở Ráp Cảnh 2D?'))return;
+   await runAction(applyCurrentOutline,true,()=>editor.showAssembly());
+   return;
+  }
   closeOutline();editor.showAssembly();
  });
  let edited=false;
