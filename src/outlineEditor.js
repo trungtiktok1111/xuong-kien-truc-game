@@ -956,9 +956,28 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   if(!presets.value)return;
   [gridWidth.value,gridHeight.value]=presets.value.split('x');readGrid();presets.value='';
  };
+ function widenPlan(){
+  if(surface||levelDraft||propEdits.length||removedWalls.length||Object.keys(wallOverrides).length){
+   gridNote.textContent='Hãy bỏ lớp địa hình/mẫu và các chỉnh sửa tường riêng trước khi kéo rộng để giữ đúng dữ liệu hiện có.';return;
+  }
+  const factor=Math.min(2,Math.floor(maxSide/W));
+  if(factor<2){gridNote.textContent='Chiều rộng đã chạm giới hạn '+maxSide+' ô.';return;}
+  const stretch=([x,y])=>[round(x*factor),y];
+  record();
+  if(pieces.length){
+   baseLoops=baseLoops.map(loop=>loop.map(stretch));
+   pieces=pieces.map(piece=>({...piece,loops:piece.loops.map(loop=>loop.map(stretch)),
+    link:piece.link?{...piece.link,start:stretch(piece.link.start),end:stretch(piece.link.end)}:undefined}));
+   rebuildPieces();
+  }else loops=loops.map(loop=>loop.map(stretch));
+  stamps=stamps.map(group=>group.flatMap(cell=>Array.from({length:factor},(_,i)=>({...cell,x:cell.x*factor+i}))));
+  W*=factor;resetGridView();picked=-1;select('select');
+  gridNote.textContent='Đã mở rộng mặt bằng theo chiều ngang ×'+factor+' · '+W+' × '+H+' ô. Có thể hoàn tác bằng Ctrl+Z.';
+ }
+ const widenButton=B('Mở rộng mặt bằng ×2',widenPlan);
  const gridSetup=el('form',{class:'row outline-grid-size',novalidate:''},
   el('strong',{},'Lưới'),el('label',{},'Rộng ',gridWidth),el('label',{},'Cao ',gridHeight),
-  el('button',{class:'b',type:'submit'},'Đổi số ô'),presets);
+  el('button',{class:'b',type:'submit'},'Đổi số ô'),presets,widenButton);
  gridSetup.onsubmit=e=>{e.preventDefault();readGrid();};
  const viewTools=el('div',{class:'row outline-view-tools'},sizeLabel,
   B('−',()=>{zoom(.8);previewAt=null;draw();}),viewLabel,B('+',()=>{zoom(1.25);previewAt=null;draw();}),
