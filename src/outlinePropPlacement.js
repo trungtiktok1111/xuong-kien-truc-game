@@ -76,10 +76,12 @@ export function propPlacement(view,entity,ignore){
  const outline=map.cfg.outline;
  const ground=mapCollision({...map,placementZones,cfg:{...map.cfg,outline:{...outline,floorCollision:true}}});
  const ignored=ignore instanceof Set?ignore:new Set([ignore]);
- const blockers=decoZones(map.ents.filter(other=>!ignored.has(other.id)));
+ const roofLayer=entity.sceneLayer===3||!!(entity.roofDirection||entity.roofSurface||entity.groundedRoof);
+ const blockers=decoZones(map.ents.filter(other=>!ignored.has(other.id)&&
+  !(other.sceneLayer===3||other.roofDirection||other.roofSurface||other.groundedRoof)));
  for(const other of map.ents){
   if((other.t==='deco'&&other.tile&&!other.wallLine&&!other.gateAssembly&&!other.housePart&&
-       !other.outlineAutoHouse&&!other.roofDirection)||['start','goal','door','chest','npc','enemy'].includes(other.t)){
+       !other.outlineAutoHouse&&!other.roofDirection&&other.sceneLayer!==3)||['start','goal','door','chest','npc','enemy'].includes(other.t)){
    if(!ignored.has(other.id)&&!blockers.some(zone=>zone.deco===other.id)){
     const x=other.x+(other.t==='deco'?1:.5),y=other.y+(other.t==='deco'?1:.5);
     blockers.push({k:'ell',x:x-.18,y:y-.18,w:.36,h:.36});
@@ -90,9 +92,10 @@ export function propPlacement(view,entity,ignore){
   const [left,top,right,bottom]=zBounds(zone);
   const x=(left+right)/2,y=(top+bottom)/2;
   const radius=zone.k==='ell'&&zone.w===zone.h?zone.w/2:Math.hypot(right-left,bottom-top)/2;
-  if(!ground.free(x,y,radius))
+  if(!roofLayer&&!ground.free(x,y,radius))
    return 'Chân vật phải nằm trọn trên sàn đi được.';
-  if(blockers.some(blocker=>footprintsOverlap(zone,blocker)))return 'Vùng chân vật đang chồng lên vật khác hoặc lối ra vào.';
+  if(!roofLayer&&blockers.some(blocker=>footprintsOverlap(zone,blocker)))
+   return 'Vùng chân vật đang chồng lên vật khác hoặc lối ra vào.';
  }
  return '';
 }
