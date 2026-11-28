@@ -55,6 +55,12 @@ Chọn một trong chín vị trí dưới mục Điểm neo để đặt mái t
 ## V15.7.1
 - **Va chạm (K)** hiện ngay vùng chặn. Bộ đếm ghi rõ số vùng vẽ tay.
 
+## V15.8
+- Mở rộng/thu vùng mặt bằng bằng **Shift+Space**; phím này còn tự căn toàn bộ màn vào khung nhìn.
+- **M** mở thẳng bảng Màn & cửa. **C** bật đặt cửa thủ công tại vị trí bạn bấm.
+- Sau khi chọn màn đích, chọn cửa đã đặt, nhấn **Shift+C** rồi tự bấm ô đến. Không tự dò hoặc tự nối vị trí.
+- Bảng Phím tắt và hướng dẫn Màn & cửa có quy trình thao tác mới.
+
 ## V15.7
 - **Dựng cảnh** hiển thị vật liệu và vật thể theo lớp ngay trong khung bên phải. **Đặt mảnh (B)** dùng mảnh đã chọn để lắp lên bản đồ.
 - Tìm và chọn mảnh trong cùng khung. Dùng **Bảng ghép ô** để kéo chọn nhiều ô liền nhau trong atlas.

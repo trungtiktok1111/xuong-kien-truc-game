@@ -951,6 +951,29 @@ export function init2D(root,A){
     if(k==='escape'&&doorPick){doorPick=null;toast('Đã hủy chọn ô đến.');e.preventDefault();return;}
     if(k==='escape'&&drag?.regionPaste){drag=null;dirty=true;e.preventDefault();return;}
     if(desktop()&&!m&&!e.altKey){
+      if(e.code==='Space'&&e.shiftKey){
+        e.preventDefault();sidebarButton.click();fit();
+        toast(root.classList.contains('assembly-wide')?'Đã mở rộng mặt bằng. Shift+Space để trở lại.':'Đã thu mặt bằng về bố cục thường.');
+        return;
+      }
+      if(k==='m'){
+        if(root.classList.contains('assembly-wide'))sidebarButton.click();
+        chooseTab('maps');e.preventDefault();return;
+      }
+      if(k==='c'&&e.shiftKey){
+        const door=selEnt();
+        if(door?.t==='door')pickDoorArrival(door);
+        else toast('Chọn một cửa đã đặt, rồi nhấn Shift+C để chọn ô đến.');
+        e.preventDefault();return;
+      }
+      if(k==='c'){
+        if(root.classList.contains('assembly-wide'))sidebarButton.click();
+        objType='door';tool='obj';chooseTab('maps');draw();cv.focus({preventScroll:true});
+        toast('Bấm vị trí cửa trên màn này. Chọn màn đích; nhấn Shift+C để chọn ô đến.');
+        e.preventDefault();return;
+      }
+    }
+    if(desktop()&&!m&&!e.altKey){
       if(k==='p'){if(!e.repeat)void toggleProjection();e.preventDefault();return;}
       if(k==='j'){if(!e.repeat)sidebarButton.click();e.preventDefault();return;}
       if(k==='['||k===']'){zoomBy(k===']'?1.25:1/1.25);updateDesktop();e.preventDefault();return;}
