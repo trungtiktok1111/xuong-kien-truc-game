@@ -69,9 +69,9 @@ export function play2D(o){
   const atk=el('div',{style:'position:absolute;right:22px;bottom:calc(env(safe-area-inset-bottom) + 26px);width:84px;height:84px;border-radius:50%;background:#c0392bcc;border:3px solid #fff8;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;text-align:center;padding:5px;box-sizing:border-box'},'Chiêu');
   ov.append(msg,atk);
   let miniExpanded=false;
-  const miniMap=el('canvas',{width:640,height:448,title:'Bấm lên bản đồ nhỏ để di chuyển nhân vật'});miniMap.style.cssText='display:block;width:100%;height:140px;border-radius:5px;background:#182630;cursor:crosshair;touch-action:none';
-  const miniWrap=el('div',{style:'position:absolute;right:10px;top:calc(env(safe-area-inset-top) + 154px);width:200px;background:#101820d9;border:1px solid #9ab0c4aa;border-radius:8px;padding:5px;z-index:4;box-shadow:0 2px 10px #0008'});
-  const miniToggle=el('button',{type:'button',style:'border:0;border-radius:5px;background:#34506a;color:#fff;padding:3px 6px;font:600 11px system-ui',onclick:e=>{e.stopPropagation();miniExpanded=!miniExpanded;miniWrap.style.width=miniExpanded?'400px':'200px';miniMap.style.height=miniExpanded?'280px':'140px';e.currentTarget.textContent=miniExpanded?'Thu nhỏ':'Phóng ×2';}},'Phóng ×2');
+  const miniMap=el('canvas',{width:640,height:448,title:'Bấm lên bản đồ nhỏ để nhân vật tự đi tới vị trí đó'});miniMap.style.cssText='display:block;width:100%;height:196px;border-radius:5px;background:#182630;cursor:crosshair;touch-action:none';
+  const miniWrap=el('div',{style:'position:absolute;right:10px;top:calc(env(safe-area-inset-top) + 154px);width:min(280px,42vw);background:#101820e8;border:1px solid #9ab0c4aa;border-radius:8px;padding:5px;z-index:4;box-shadow:0 2px 10px #0008'});
+  const miniToggle=el('button',{type:'button',style:'border:0;border-radius:5px;background:#34506a;color:#fff;padding:3px 6px;font:600 11px system-ui',onclick:e=>{e.stopPropagation();miniExpanded=!miniExpanded;miniWrap.style.width=miniExpanded?'min(560px,90vw)':'min(280px,42vw)';miniMap.style.height=miniExpanded?'392px':'196px';e.currentTarget.textContent=miniExpanded?'Thu nhỏ':'Phóng ×2';}},'Phóng ×2');
   miniWrap.append(el('div',{style:'display:flex;align-items:center;justify-content:space-between;color:#fff;font:600 12px system-ui;padding:0 2px 4px'},el('span',{},'Toàn cảnh'),miniToggle),miniMap);ov.append(miniWrap);
   if(SIDE){const jb=el('div',{style:'position:absolute;right:122px;bottom:calc(env(safe-area-inset-bottom) + 26px);width:84px;height:84px;border-radius:50%;background:#2e86c1cc;border:3px solid #fff8;color:#fff;font-size:34px;display:flex;align-items:center;justify-content:center'},'⤒');jb.addEventListener('pointerdown',e=>{e.stopPropagation();e.preventDefault();keys.k=1;});const jr=()=>{keys.k=0;};jb.addEventListener('pointerup',jr);jb.addEventListener('pointercancel',jr);ov.append(jb);}
   const setZ=v=>{zm=Math.max(.4,Math.min(3.5,v));};
@@ -82,6 +82,9 @@ export function play2D(o){
   const tbtn=(t,f)=>{const b=el('div',{style:'padding:7px 11px;border-radius:14px;background:#263342cc;color:#fff;font:600 12.5px system-ui;cursor:pointer;white-space:nowrap;user-select:none',onclick:e=>{e.stopPropagation();f(b);}},t);TB.append(b);return b;};
   const lab=(b,t,on)=>{b.textContent=t+(on==null?'':on?': bật':': tắt');b.style.background=on?'#2e7d4fcc':'#263342cc';};
   tbtn('Camera: theo nhân vật',b=>{camMode=camMode?0:1;b.textContent=camMode?'Camera: toàn cảnh':'Camera: theo nhân vật';});
+  let moveMode='run';let moveModeButton;
+  const toggleMoveMode=()=>{moveMode=moveMode==='run'?'walk':'run';if(moveModeButton)moveModeButton.textContent=(moveMode==='run'?'Chạy':'Đi')+' · Shift đổi';};
+  moveModeButton=tbtn('Chạy · Shift đổi',toggleMoveMode);
   tbtn('Lưới: tắt',b=>{showGrid^=1;lab(b,'Lưới',showGrid);});
   tbtn('Vùng đi: tắt',b=>{showReach^=1;if(showReach)REACH=calcReach();lab(b,'Vùng đi',showReach);});
   tbtn('Va chạm: tắt',b=>{dbgMode=dbgMode?0:1;lab(b,'Va chạm',dbgMode);});
@@ -90,7 +93,7 @@ export function play2D(o){
   if(o.published)for(const b of [...TB.children].slice(1))b.hidden=true;
   let crouchButton;
   if(!SIDE)crouchButton=tbtn('Cúi · C',toggleCrouch);
-  ov.append(TB,el('div',{style:'position:absolute;left:10px;bottom:calc(env(safe-area-inset-bottom) + 8px);color:#fffc;font:12px system-ui;text-shadow:0 1px 2px #000;pointer-events:none;max-width:60%'},'Bấm sàn để đi · W/A/S/D hoặc phím mũi tên · Space/J lần lượt dùng chiêu · 1–9 chọn chiêu · C cúi/đứng · +/− thu phóng'));
+  ov.append(TB,el('div',{style:'position:absolute;left:10px;bottom:calc(env(safe-area-inset-bottom) + 8px);color:#fffc;font:12px system-ui;text-shadow:0 1px 2px #000;pointer-events:none;max-width:60%'},'Nhấp chuột hoặc minimap để tự đi · Shift đổi đi/chạy · W/A/S/D hoặc phím mũi tên · Space/J đánh · 1–9 dùng chiêu · C cúi/đứng · +/− thu phóng'));
   cv.addEventListener('wheel',e=>{e.preventDefault();setZ(zm*Math.exp(-e.deltaY*.0015));},{passive:false});
   let pd=0;cv.addEventListener('touchstart',e=>{if(e.touches.length===2){const a=e.touches[0],b=e.touches[1];pd=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);stick=null;}},{passive:true});
   cv.addEventListener('touchmove',e=>{if(e.touches.length===2&&pd){const a=e.touches[0],b=e.touches[1],d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);setZ(zm*d/pd);pd=d;}},{passive:true});
@@ -103,7 +106,27 @@ export function play2D(o){
   }
   const AN=makeAnims(CF,sheets);
   const skillStates=AN.combatStates(CF.heroAnim),skillLabel=state=>state==='atk_combo'?'Liên chiêu':state==='atk'?'Đánh':/^atk\d+$/.test(state)?'Chiêu '+state.slice(3):state;
-  const skillSelect=el('select',{title:'Chọn chiêu của nhân vật chính',style:'position:absolute;right:112px;bottom:calc(env(safe-area-inset-bottom) + 48px);max-width:min(240px,48vw);padding:8px;border:1px solid #ffffff88;border-radius:7px;background:#17232ddd;color:#fff;font:600 13px system-ui;z-index:4',onchange:e=>{P.actionIndex=+e.currentTarget.value;atk.textContent=(P.actionIndex+1)+'. '+skillLabel(skillStates[P.actionIndex]);}});
+  const martialStoreKey='game-editor-martial-sets:'+String(M.id||M.name||'current');
+  let martialSets=[];try{const parsed=JSON.parse(localStorage.getItem(martialStoreKey)||'[]');if(Array.isArray(parsed))martialSets=parsed.filter(s=>s&&s.name&&Array.isArray(s.states)&&s.states.every(x=>skillStates.includes(x)));}catch{}
+  let activeMartialSetId=null,combatSequence=null;
+  const activeMartialSet=()=>martialSets.find(s=>s.id===activeMartialSetId)||null;
+  function persistMartialSets(){try{localStorage.setItem(martialStoreKey,JSON.stringify(martialSets));}catch{note('Không lưu được bộ võ công vào trình duyệt.');}}
+  function interruptCombatSequence(){combatSequence=null;if(P?.pose&&skillStates.includes(P.pose.state))P.pose=null;}
+  function openMartialEditor(){
+    const shade=el('div',{style:'position:absolute;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px;z-index:10'});
+    const card=el('section',{style:'width:min(560px,94vw);max-height:86vh;overflow:auto;background:#162430;color:#fff;border:1px solid #7892a7;border-radius:12px;padding:16px;box-shadow:0 10px 40px #000a;font:14px/1.4 system-ui'});
+    const name=el('input',{type:'text',maxlength:48,placeholder:'Tên bộ võ công',style:'box-sizing:border-box;width:100%;padding:9px;border:1px solid #667d8e;border-radius:6px;background:#0e1820;color:#fff;margin:8px 0 12px'});
+    const checks=el('div',{style:'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;margin:8px 0 12px'});
+    const boxes=new Map();for(const state of skillStates){const cb=el('input',{type:'checkbox',value:state});boxes.set(state,cb);checks.append(el('label',{style:'display:flex;align-items:center;gap:7px;padding:7px;background:#233746;border-radius:6px'},cb,skillLabel(state)));}
+    const saved=el('div',{style:'display:flex;flex-direction:column;gap:6px;margin:8px 0'});
+    const redrawSaved=()=>{saved.replaceChildren();if(!martialSets.length){saved.append(el('div',{style:'color:#aebdca'},'Chưa có bộ võ công đã lưu.'));return;}for(const set of martialSets){const row=el('div',{style:'display:flex;align-items:center;gap:6px;padding:7px;background:#203440;border-radius:6px'});row.append(el('span',{style:'flex:1'},set.name+' · '+set.states.length+' chiêu'));row.append(el('button',{class:'b',onclick:()=>{interruptCombatSequence();activeMartialSetId=set.id;atk.textContent='Bộ: '+set.name;shade.remove();note('Đã chọn bộ võ công '+set.name);}},activeMartialSetId===set.id?'Đang dùng':'Dùng bộ'));row.append(el('button',{class:'b',onclick:()=>{martialSets=martialSets.filter(x=>x.id!==set.id);if(activeMartialSetId===set.id){activeMartialSetId=null;combatSequence=null;atk.textContent='Chiêu';}persistMartialSets();redrawSaved();}},'Xóa'));saved.append(row);}};
+    const close=()=>shade.remove();
+    const save=()=>{const chosen=skillStates.filter(s=>boxes.get(s)?.checked),label=name.value.trim();if(!label){name.focus();note('Hãy đặt tên cho bộ võ công.');return;}if(!chosen.length){note('Chọn ít nhất một chiêu thức.');return;}interruptCombatSequence();const set={id:'martial-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7),name:label,states:chosen};martialSets.push(set);activeMartialSetId=set.id;persistMartialSets();atk.textContent='Bộ: '+label;name.value='';for(const cb of boxes.values())cb.checked=false;redrawSaved();note('Đã lưu bộ '+label+' · '+chosen.length+' chiêu. Bấm Space/J hoặc nút Chiêu để thi triển liên tục.');};
+    card.append(el('div',{style:'font-size:18px;font-weight:700'},'Tạo bộ võ công'),el('div',{style:'color:#c1d0dc'},'Chọn các chiêu. Khi dùng bộ, nhân vật đánh lần lượt đến hết; di chuyển hoặc trúng đòn sẽ ngắt chuỗi.'),name,el('div',{style:'font-weight:700'},'Chiêu thức của nhân vật'),checks,el('button',{class:'b',onclick:save},'Lưu và dùng bộ'),el('div',{style:'font-weight:700;margin-top:14px'},'Bộ đã lưu'),saved,el('button',{class:'b',onclick:close,style:'margin-top:10px'},'Đóng'));
+    shade.addEventListener('pointerdown',e=>{if(e.target===shade)close();});shade.append(card);ov.append(shade);redrawSaved();
+  }
+  tbtn('Bộ võ công',openMartialEditor);
+  const skillSelect=el('select',{title:'Chọn chiêu của nhân vật chính',style:'position:absolute;right:112px;bottom:calc(env(safe-area-inset-bottom) + 48px);max-width:min(240px,48vw);padding:8px;border:1px solid #ffffff88;border-radius:7px;background:#17232ddd;color:#fff;font:600 13px system-ui;z-index:4',onchange:e=>{interruptCombatSequence();activeMartialSetId=null;P.actionIndex=+e.currentTarget.value;atk.textContent=(P.actionIndex+1)+'. '+skillLabel(skillStates[P.actionIndex]);}});
   skillStates.forEach((state,index)=>skillSelect.append(el('option',{value:index},(index+1)+'. '+skillLabel(state))));
   if(skillStates.length)ov.append(skillSelect);else{atk.textContent='Không có chiêu';atk.style.opacity='.55';}
   const placementZones=playPaintZones(M,sheets);
@@ -186,12 +209,13 @@ export function play2D(o){
   // ---- trạng thái ----
   let dead=0,DR=[],ENTRY=o.spawn||null,zm=1,L,HID=new Map(),P,E,NP,CH,GL,items,score=0,said=null,winMode='kill',over,t=0,raf,keys={},stick=null,atkCD=0,fx=0,fy=1,last=0;
   const arrOf=k=>k==='E'?E:k==='NP'?NP:CH;
-  const host={say:(t,s)=>{said={n:{x:P.x,y:P.y,name:'',text:t},t:s||3};},heal:n=>{P.hp=Math.min(CF.hp,P.hp+n);},hurt:n=>{P.hitT=.4;P.hp-=n;if(P.hp<=0)end(false);},win:()=>end(true),lose:()=>end(false),
+  const host={say:(t,s)=>{said={n:{x:P.x,y:P.y,name:'',text:t},t:s||3};},heal:n=>{P.hp=Math.min(CF.hp,P.hp+n);},hurt:n=>{interruptCombatSequence();P.hitT=.4;P.hp-=n;if(P.hp<=0)end(false);},win:()=>end(true),lose:()=>end(false),
     setHidden:(id,h)=>{if(h){for(const k of ['E','NP','CH']){const a=arrOf(k),i=a.findIndex(o=>o.id===id);if(i>=0){HID.set(id,{k,obj:a.splice(i,1)[0]});return;}}if(GL&&GL.id===id){HID.set(id,{k:'GL',obj:GL});GL=null;}}
       else{const m=HID.get(id);if(!m)return;HID.delete(id);if(m.k==='GL')GL=m.obj;else arrOf(m.k).push(m.obj);}}};
   const hidEn=()=>[...HID.values()].some(m=>m.k==='E');
   function add(k,obj,e){obj.id=e.id;if(e.hid)HID.set(e.id,{k,obj});else if(k==='GL')GL=obj;else arrOf(k).push(obj);}
   function start(){
+    combatSequence=null;
     let best=null,bd=1e9;const st=EN.find(e=>e.t==='start');
     if(st)best=[st.x,st.y];else for(let i=0;i<W*H;i++){if(M.blk[i])continue;const x=i%W,y=Math.floor(i/W),d=(x-W/2)**2+(y-H/2)**2;if(d<bd){bd=d;best=[x,y];}}
     if(!best){best=[0,0];}
@@ -313,9 +337,9 @@ export function play2D(o){
   }
   function goTo(x,y){if(over||L.dlgOpen)return false;if(x<0||y<0||x>=W||y>=H){note('Ngoài bản đồ');return false;}if(!fitsAt(x,y,.28,postureHeight(P))){note(P.crouching?'Khoảng trống quá thấp':'Mái thấp · Nhấn C để cúi');return false;}
     const g=snapFree(x,y,.28,1);if(!g){note('Điểm này bị chặn');return false;}
-    const p=findPath(P.x,P.y,g.x,g.y,.28);if(!p){PATH=null;GOAL=null;note(!P.crouching&&ceilings.length?'Chưa có đường đứng đi được · thử nhấn C để cúi':'Chưa có đường tới đó');return false;}PATH=p;GOAL=g;stuckT=0;repN=0;return true;}
+    const p=findPath(P.x,P.y,g.x,g.y,.28);if(!p){PATH=null;GOAL=null;note(!P.crouching&&ceilings.length?'Chưa có đường đứng đi được · thử nhấn C để cúi':'Chưa có đường tới đó');return false;}interruptCombatSequence();PATH=p;GOAL=g;stuckT=0;repN=0;return true;}
   function repath(){if(!GOAL)return;if(++repN>4){PATH=null;GOAL=null;note('Không đi tiếp được');return;}const p=findPath(P.x,P.y,GOAL.x,GOAL.y,.28);if(p)PATH=p;else{PATH=null;GOAL=null;note('Chưa có đường');}}
-  function followPath(dt){const q=PATH[0],dx=q.x-P.x,dy=q.y-P.y,d=Math.hypot(dx,dy),st=CF.spd*(P.crouching?.62:1)*dt;
+  function followPath(dt){const q=PATH[0],dx=q.x-P.x,dy=q.y-P.y,d=Math.hypot(dx,dy),st=CF.spd*(moveMode==='walk'?.55:1)*(P.crouching?.62:1)*dt;
     if(d<=Math.max(.03,st)&&traverse(P.x,P.y,q.x,q.y,.28,false)){P.x=q.x;P.y=q.y;PATH.shift();if(!PATH.length){PATH=null;GOAL=null;}return;}
     const px0=P.x,py0=P.y;const step=Math.min(d,st);move(P,dx/d*step,dy/d*step,.28);solidPush(P);fx=dx/d;fy=dy/d;const sxv=ISO?(dx-dy):dx;if(Math.abs(sxv)>.05)P.face=sxv>0?1:-1;
     stuckT=Math.hypot(P.x-px0,P.y-py0)<st*.35?stuckT+dt:0;if(stuckT>.45){stuckT=0;repath();}}
@@ -340,30 +364,29 @@ export function play2D(o){
       el('div',{style:'margin-top:8px;padding:6px 12px;border-radius:10px;background:#263342;display:inline-block;cursor:pointer',onclick:()=>{chkBox.remove();chkBox=null;}},'Đóng'));
     ov.append(chkBox);return res;}
   window.__pl={goTo,toggleDoor,setDoor,DRS,get ZS(){return ZS;},findPath,runCheck,free,get P(){return P;},get PATH(){return PATH;},get W(){return W;},get H(){return H;},GL:()=>GL,toPlane};
-  function end(win){over=1;if(o.onResult)o.onResult(win);msg.textContent='';msg.append(el('div',{},win?'🏆 Chiến thắng!':'💀 Thất bại'),el('div',{style:'padding:12px 22px;border-radius:20px;background:#e0b050;color:#2a1a08;font-size:18px',onclick:o.onRetry||start},'Chơi lại'));msg.style.display='flex';}
-  function attack(index=null){if(over||atkCD>0||L.dlgOpen)return;for(const n of NP){if(Math.hypot(n.x-P.x,n.y-P.y)<1.3){atkCD=.3;if(!L.talk(n))said={n,t:4};L.fire('talk',n.id);return;}}
+  function end(win){over=1;combatSequence=null;if(o.onResult)o.onResult(win);msg.textContent='';msg.append(el('div',{},win?'🏆 Chiến thắng!':'💀 Thất bại'),el('div',{style:'padding:12px 22px;border-radius:20px;background:#e0b050;color:#2a1a08;font-size:18px',onclick:o.onRetry||start},'Chơi lại'));msg.style.display='flex';}
+  function playSkill(state){const as=AN.get(CF.heroAnim),clip=as?.st?.[state];if(!clip)return false;const dur=AN.clipSec(as,state);P.pose={state,direction:AN.dirIdx(as,AN.dirsOf(clip),fx,fy,P.face),startedAt:t,loop:false};P.atkT=dur;P.atkN=(P.atkN||0)+1;const idx=skillStates.indexOf(state);if(idx>=0){P.actionIndex=(idx+1)%skillStates.length;if(skillSelect)skillSelect.value=String(idx);}atkCD=Math.max(.12,Math.min(.35,dur*.6));for(const e of E){const dx=e.x-P.x,dy=e.y-P.y,d=Math.hypot(dx,dy);if(d<CF.rng&&(d<.3||(dx*fx+dy*fy)/d>-.2)){e.hp-=CF.dmg;e.fl=.3;const k=d||1;move(e,dx/k*.6,dy/k*.6,.3);if(e.hp<=0&&Math.random()<.3)items.push({x:e.x,y:e.y});}}const deadEnemies=E.filter(e=>e.hp<=0);E=E.filter(e=>e.hp>0);for(const e of deadEnemies)L.fire('kill',e.id);if(deadEnemies.length&&!E.length&&!hidEn())L.fire('allkill');checkWin();return true;}
+  function attack(index=null){if(over||atkCD>0||L.dlgOpen)return;for(const n of NP){if(Math.hypot(n.x-P.x,n.y-P.y)<1.3){interruptCombatSequence();atkCD=.3;if(!L.talk(n))said={n,t:4};L.fire('talk',n.id);return;}}
     if(!skillStates.length){atkCD=.25;note('Nhân vật chính chưa có hoạt ảnh chiêu thức.');return;}
-    const next=index==null?Math.max(0,P.actionIndex||0):Math.max(0,Math.min(skillStates.length-1,index));const state=skillStates[next],as=AN.get(CF.heroAnim),clip=as.st[state],dur=AN.clipSec(as,state);
-    if(skillSelect)skillSelect.value=String(next);atk.textContent=(next+1)+'. '+skillLabel(state);
-    P.pose={state,direction:AN.dirIdx(as,AN.dirsOf(clip),fx,fy,P.face),startedAt:t,loop:false};P.atkT=dur;P.atkN=(P.atkN||0)+1;P.actionIndex=(next+1)%skillStates.length;if(skillSelect)skillSelect.value=String(next);atkCD=Math.max(.12,Math.min(.35,dur*.6));
-    for(const e of E){const dx=e.x-P.x,dy=e.y-P.y,d=Math.hypot(dx,dy);if(d<CF.rng&&(d<.3||(dx*fx+dy*fy)/d>-.2)){e.hp-=CF.dmg;e.fl=.3;const k=d||1;move(e,dx/k*.6,dy/k*.6,.3);if(e.hp<=0&&Math.random()<.3)items.push({x:e.x,y:e.y});}}const dead=E.filter(e=>e.hp<=0);E=E.filter(e=>e.hp>0);for(const k of dead)L.fire('kill',k.id);if(dead.length&&!E.length&&!hidEn())L.fire('allkill');checkWin();}
+    if(index==null&&activeMartialSetId){const set=activeMartialSet();if(set?.states?.length){if(combatSequence)return;combatSequence={states:[...set.states],index:0};atk.textContent='Bộ: '+set.name;playSkill(combatSequence.states[combatSequence.index++]);return;}}
+    if(index!=null){interruptCombatSequence();activeMartialSetId=null;}const next=index==null?Math.max(0,P.actionIndex||0):Math.max(0,Math.min(skillStates.length-1,index));const state=skillStates[next];atk.textContent=(next+1)+'. '+skillLabel(state);playSkill(state);}
   function checkWin(){if(over)return;if(winMode==='kill'&&!E.length&&!hidEn()&&(legacy||EN.some(e=>e.t==='enemy')))end(true);}
   function solidPush(o){for(const n of [...NP,...CH]){const dx=o.x-n.x,dy=o.y-n.y,d=Math.hypot(dx,dy),r=.6;if(d<r&&d>0){const nx=n.x+dx/d*r,ny=n.y+dy/d*r;if(traverse(o.x,o.y,nx,o.y,.28,false,postureHeight(o)))o.x=nx;if(traverse(o.x,o.y,o.x,ny,.28,false,postureHeight(o)))o.y=ny;}}}
   function upd(dt){
-    t+=dt;atkCD-=dt;P.inv-=dt;P.atkT-=dt;P.hitT-=dt;P.pkT=(P.pkT||0)-dt;if(P.pose&&t-(P.pose.startedAt||0)>=AN.clipSec(AN.get(CF.heroAnim),P.pose.state))P.pose=null;if(over||L.dlgOpen)return;
+    t+=dt;atkCD-=dt;P.inv-=dt;P.atkT-=dt;P.hitT-=dt;P.pkT=(P.pkT||0)-dt;if(P.pose&&t-(P.pose.startedAt||0)>=AN.clipSec(AN.get(CF.heroAnim),P.pose.state))P.pose=null;if(combatSequence&&!P.pose){if(combatSequence.index<combatSequence.states.length)playSkill(combatSequence.states[combatSequence.index++]);else{combatSequence=null;const set=activeMartialSet();atk.textContent=set?'Bộ: '+set.name:'Chiêu';}}if(over||L.dlgOpen)return;
     doorsTick();
     let ix=0,iy=0;if(keys.ArrowLeft||keys.a)ix--;if(keys.ArrowRight||keys.d)ix++;if(keys.ArrowUp||keys.w)iy--;if(keys.ArrowDown||keys.s)iy++;
     if(stick){ix=stick.x;iy=stick.y;}
-    if((ix||iy)&&PATH){PATH=null;GOAL=null;}
+    if(ix||iy){if(combatSequence)interruptCombatSequence();if(PATH){PATH=null;GOAL=null;}}
     if(!over&&!free(P.x,P.y,.28)){const g=snapFree(P.x,P.y,.28,1.5,false);if(g){P.x=g.x;P.y=g.y;}}
     if(SIDE){P.vy=Math.min(18,(P.vy||0)+30*dt);if((keys.ArrowUp||keys.w||keys.k||(stick&&stick.y<-.55))&&P.on){P.vy=-11.5;P.on=0;}
-      const mx=(Math.abs(ix)>.15?Math.sign(ix)*Math.min(1,Math.abs(ix)):0)*CF.spd*dt;if(mx&&traverse(P.x,P.y,P.x+mx,P.y,.28,false))P.x+=mx;if(Math.abs(ix)>.2){P.face=ix>0?1:-1;fx=ix>0?1:-1;fy=0;}
+      const mx=(Math.abs(ix)>.15?Math.sign(ix)*Math.min(1,Math.abs(ix)):0)*CF.spd*(moveMode==='walk'?.55:1)*dt;if(mx&&traverse(P.x,P.y,P.x+mx,P.y,.28,false))P.x+=mx;if(Math.abs(ix)>.2){P.face=ix>0?1:-1;fx=ix>0?1:-1;fy=0;}
       const ny=P.y+P.vy*dt;if(traverse(P.x,P.y,P.x,ny,.28,false)){P.y=ny;P.on=0;}else{if(P.vy>0)P.on=1;P.vy=0;}}
     else if(PATH&&PATH.length&&!(ix||iy)){followPath(dt);}
-    else{const m=Math.hypot(ix,iy);if(m>.15){ix/=Math.max(m,1);iy/=Math.max(m,1);const sxv=ix;if(ISO&&!ANG){const a2=(ix+iy)/1.4142,b2=(iy-ix)/1.4142;ix=a2;iy=b2;}const speed=CF.spd*(P.crouching?.62:1);move(P,ix*speed*dt,iy*speed*dt,.28);solidPush(P);const n=Math.hypot(ix,iy);fx=ix/n;fy=iy/n;if(Math.abs(sxv)>.2)P.face=sxv>0?1:-1;}}
+      else{const m=Math.hypot(ix,iy);if(m>.15){ix/=Math.max(m,1);iy/=Math.max(m,1);const sxv=ix;if(ISO&&!ANG){const a2=(ix+iy)/1.4142,b2=(iy-ix)/1.4142;ix=a2;iy=b2;}const speed=CF.spd*(moveMode==='walk'?.55:1)*(P.crouching?.62:1);move(P,ix*speed*dt,iy*speed*dt,.28);solidPush(P);const n=Math.hypot(ix,iy);fx=ix/n;fy=iy/n;if(Math.abs(sxv)>.2)P.face=sxv>0?1:-1;}}
     for(const e of E){e.fl-=dt;e.attackReady=(e.attackReady||0)-dt;if(e.pose&&t-(e.pose.startedAt||0)>=AN.clipSec(AN.get(e.anim),e.pose.state))e.pose=null;const dx=P.x-e.x,dy=P.y-e.y,d=Math.hypot(dx,dy);
       if(e.ai==='chase'||(e.ai!=='still'&&d<e.ch)){move(e,dx/d*e.spd*dt,dy/d*e.spd*dt,.28);}else if(e.ai!=='still'){e.wt-=dt;if(e.wt<=0){e.wt=1+Math.random()*1.5;const a=Math.random()*6.28;e.dx=Math.cos(a)*(Math.random()<.4?0:1);e.dy=Math.sin(a)*(e.dx?1:0);}move(e,e.dx*.8*dt,e.dy*.8*dt,.28);}
-      solidPush(e);if(d<.6&&P.inv<=0&&e.attackReady<=0){const states=AN.combatStates(e.anim);if(states.length){const as=AN.get(e.anim),state=states[(e.actionIndex||0)%states.length],clip=as.st[state];e.actionIndex=(e.actionIndex||0)+1;e.pose={state,direction:AN.dirIdx(as,AN.dirsOf(clip),dx,dy,dx<0?-1:1),startedAt:t};e.attackReady=Math.max(.55,AN.clipSec(as,state)*.9);P.hp-=e.dmg;P.inv=1;P.hitT=.4;const k=d||1;move(P,-dx/k*.7,-dy/k*.7,.28);if(P.hp<=0){end(false);return;}}}}
+      solidPush(e);if(d<.6&&P.inv<=0&&e.attackReady<=0){const states=AN.combatStates(e.anim);if(states.length){const as=AN.get(e.anim),state=states[(e.actionIndex||0)%states.length],clip=as.st[state];e.actionIndex=(e.actionIndex||0)+1;e.pose={state,direction:AN.dirIdx(as,AN.dirsOf(clip),dx,dy,dx<0?-1:1),startedAt:t};e.attackReady=Math.max(.55,AN.clipSec(as,state)*.9);interruptCombatSequence();P.hp-=e.dmg;P.inv=1;P.hitT=.4;const k=d||1;move(P,-dx/k*.7,-dy/k*.7,.28);if(P.hp<=0){end(false);return;}}}}
     for(const c of CH)if(!c.open&&Math.hypot(c.x-P.x,c.y-P.y)<.7){
       if(!fitsAt(c.x,c.y,.25,c.openHeight)){if(!said)note('Không đủ chỗ để mở nắp rương');continue;}
       c.open=1;P.pkT=1;L.fire('chest',c.id);if(c.gives==='hp')P.hp=Math.min(CF.hp,P.hp+c.amt);else score+=c.amt;said={n:{x:c.x,y:c.y,name:'Rương',text:c.gives==='hp'?'+'+c.amt+' máu':'+'+c.amt+' điểm'},t:1.5};}
@@ -438,7 +461,7 @@ export function play2D(o){
           const actor={...CF.outlineHero,tile:CF.hero,x:P.x-1,y:P.y-1};
           if(CF.outline?.surface)actor.sc=playerSize.standing*.75/Math.max(.05,tileSpan(sheets[actor.tile.sid],actor.tile.idx));
           drawPlacedProp(cx,actor,sheets[actor.tile.sid],placedPropFrame(actor,()=>[ox+P.x*s,oy+P.y*s],ISO?s:s/.75,ISO?'iso':'top'));
-        }else if(!(CF.heroAnim&&AN.drawChar(cx,P,CF.heroAnim,ox+P.x*s,oy+P.y*s,s,t,{iso:ISO,ang:ANG,grounded,height:CF.outline?.surface?playerSize.standing:0,pose:P.pose,pk:q.pkT>0,hit:P.hitT>0}))){const hs=sheets[CF.hero.sid];if(hs&&/đã gỡ/.test(hs.name)){cx.fillStyle='#e0b050';cx.beginPath();cx.arc(ox+P.x*s,oy+(P.y-.3)*s,s*.3,0,6.3);cx.fill();}else{fitActor(P,CF.hero.sid,CF.hero.idx,playerSize.standing);tile(CF.hero.sid,CF.hero.idx,ox+(P.x-.5)*s,actorTop(P,CF.hero.sid,CF.hero.idx),s,P.face<0);}}cx.restore();}
+        }else if(!(CF.heroAnim&&AN.drawChar(cx,P,CF.heroAnim,ox+P.x*s,oy+P.y*s,s,t,{iso:ISO,ang:ANG,grounded,height:CF.outline?.surface?playerSize.standing:0,pose:P.pose,pk:q.pkT>0,hit:P.hitT>0,moveMode}))){const hs=sheets[CF.hero.sid];if(hs&&/đã gỡ/.test(hs.name)){cx.fillStyle='#e0b050';cx.beginPath();cx.arc(ox+P.x*s,oy+(P.y-.3)*s,s*.3,0,6.3);cx.fill();}else{fitActor(P,CF.hero.sid,CF.hero.idx,playerSize.standing);tile(CF.hero.sid,CF.hero.idx,ox+(P.x-.5)*s,actorTop(P,CF.hero.sid,CF.hero.idx),s,P.face<0);}}cx.restore();}
       else{const e=n.e;cx.globalAlpha=e.fl>0?.5:1;if(!(e.anim&&AN.drawChar(cx,e,e.anim,ox+e.x*s,oy+e.y*s,s,t,{iso:ISO,ang:ANG,grounded,scale:e.visualScale,height:CF.outline?.surface?e.height:0,pose:e.pose,hit:e.fl>0}))){cx.save();fitActor(e,e.tl.sid,e.tl.idx,e.height||1.2);fbk(e,ox+(e.x-.5)*s,actorTop(e,e.tl.sid,e.tl.idx),s,e.x<P.x);cx.restore();}cx.globalAlpha=1;cx.fillStyle='#000a';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7,3);cx.fillStyle='#e74c3c';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7*Math.max(0,e.hp)/e.mhp,3);}}
     for(const q of TC){const d=q.d,zb=d.zb||[-(d.fx||1),-(d.fy||1),d.fx||1,d.fy||1],x0=d.x+1+zb[0]-.7,y0=d.y+1+zb[1]-.7,ins=P.x>x0&&P.x<x0+zb[2]+1.4&&P.y>y0&&P.y<y0+zb[3]+1.4;d._a=(d._a==null?1:d._a)+((ins?.3:1)-(d._a==null?1:d._a))*.2;const sh=sheets[d.cv.sid];if(!sh||!sh.img)continue;const sx=(d.cv.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(d.cv.idx/sh.cols)*(sh.tw+sh.margin);cx.globalAlpha=d._a;cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,q.X-q.ws/2+(d.ox||0)*q.ws,q.Y-q.ws+(d.oy||0)*q.ws,q.ws,q.ws);cx.globalAlpha=1;}
     if(ISO)for(const g of OVG){const ins=P.x>g.x0-.4&&P.x<g.x1+.4&&P.y>g.y0-.4&&P.y<g.y1+.4;g.a+=((ins?.35:1)-g.a)*.18;const k2=s*.95/CQ,wp=g.c.width*k2,hp=g.c.height*k2;cx.globalAlpha=g.a;cx.drawImage(g.c,pX(g.xc,g.yb)-wp/2,pY(g.xc,g.yb)-hp,wp,hp);cx.globalAlpha=1;}
@@ -494,7 +517,7 @@ export function play2D(o){
   function fbk(q,x,y,s,flip){if(q.anim){cx.fillStyle='#e0b050';cx.beginPath();cx.arc(x+s/2,y+s*.3,s*.28,0,6.3);cx.fill();cx.fillStyle='#222';cx.font='bold '+(s*.35)+'px system-ui';cx.textAlign='center';cx.fillText((q.name||'?')[0],x+s/2,y+s*.42);}else tile(q.tl.sid,q.tl.idx,x,y,s,flip);}
   function loop(ts){if(dead)return;const dt=Math.min(.05,(ts-last)/1000||0);last=ts;upd(dt);if(dead)return;draw();raf=requestAnimationFrame(loop);}
   // ---- điều khiển ----
-  const kd=e=>{if(e.key==='Escape'&&(o.onSnapshot||o.escapeExit)){e.preventDefault();stop();return;}const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=1;if(k==='+'||k==='='){setZ(zm*1.25);}if(k==='-'||k==='_'){setZ(zm*.8);}if(k==='e'){toggleDoor();}if(k==='c'&&!e.repeat){toggleCrouch();e.preventDefault();}if(/^[1-9]$/.test(k)){attack(+k-1);e.preventDefault();}else if(k===' '||k==='j'){attack();e.preventDefault();}else if(k.startsWith('Arrow'))e.preventDefault();},ku=e=>{keys[e.key.length===1?e.key.toLowerCase():e.key]=0;};
+  const kd=e=>{if(e.key==='Escape'&&(o.onSnapshot||o.escapeExit)){e.preventDefault();stop();return;}if(e.key==='Shift'&&!e.repeat){toggleMoveMode();e.preventDefault();return;}const k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=1;if(k==='+'||k==='='){setZ(zm*1.25);}if(k==='-'||k==='_'){setZ(zm*.8);}if(k==='e'){toggleDoor();}if(k==='c'&&!e.repeat){toggleCrouch();e.preventDefault();}if(/^[1-9]$/.test(k)){attack(+k-1);e.preventDefault();}else if(k===' '||k==='j'){attack();e.preventDefault();}else if(k.startsWith('Arrow'))e.preventDefault();},ku=e=>{keys[e.key.length===1?e.key.toLowerCase():e.key]=0;};
   addEventListener('keydown',kd);addEventListener('keyup',ku);
   atk.addEventListener('pointerdown',e=>{e.stopPropagation();e.preventDefault();attack();});
   let clk=null;cv.addEventListener('pointerdown',e=>{clk={x:e.clientX,y:e.clientY,t:performance.now(),id:e.pointerId};},true);
