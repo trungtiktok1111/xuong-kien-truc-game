@@ -20,7 +20,8 @@ export function directionalPanel(editor){
   ctx.clearRect(0,0,96,96);
   if(sheet?.img){
    const frame=Math.floor(Math.max(0,time-epoch)*clip.fps/1000)%clip.n;
-   ctx.drawImage(sheet.img,frame*clip.fw,Number(direction.value)*clip.fh,clip.fw,clip.fh,0,0,96,96);
+   const scale=96/Math.max(clip.fw,clip.fh),w=clip.fw*scale,h=clip.fh*scale;
+   ctx.drawImage(sheet.img,frame*clip.fw,Number(direction.value)*clip.fh,clip.fw,clip.fh,(96-w)/2,96-h,w,h);
   }
   raf=requestAnimationFrame(paint);
  }
@@ -46,7 +47,7 @@ export function directionalPanel(editor){
   try{
    const groups=[];
    for(const file of files)groups.push(...readDirectionalZip(new Uint8Array(await file.arrayBuffer())));
-   status.textContent=names+' · '+(groups.length?groups.length+' bộ. Bấm tên bộ để nạp.':'Chưa thấy bảng PNG 8 hướng hoặc đủ 8 dải PNG có tên hướng.');
+   status.textContent=names+' · '+(groups.length?groups.length+' bộ. Bấm tên bộ để nạp.':'Chưa ghép được hoạt ảnh từ các tệp trong ZIP này.');
    for(const group of groups){
     const pick=button(group.name,async()=>{
      const map=editor.map();pick.disabled=true;
@@ -61,6 +62,6 @@ export function directionalPanel(editor){
    }
   }catch(error){status.textContent=error.message;}
  };
- section.append(el('strong',{},'Animation/Animated'),el('label',{},'Nhập ZIP hoạt ảnh 8 hướng ',input),status,available,library,preview);
+ section.append(el('strong',{},'Animation/Animated'),el('label',{},'Nhập ZIP hoạt ảnh ',input),status,available,library,preview);
  refresh();return section;
 }
