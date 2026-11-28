@@ -3543,7 +3543,7 @@ export function init2D(root,A){
         const target=valid?MAPS[e.to]:null;
         for(const k of ['tx','ty']){const field=coords[k];if(!field)continue;const max=target?((k==='tx'?target.w:target.h)-1):null;field.max=max??'';field.disabled=!valid;}
       };
-      sel.onchange=()=>{pushUndo();e.to=sel.value===''?null:+sel.value;e.tx=e.ty=null;syncDoorControls();after();};
+      sel.onchange=()=>{pushUndo();e.to=sel.value===''?null:+sel.value;e.tx=e.ty=null;syncDoorControls();after();cv.focus({preventScroll:true});};
       const num=(k)=>{const i=el('input',{type:'number',class:'num',style:'width:60px',min:0,step:1,placeholder:'chọn trên bản đồ',value:e[k]==null?'':e[k]});coords[k]=i;i.onchange=()=>{const n=i.valueAsNumber,max=MAPS[e.to]?(k==='tx'?MAPS[e.to].w:MAPS[e.to].h)-1:null;if(i.value!==''&&(!Number.isInteger(n)||n<0||(max!=null&&n>max))){toast('Tọa độ phải nằm trong kích thước màn đích.');i.value=e[k]??'';return;}pushUndo();e[k]=i.value===''?null:n;after();};return i;};
       syncDoorControls();
       body.append(el('div',{style:'border:1px solid #ffa94d;border-radius:10px;padding:8px;margin:6px 0'+(e.id===selId?';background:#2a2418':'')},
