@@ -101,7 +101,7 @@ export function outlineWallRuns(outline){
       while(j+1<points.length&&straight(points[i],points[j],points[j+1]))j++;
       const a=points[i],b=points[j],dx=b[0]-a[0],dy=b[1]-a[1],edgeIndexes=[];
       for(let edge=i;edge<j;edge++)edgeIndexes.push((start+edge)%loop.length);
-      if(Math.hypot(dx,dy)>1e-6)out.push({id:runId(a,b),outlineWall:true,loopIndex,edgeIndexes,x:a[0]-1,y:a[1]-1,
+      if(Math.hypot(dx,dy)>.5)out.push({id:runId(a,b),outlineWall:true,loopIndex,edgeIndexes,x:a[0]-1,y:a[1]-1,
         wallLine:{dx,dy,thickness:outline.thickness??WALL_THICKNESS}});
       i=j;
     }
