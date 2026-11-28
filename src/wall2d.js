@@ -88,7 +88,7 @@ function runId(a,b){
 // "this segment belongs to no run at all" (a short or curved stretch, never assigned an
 // id) and "this segment's run was deliberately removed" stay distinguishable.
 export function outlineWallRuns(outline){
-  return (outline?.loops||[]).flatMap(loop=>{
+  return (outline?.loops||[]).flatMap((loop,loopIndex)=>{
     const straight=(a,b,c)=>{
       const x=b[0]-a[0],y=b[1]-a[1],u=c[0]-b[0],v=c[1]-b[1];
       return x*u+y*v>0&&Math.abs(x*v-y*u)<=1e-5*Math.hypot(x,y)*Math.hypot(u,v);
@@ -99,8 +99,9 @@ export function outlineWallRuns(outline){
     for(let i=0;i<points.length-1;){
       let j=i+1;
       while(j+1<points.length&&straight(points[i],points[j],points[j+1]))j++;
-      const a=points[i],b=points[j],dx=b[0]-a[0],dy=b[1]-a[1];
-      if(Math.hypot(dx,dy)>.5)out.push({id:runId(a,b),outlineWall:true,x:a[0]-1,y:a[1]-1,
+      const a=points[i],b=points[j],dx=b[0]-a[0],dy=b[1]-a[1],edgeIndexes=[];
+      for(let edge=i;edge<j;edge++)edgeIndexes.push((start+edge)%loop.length);
+      if(Math.hypot(dx,dy)>1e-6)out.push({id:runId(a,b),outlineWall:true,loopIndex,edgeIndexes,x:a[0]-1,y:a[1]-1,
         wallLine:{dx,dy,thickness:outline.thickness??WALL_THICKNESS}});
       i=j;
     }
