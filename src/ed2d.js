@@ -1,3 +1,4 @@
+import {characterNameKey,mergeAnimationClips} from './animationClips.js';
 import {baseAnchorPoints} from './baseAnchors.js';
 import {cropContactFrame} from './cropContact.js';
 import {drawAssemblyGuides} from './assemblyGuides.js';
@@ -4073,12 +4074,43 @@ export function init2D(root,A){
     placementQueue=job.catch(()=>{});
     return job;
   }
-  async function installDirectionalSet(set,assets,map){
-    const prepared=sheets.slice(),count=sheets.length;
-    for(const asset of assets)await loadBuiltinSheet(asset,prepared);
+  async function installDirectionalSet(set,assets,map,targetId){
+    const prepared=sheets.slice(),count=sheets.length,assetNames=new Map();
+    for(const asset of assets){
+      const sid=await loadBuiltinSheet(asset,prepared);
+      assetNames.set(asset.name,prepared[sid].name);
+    }
     if(M!==map||sheets.length!==count)throw Error('Màn đang chỉnh đã đổi. Hãy nạp lại.');
-    sheets.push(...prepared.slice(count));pushUndo();
-    M.cfg.anims=[...(M.cfg.anims||[]),set];anK='';after();draw();
+    const sets=M.cfg.anims||[];
+    const target=targetId?sets.find(item=>item.id===targetId):
+      sets.find(item=>characterNameKey(item.name)===characterNameKey(set.name));
+    if(targetId&&!target)throw Error('Nhân vật đã chọn không còn trong màn.');
+    for(const clip of Object.values(set.st))clip.src=clip.src.map(name=>assetNames.get(name)??name);
+    const merged=target?{...target,st:mergeAnimationClips(target.st,set.st).clips}:set;
+    pushUndo();
+    sheets.push(...prepared.slice(count));
+    M.cfg.anims=target?sets.map(item=>item===target?merged:item):[...sets,merged];
+    anK='';after();draw();
+    return merged;
+  }
+  function mergeDirectionalSets(sourceId,targetId){
+    const sets=M.cfg.anims||[];
+    const source=sets.find(item=>item.id===sourceId),target=sets.find(item=>item.id===targetId);
+    if(!source||!target||source===target)return null;
+    const {clips,keys}=mergeAnimationClips(target.st,source.st);
+    const merged={...target,st:clips};
+    pushUndo();
+    M.cfg.anims=sets.filter(item=>item!==source).map(item=>item===target?merged:item);
+    if(M.cfg.heroAnim===sourceId)M.cfg.heroAnim=targetId;
+    if(M.cfg.beforeOutlineHero?.heroAnim===sourceId)M.cfg.beforeOutlineHero.heroAnim=targetId;
+    for(const entity of M.ents){
+      if(entity.anim!==sourceId)continue;
+      entity.anim=targetId;
+      const pose=entity.animationPose;
+      if(pose&&keys.has(pose.state))pose.state=keys.get(pose.state);
+    }
+    anK='';after();draw();
+    return merged;
   }
   function setAnimationScale(id,scale){
     if(!Number.isFinite(scale)||scale<.1||scale>4)return;
@@ -4320,6 +4352,6 @@ export function init2D(root,A){
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
     .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
-  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){if(materialDrag){materialDrag=null;setMaterialAnchor(null);}},installDirectionalSet,setAnimatedHero,setAnimationScale,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){if(materialDrag){materialDrag=null;setMaterialAnchor(null);}},installDirectionalSet,mergeDirectionalSets,setAnimatedHero,setAnimationScale,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
   return api;
 }
