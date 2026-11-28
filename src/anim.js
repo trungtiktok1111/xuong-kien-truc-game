@@ -57,7 +57,7 @@ export function makeAnims(cfg,sheets){uniqNames(sheets);
   function drawChar(cx,q,id,sx,sy,s,t,hint){
     const set=get(id);if(!set)return false;
     const pose=hint?.pose;
-    if(pose&&set.st?.[pose.state])return frame(cx,set,pose.state,pose.direction,t,sx,sy,s,false,hint.grounded,hint.height,hint.scale,true);
+    if(pose&&set.st?.[pose.state])return frame(cx,set,pose.state,pose.direction,Math.max(0,t-(pose.startedAt||0)),sx,sy,s,false,hint.grounded,hint.height,hint.scale,!!pose.loop);
     if(q.lx!==undefined){let dx=q.x-q.lx,dy=q.y-q.ly;if(hint&&hint.iso&&!hint.ang){const a=dx-dy,b=(dx+dy)*.5;dx=a;dy=b;}if(Math.abs(dx)+Math.abs(dy)>.0004){q.mvt=t;const m=Math.hypot(dx,dy);q.afx=dx/m;q.afy=dy/m;if(Math.abs(dx)>.0002)q.aface=dx>0?1:-1;}}q.lx=q.x;q.ly=q.y;
     const want=hint&&hint.pk&&set.st&&set.st.pickup?'pickup':hint&&hint.hit?'hit':hint&&hint.atk?('atk'+(hint.atk>1?hint.atk:'')):(t-(q.mvt===undefined?-9:q.mvt)<.12?'run':'idle');
     const stn=pickState(set,want);if(!stn)return false;
@@ -66,7 +66,9 @@ export function makeAnims(cfg,sheets){uniqNames(sheets);
     const fl=dirs===1&&((q.aface||1)<0)!==!!set.fl;
     let tt=want==='idle'&&stn!=='idle'?0:t-q.ast0;const sk=set.st[stn];if(sk&&sk.skip1&&hint&&hint.chain){const sp0=strip(set,stn,d);if(sp0)tt+=sp0.dur?sp0.dur[0]/1000:1/sp0.fps;}
     return frame(cx,set,stn,d,tt,sx,sy,s,fl,hint?.grounded,hint?.height,hint?.scale);}
-  return {get,strip,frame,drawChar,dirsOf,dirIdx,clipSec,pickState};
+  const skillStates=id=>{const states=get(id)?.st||{};return Object.keys(states).filter(k=>states[k]?.src?.length&&!/^(idle|walk|run|hit\d*|pickup|death\d*|die\d*|dead|guard|block)$/i.test(k)).sort((a,b)=>{const na=+(a.match(/\d+/)?.[0]||0),nb=+(b.match(/\d+/)?.[0]||0);return na-nb||a.localeCompare(b,'en');});};
+  const combatStates=id=>skillStates(id).filter(k=>/^(atk|attack|combo|punch|kick|slash|strike|skill|special|cast|spell|charge)/i.test(k));
+  return {get,strip,frame,drawChar,dirsOf,dirIdx,clipSec,pickState,skillStates,combatStates};
 }
 
 /* ---------- tự gom ảnh thành bộ ---------- */
