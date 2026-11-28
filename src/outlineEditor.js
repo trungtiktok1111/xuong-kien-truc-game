@@ -3,7 +3,7 @@ import {directionalPanel} from './directionalPanel.js';
 import {drawSurfaceTerrain} from './surfaceContours.js';
 import {surfaceLevels,surfaceLevelById,surfacePieces} from './surfaceLibrary.js';
 import {diamondOutline,newSurface,planSurface,surfaceFromLevel,surfaceTypes,surfaceWater} from './surfaceTerrain.js';
-import {WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS,outlineSupports} from './wall2d.js';
+import {WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS,outlineWallRuns} from './wall2d.js';
 import {DEFAULT_OUTLINE_WALL_HEIGHT,fitDraftGrid} from './outlineGrid.js';
 import {captureOutlineTiles,placeOutlineTiles} from './outlineMaterials.js';
 import {levelLibrary} from './outlineLevels.js';
@@ -290,10 +290,16 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   }
   refreshWallControls();
   if(mode==='wall'){
-   for(const run of outlineSupports({loops,thickness:+thickness.value,removedWalls,wallOverrides})){
+   // Draw every run regardless of removal (dashed when removed) so a deleted run stays
+   // visible and clickable to restore — only hiding it here would make "Khôi phục" work
+   // only while the run was still the live selection, with no way back afterward.
+   for(const run of outlineWallRuns({loops,thickness:+thickness.value})){
+    const removed=removedWalls.includes(run.id);
     const a=[run.x+1,run.y+1],b=[a[0]+run.wallLine.dx,a[1]+run.wallLine.dy];
     c.beginPath();c.moveTo(xp(a[0]),yp(a[1]));c.lineTo(xp(b[0]),yp(b[1]));
-    c.strokeStyle=run.id===selectedWall?'#f9cb6a':'#76dfbd';c.lineWidth=run.id===selectedWall?4:2;c.stroke();
+    c.save();if(removed)c.setLineDash([4,4]);
+    c.strokeStyle=run.id===selectedWall?'#f9cb6a':removed?'#76dfbd77':'#76dfbd';
+    c.lineWidth=run.id===selectedWall?4:2;c.stroke();c.restore();
    }
   }
   if(is3D&&(gates.length||mode==='gate'||mode==='ungate')){
@@ -724,7 +730,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
    else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){
     e.preventDefault();e.shiftKey?travel(redo,undo):travel(undo,redo);
    }
-   else if(e.key.toLowerCase()==='l'&&!e.ctrlKey&&!e.metaKey&&!placement){e.preventDefault();select('wall');}
+   else if(e.key.toLowerCase()==='l'&&!e.ctrlKey&&!e.metaKey&&!placement&&box.dataset.page!=='preview'){e.preventDefault();select('wall');}
  };
  box.tabIndex=-1;
  operation.onchange=draw;
@@ -740,7 +746,9 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   const button=B(label,()=>select(key));modeButtons.set(key,button);toolbar.append(button);
  }
  function nearestWallRun(p){
-  const runs=outlineSupports({loops,thickness:+thickness.value,removedWalls,wallOverrides});
+  // Unfiltered: a removed run must stay clickable (to restore it), see the matching
+  // note in draw().
+  const runs=outlineWallRuns({loops,thickness:+thickness.value});
   let best=null,dist=10/s;
   for(const run of runs){
    const a=[run.x+1,run.y+1],dx=run.wallLine.dx,dy=run.wallLine.dy,length=dx*dx+dy*dy;
@@ -754,7 +762,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  const wallDeleteButton=B('Xoá đoạn này',()=>{
   if(!selectedWall)return;
   if(removedWalls.includes(selectedWall)){record();removedWalls=removedWalls.filter(id=>id!==selectedWall);draw();return;}
-  if((map.ents||[]).some(e=>e.wallId===selectedWall)){toast('Đoạn tường có cổng. Hãy xóa cổng trước.');return;}
+  if((map.ents||[]).some(e=>e.wallId===selectedWall)||gates.some(g=>g.wallId===selectedWall)){toast('Đoạn tường có cổng. Hãy xóa cổng trước.');return;}
   record();removedWalls=[...removedWalls,selectedWall];draw();
  });
  wallMaterialSelect.onchange=()=>{
@@ -771,7 +779,10 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   if(!active)return;
   const removed=removedWalls.includes(selectedWall);
   wallDeleteButton.textContent=removed?'Khôi phục đoạn này':'Xoá đoạn này';
-  const names=map.cfg.outline?.wallMaterials||(map.cfg.outline?.wallMaterial?[map.cfg.outline.wallMaterial]:[]);
+  const names=[...new Set([
+   ...(map.cfg.outline?.wallMaterials||(map.cfg.outline?.wallMaterial?[map.cfg.outline.wallMaterial]:[])),
+   ...(map.cfg.outline?.wallModules||[]).map(module=>module.sheet).filter(Boolean)
+  ])];
   wallMaterialSelect.replaceChildren(el('option',{value:''},'— mặc định —'),...names.map(name=>el('option',{value:name},name)));
   wallMaterialSelect.value=wallOverrides[selectedWall]||'';
   wallMaterialSelect.disabled=removed||!names.length;
@@ -1041,7 +1052,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   wallMaterial:!levelDraft?map.cfg.outline?.wallMaterial:undefined,
   wallMaterials:!levelDraft?map.cfg.outline?.wallMaterials:undefined,
   wallModules:!levelDraft?map.cfg.outline?.wallModules:undefined,
-  removedWalls:[...removedWalls],wallOverrides:{...wallOverrides},
+  removedWalls:!levelDraft?[...removedWalls]:undefined,wallOverrides:!levelDraft?{...wallOverrides}:undefined,
   ...(is3D?{gates:copy(gates),floorCollision:collision.checked}:{})});
  async function runAction(action,close){
   if(commitBusy||!readGrid())return;

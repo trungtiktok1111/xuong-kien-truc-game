@@ -210,7 +210,7 @@ export function init2D(root,A){
     for(const e of M.ents){if(e.wallLine||(e.t==='deco'&&!vis[sceneEntityLayer(e)]))continue;for(const wall of gateWalls(e,AG))items.push({k:wall.k,wall});items.push({k:e.tiledLayer===undefined?(e.placedProp?(AG?e.y+1:e.x+e.y+2):AG?(e.t==='deco'?(e.flat?-1e4+e.y:depthAng(e)):e.y+.5):(e.t==='deco'?(e.flat?-1e4+e.x+e.y:e.x+e.y+1):e.x+e.y+1)):tiledDepth(e,M.w,M.h,AG),e});}
     items.sort((a,b)=>a.k-b.k);isoHB=[];const COV=[],roofs=[];const cur=tool==='obj'||tool==='zone';
     for(const it of items){
-      if(it.wall){stoneWall(cx,it.wall,g2s,S,w,h,geo,wallImage);continue;}
+      if(it.wall){stoneWall(cx,it.wall,g2s,S,w,h,geo,wallImage,sheets);continue;}
       if(it.g){const g=it.g,k2=sc*.95/B.CQ,wp=AG?g.c.width*2*S/B.CQ:g.c.width*k2,hp=AG?g.c.height*2*S*ANG_R/B.CQ:g.c.height*k2,p=g2s(g.xc,g.yb);cx.imageSmoothingEnabled=true;cx.drawImage(g.c,p[0]-wp/2,p[1]-hp,wp,hp);cx.imageSmoothingEnabled=false;continue;}
       const e=it.e,sel=e.id===selId;
       if(e.placedProp){if(isRoof(e)||e.tiledLayer!==undefined&&e.sceneLayer===3)roofs.push(e);else drawIndependentProp(e);continue;}

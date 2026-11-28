@@ -1,4 +1,4 @@
-import {WALL_THICKNESS,outlineSupports,wallRuns,wallSpan} from './wall2d.js';
+import {WALL_THICKNESS,outlineSupports,outlineWallRuns,wallRuns,wallSpan} from './wall2d.js';
 import {DEFAULT_OUTLINE_WALL_HEIGHT} from './outlineGrid.js';
 const cached=new WeakMap();
 export function outlineWallImage(outline,sheets){
@@ -49,18 +49,26 @@ export function outline2D(data,angle=false,ents=[]){
  const points=loops.flat(),u=points.map(p=>angle?p[0]:p[0]-p[1]),v=points.map(p=>angle?p[1]:(p[0]+p[1])/2);
  const bounds=[Math.min(...u),Math.min(...v),Math.max(...u),Math.max(...v)];
  const supports=outlineSupports(data);
- // Tag each fine render segment with the (filtered/overridden) support run it sits
- // on: `removed` lets the wall face be skipped while the floor skirt (drawFloorSlab,
- // which reads the same walls array) still draws there unchanged; `material` lets
- // that one run's face use a different texture than the scene default.
+ // Tag each fine render segment with the run it sits on, matched against the UNFILTERED
+ // run list (outlineWallRuns) so a segment that never had an owning run at all (too
+ // short, or part of a loop with no straight corner — e.g. a dense curve) is left alone,
+ // distinct from a segment whose run exists but is in removedWalls. `removed` lets the
+ // wall face be skipped while the floor skirt (drawFloorSlab, which reads the same walls
+ // array) still draws there unchanged; `material` lets that one run's face use a
+ // different texture than the scene default.
+ const allRuns=outlineWallRuns(data);
  for(const seg of walls){
   const mid=[(seg.a[0]+seg.b[0])/2,(seg.a[1]+seg.b[1])/2];
-  const owner=supports.find(support=>{
-   const {a,length,u:du}=wallSpan(support),x=mid[0]-a[0],y=mid[1]-a[1],d=x*du[0]+y*du[1];
+  const owner=allRuns.find(run=>{
+   const {a,length,u:du}=wallSpan(run),x=mid[0]-a[0],y=mid[1]-a[1],d=x*du[0]+y*du[1];
    return Math.abs(x*du[1]-y*du[0])<=.05&&d>=-.05&&d<=length+.05;
   });
-  if(!owner)seg.removed=true;
-  else if(owner.wallLine.material!==undefined)seg.material=owner.wallLine.material;
+  if(!owner)continue;
+  if(data.removedWalls?.includes(owner.id))seg.removed=true;
+  else{
+   const material=data.wallOverrides?.[owner.id];
+   if(material!==undefined)seg.material=material;
+  }
  }
  const result={loops,walls,perimeter,floorThickness:data.floorThickness??.35,supports,bounds,front:data.front??DEFAULT_OUTLINE_WALL_HEIGHT,rear:data.rear??DEFAULT_OUTLINE_WALL_HEIGHT};
  variants[index]=result;cached.set(data,variants);return cutGateOpenings(result,ents,angle);
@@ -140,7 +148,12 @@ export function wallSurface(wall,project,unit,geometry){
  return {front:near?first:second,back:near?second:first,high};
 }
 
-export function stoneWall(cx,wall,project,unit,w,h,geometry,texture=null){
+export function stoneWall(cx,wall,project,unit,w,h,geometry,texture=null,sheets=null){
+ if(wall.removed)return;
+ if(wall.material&&sheets){
+  const override=wallMaterialImage(wall.material,sheets);
+  if(override)texture=[override];
+ }
  if(Array.isArray(texture)&&!texture.modules?.length)texture=texture[Math.min(texture.length-1,Math.floor((wall.phase||0)*texture.length/(geometry?.perimeter||1)))];
  const shape=wallSurface(wall,project,unit,geometry);
  if(!shape||shape.high<=0)return;

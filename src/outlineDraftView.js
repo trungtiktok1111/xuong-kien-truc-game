@@ -1,5 +1,5 @@
 import {drawSurfaceTerrain,surfaceTerrainTile} from './surfaceContours.js';
-import {clipOutline,outline2D,outlineWallImage,wallMaterialImage,stoneBackdrop,drawFloorSlab,stoneWall,wallSurface} from './outline2d.js';
+import {clipOutline,outline2D,outlineWallImage,stoneBackdrop,drawFloorSlab,stoneWall,wallSurface} from './outline2d.js';
 import {slab,tile192,mirF} from './isoslab.js';
 import {drawPlacedProp,placedPropFrame} from './proj.js';
 import {builtWallFaces} from './wall2d.js';
@@ -76,15 +76,9 @@ export function drawOutlineDraft(canvas,{M:map,sheets},camera={zoom:1,x:0,y:0}){
   (l===3?roofs:items).push(row);
  }
  const texture=outlineWallImage(map.cfg.outline,sheets);
- const overrideImages=new Map();
  for(const {wall,e,group,layer} of [...items.sort((a,b)=>a.depth-b.depth),...roofs.sort((a,b)=>a.depth-b.depth)]){
   if(wall){
-   if(wall.removed)continue;
-   if(wall.material){
-    if(!overrideImages.has(wall.material))overrideImages.set(wall.material,wallMaterialImage(wall.material,sheets));
-    const overrideTexture=overrideImages.get(wall.material);
-    stoneWall(cx,wall,project,s,width,height,geo,overrideTexture?[overrideTexture]:texture);
-   }else stoneWall(cx,wall,project,s,width,height,geo,texture);
+   stoneWall(cx,wall,project,s,width,height,geo,texture,sheets);
    continue;
   }
   if(e?.placedProp){

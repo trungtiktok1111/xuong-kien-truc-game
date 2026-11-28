@@ -396,7 +396,7 @@ export function play2D(o){
       const scale=visual*(CF.outline?.surface?top*.75/Math.max(.05,extent):1);
       const x=ox+q.x*s;cx.translate(x,foot);cx.scale(scale,scale);cx.translate(-x,-foot);
     };
-    for(const n of ents){if(n.wall){stoneWall(cx,n.wall,ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s],ISO?s*.75:s,w,h,geo,wallImage);continue;}if(n.dc){const d=n.dc,sh=d.tile&&sheets[d.tile.sid];
+    for(const n of ents){if(n.wall){stoneWall(cx,n.wall,ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s],ISO?s*.75:s,w,h,geo,wallImage,sheets);continue;}if(n.dc){const d=n.dc,sh=d.tile&&sheets[d.tile.sid];
       if(d.placedProp){
         const project=ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s];
         drawPlacedProp(cx,d,sh,placedPropFrame(d,project,s,ANG?'angle':ISO?'iso':'top'));

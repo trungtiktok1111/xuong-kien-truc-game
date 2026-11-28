@@ -74,8 +74,21 @@ export function builtWallZones(ents,ignoreGate){
 }
 
 // Consecutive collinear edges are one support even when an outline has been subdivided.
-export function outlineSupports(outline){
-  return (outline?.loops||[]).flatMap((loop,li)=>{
+// Ids are keyed by the run's own (rounded, order-independent) endpoints rather than its
+// loop/point index, so adding, removing or reordering an unrelated loop elsewhere in the
+// outline — which renumbers every later loop's index — does not silently repoint a
+// removedWalls/wallOverrides entry at a different physical wall. The id only changes when
+// the wall itself actually moves, resizes, or disappears.
+function runId(a,b){
+  const key=p=>Math.round(p[0]*100)+','+Math.round(p[1]*100);
+  return 'outline:'+[key(a),key(b)].sort().join(':');
+}
+// Every straight run, regardless of removedWalls/wallOverrides — the single source of
+// truth both outlineSupports (below) and outline2D's render-segment tagging consult, so
+// "this segment belongs to no run at all" (a short or curved stretch, never assigned an
+// id) and "this segment's run was deliberately removed" stay distinguishable.
+export function outlineWallRuns(outline){
+  return (outline?.loops||[]).flatMap(loop=>{
     const straight=(a,b,c)=>{
       const x=b[0]-a[0],y=b[1]-a[1],u=c[0]-b[0],v=c[1]-b[1];
       return x*u+y*v>0&&Math.abs(x*v-y*u)<=1e-5*Math.hypot(x,y)*Math.hypot(u,v);
@@ -87,15 +100,17 @@ export function outlineSupports(outline){
       let j=i+1;
       while(j+1<points.length&&straight(points[i],points[j],points[j+1]))j++;
       const a=points[i],b=points[j],dx=b[0]-a[0],dy=b[1]-a[1];
-      const id='outline:'+li+':'+((start+i)%loop.length);
-      if(Math.hypot(dx,dy)>.5&&!outline.removedWalls?.includes(id)){
-        const material=outline.wallOverrides?.[id];
-        out.push({id,outlineWall:true,x:a[0]-1,y:a[1]-1,
-          wallLine:{dx,dy,thickness:outline.thickness??WALL_THICKNESS,...(material!==undefined?{material}:{})}});
-      }
+      if(Math.hypot(dx,dy)>.5)out.push({id:runId(a,b),outlineWall:true,x:a[0]-1,y:a[1]-1,
+        wallLine:{dx,dy,thickness:outline.thickness??WALL_THICKNESS}});
       i=j;
     }
     return out;
+  });
+}
+export function outlineSupports(outline){
+  return outlineWallRuns(outline).filter(run=>!outline.removedWalls?.includes(run.id)).map(run=>{
+    const material=outline.wallOverrides?.[run.id];
+    return material!==undefined?{...run,wallLine:{...run.wallLine,material}}:run;
   });
 }
 
