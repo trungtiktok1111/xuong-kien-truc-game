@@ -12,7 +12,7 @@ import {planSurface,surfaceReachable,surfaceKinds,surfaceHash,surfaceProfiles} f
 import {surfaceSheet,surfaceRock,SURFACE_VARIANTS} from './surfaceArt.js';
 import builtinOutlineArchive from '../assets/kenney-outline.zip';
 import {dressOutline,kenneyOutlinePacks} from './outlineDressing.js';
-import {campaignStart,linkWalkability,planMapPair,safeMapEntry} from './mapLinks2d.js';
+import {campaignStart,linkWalkability,safeMapEntry} from './mapLinks2d.js';
 import {stockScenes,packPurpose} from './stockScenes.js';
 import {drawSettlementBridge} from './settlementBridge.js';
 import {settlementIssues} from './settlementChecks.js';
@@ -113,7 +113,7 @@ export function init2D(root,A){
     if(t==='npc'){Object.assign(b,{tile:{sid:2,idx:96},name:'Dân làng',text:'Chào kiếm sĩ! Cẩn thận quái vật quanh đây.'});}
     if(t==='chest'){Object.assign(b,{tile:null,gives:'hp',amt:2});}
     if(t==='goal'){b.tile=null;}
-    if(t==='door'){Object.assign(b,{name:'Cửa',tile:null,to:Math.min(MAPS.length-1,curMap+1)===curMap?0:curMap+1,tx:null,ty:null});}
+    if(t==='door'){Object.assign(b,{name:'Cửa',tile:null,to:null,tx:null,ty:null});}
     return b;}
   const entityAnimation=e=>e.t==='start'?M.cfg.heroAnim:e.anim;
   function drawEnts(z){isoHB=[];if(vis[2])for(const wall of builtWallFaces(renderWallEnts(),true))drawGateWall(wall);for(const e of M.ents){
@@ -673,6 +673,14 @@ export function init2D(root,A){
     if(P.size===2){drag=null;const [a,b]=[...P.values()];gest={d:Math.hypot(a.x-b.x,a.y-b.y),cx:(a.x+b.x)/2,cy:(a.y+b.y)/2};return;}
     if(spacePan||e.button===1||e.button===2||tool==='pan'||e.buttons===4){drag={pan:true,x:p.x,y:p.y,vx:view.x,vy:view.y};return;}
     const c=cellAt(p.x,p.y);hov=c;lastPt={...p,snap:e.shiftKey,free:e.altKey};
+    if(doorPick){
+      if(!inb(c.x,c.y)){toast('Chọn một ô nằm trong màn để làm điểm đến.');return;}
+      const pick=doorPick;doorPick=null;
+      const door=MAPS[pick.source]?.ents.find(q=>q.id===pick.doorId);
+      if(!door){toast('Cửa cần chỉnh đã bị xóa.');return;}
+      door.tx=c.x;door.ty=c.y;after();draw();
+      toast('Đã đặt ô đến màn '+mapName(curMap)+': X '+c.x+' · Y '+c.y+'.');return;
+    }
     if(e.button===0&&(e.ctrlKey||e.metaKey)&&e.shiftKey){
       if(!clip){toast('Chọn vùng nguồn rồi nhấn Ctrl+C trước khi dán.');return;}
       drag={regionPaste:true,rect:{x0:c.x,y0:c.y,x1:c.x,y1:c.y}};dirty=true;return;
@@ -940,6 +948,7 @@ export function init2D(root,A){
   window.__kb2d=e=>{const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(!M||!cv.offsetParent)return;
     if(desktop()&&document.activeElement!==cv)return;
     const k=(e.key||'').toLowerCase(),m=e.ctrlKey||e.metaKey;
+    if(k==='escape'&&doorPick){doorPick=null;toast('Đã hủy chọn ô đến.');e.preventDefault();return;}
     if(k==='escape'&&drag?.regionPaste){drag=null;dirty=true;e.preventDefault();return;}
     if(desktop()&&!m&&!e.altKey){
       if(k==='p'){if(!e.repeat)void toggleProjection();e.preventDefault();return;}
@@ -3032,21 +3041,10 @@ export function init2D(root,A){
         Object.assign(map,{name,ents,cfg:{...map.cfg,view:'iso',proj:'iso',smooth:false,win:origin?.kind==='original'&&!ents.some(e=>e.t==='goal')?'explore':'goal',...(summary?{settlement:summary}:{}),...(origin?{stockScene:origin}:{})}});
         if(blocked)map.blk=blocked;
         if(ground)map.layers[0]=ground.map(sid=>sid==null?enc(0,0):enc(ids[sid],0));
-        if(links)map.links=links;
         maps.push(map);
         if(summary?.draft){const issue=settlementIssues(map)[0];notes.push('Bản nháp · '+issue.name+' · X '+issue.x+' · Y '+issue.y+'. Mở Kiểm để xem.');}
         if(summary)notes.push(summary.buildings+' nhà, '+summary.groves+' cụm cây, '+summary.bridges+' cầu.'+(summary.sources?' Dùng '+summary.sources.length+' nguồn.':''));
         notes.push(...(gaps||[]));
-      }
-      const first=MAPS.length;
-      for(const [i,map] of maps.entries()){
-        if(map.links&&maps.length===2){
-          const other=i===0?1:0;
-          const entry=map.links[i],exit=maps[other].links[other];
-          map.ents.push({id:'link-'+i,t:'door',name:'Đổi tầng',x:Math.floor(entry[0]),y:Math.floor(entry[1]),
-            to:first+other,tx:Math.floor(exit[0]),ty:Math.floor(exit[1])});
-        }
-        delete map.links;
       }
       syncCur();sheets.push(...updated.slice(sheets.length));MAPS.push(...maps);
       useTool('draw');switchMap(MAPS.length-maps.length);
@@ -3417,7 +3415,7 @@ export function init2D(root,A){
     M={name:M.name,w:R.w,h:R.h,layers:R.layers,blk:R.blk,ents:R.ents,cfg:Object.assign({},M.cfg,{view:R.view||'rpg'},R.iso?{zones:R.zones||[]}:{})};selId=null;after();fit();draw();
     const i=R.info;toast('Đã tạo: '+i.placed.house+' nhà, '+i.placed.tree+' cây, '+i.placed.prop+' đồ'+((!i.house&&!i.tree)?' — chưa thấy tài nguyên gắn nhãn Cây/Nhà (xem tab 🔎 Tài nguyên)':''));}
   /* ===== NHIỀU MÀN ===== */
-  let MAPS=[],curMap=0;
+  let MAPS=[],curMap=0,doorPick=null;
   let projectMeta=lsGet('xuong_project_meta',null)||newMeta('Hầm ngục Đá Xoáy');
   lsSet('xuong_project_meta',projectMeta);
   const syncCur=()=>{M.name=M.name||('Màn '+(curMap+1));MAPS[curMap]=clone(M);};
@@ -3443,29 +3441,21 @@ export function init2D(root,A){
   function switchMap(i){if(i===curMap||!MAPS[i])return;syncCur();curMap=i;M=clone(MAPS[i]);undo=[];redo=[];selId=null;inventoryGroup='';inventoryId='';inventoryMoving=false;after();fit();draw();}
   function mkMap(w,h,name,cfg){const m=newMap(w,h);m.name=name;m.cfg=cfg;const sx=Math.floor(w/2),sy=Math.floor(h/2);m.ents.push({id:'s'+Date.now().toString(36),t:'start',x:sx,y:sy,name:'Xuất phát',tile:null});return m;}
   const mapName=i=>(i===curMap?M.name:(MAPS[i]&&MAPS[i].name))||('Màn '+(i+1));
+  function pickDoorArrival(door){
+    if(!Number.isInteger(door.to)||!MAPS[door.to]){toast('Chọn màn đích trước, rồi mới chọn ô đến.');return;}
+    const source=curMap,doorId=door.id,target=door.to;
+    syncCur();doorPick={source,doorId};switchMap(target);cv.focus({preventScroll:true});
+    toast('Bấm đúng ô đến trên bản đồ. Esc để hủy.');
+  }
+  function armReturnDoor(door){
+    if(!Number.isInteger(door.to)||!MAPS[door.to]||door.to===curMap){toast('Hãy chọn một màn đích khác màn hiện tại.');return;}
+    switchMap(door.to);chooseTab('maps');objType='door';tool='obj';draw();cv.focus({preventScroll:true});
+    toast('Bấm đúng vị trí đặt cửa quay lại trên màn này. Chọn màn đích và ô đến sau đó.');
+  }
   function placeMapEntry(map,point){
     const entry=map.ents.find(e=>e.t==='start');
     if(entry)Object.assign(entry,{x:point.x,y:point.y});
     else map.ents.push({id:crypto.randomUUID(),t:'start',name:'Xuất phát',tile:null,x:point.x,y:point.y});
-  }
-  function addPair(source,target,from,to,prepared=sheets){
-    const lookup=makePaintLookup();
-    const [out,back,{sourceEntry,targetEntry}]=planMapPair(sceneForPlay(source,source.cfg,lookup),
-      sceneForPlay(target,target.cfg,prepared===sheets?lookup:makePaintLookup(prepared)),from,to,crypto.randomUUID());
-    placeMapEntry(source,sourceEntry);placeMapEntry(target,targetEntry);
-    source.ents.push(out);target.ents.push(back);
-    return out;
-  }
-  function connectMap(to){
-    if(!MAPS[to]||to===curMap)throw Error('Hãy chọn màn khác để nối.');
-    if(M.ents.some(e=>e.pairId&&e.to===to&&MAPS[to].ents.some(peer=>peer.pairId===e.pairId&&peer.to===curMap)))
-      throw Error('Hai màn đã có lối nối hai chiều.');
-    syncCur();
-    const target=clone(MAPS[to]);
-    const out=addPair(M,target,curMap,to);
-    MAPS[to]=target;syncCur();after();draw();
-    const message='Đã nối hai chiều · '+out.name+' · ô '+out.x+', '+out.y+'.';
-    toast(message);return message;
   }
   async function outlinePlayData(index){
     const data=gameData();
@@ -3474,15 +3464,14 @@ export function init2D(root,A){
     if(map.cfg?.proj==='angle')await ensureAngle(sheets);
     return {M:map,sheets};
   }
+  function mapConnectionBox(){
+    return el('div',{class:'row'},btn('Chọn vị trí đặt cửa',()=>{
+      objType='door';tool='obj';draw();cv.focus({preventScroll:true});
+      toast('Bấm đúng ô đặt cửa trên bản đồ. Chọn màn đích và điểm đến riêng cho từng cửa.');
+    },tool==='obj'&&objType==='door'?'on':''),el('span',{class:'hint'},'Không tự nối cảnh. Bạn tự đặt từng cửa, màn đích và ô đến.'));
+  }
   function outlineConnectionTargets(){
     return MAPS.map((_,i)=>({id:i,name:mapName(i),current:i===curMap}));
-  }
-  function mapConnectionBox(){
-    const options=MAPS.map((m,i)=>[i,m]).filter(([i])=>i!==curMap);
-    const select=el('select',{class:'num','aria-label':'Chọn màn để kết nối'},options.map(([i])=>el('option',{value:i},mapName(i))));
-    return options.length?el('div',{class:'row'},el('span',{class:'hint'},'Nối từ '+mapName(curMap)),select,btn('Nối hai chiều',()=>{
-      try{connectMap(+select.value);}catch(error){toast(error.message);}
-    })):el('p',{class:'hint'},'Thêm một màn Cảnh ZIP hoặc Đường bao để nối.');
   }
   function mapsTab(){
     if(!MAPS.length)syncCur();
@@ -3521,13 +3510,24 @@ export function init2D(root,A){
     body.append(el('div',{class:'lbl',style:'margin-top:8px'},'🚪 CỬA TRÊN MÀN NÀY ('+doors.length+')'));
     if(!doors.length)body.append(el('div',{class:'hint'},'Chưa có cửa. Bấm "🚪 Cửa chuyển màn" rồi chạm bản đồ.'));
     for(const e of doors){
-      const sel=el('select',{class:'num'},MAPS.map((m,i)=>el('option',{value:i},(i+1)+'. '+mapName(i))));sel.value=e.to;sel.onchange=()=>{e.to=+sel.value;after();};
-      const num=(k)=>{const i=el('input',{type:'number',class:'num',style:'width:60px',placeholder:'tự động',value:e[k]==null?'':e[k]});i.oninput=()=>{e[k]=i.value===''?null:+i.value;after();};return i;};
+      const pickArrival=btn('📍 Chọn ô đến trên bản đồ',()=>pickDoorArrival(e));
+      const returnDoor=btn('Đặt cửa quay lại thủ công',()=>armReturnDoor(e));
+      const sel=el('select',{class:'num'},el('option',{value:''},'— Chưa chọn màn đích —'),...MAPS.map((m,i)=>el('option',{value:i},(i+1)+'. '+mapName(i))));sel.value=e.to??'';
+      const coords={};
+      const syncDoorControls=()=>{
+        const valid=Number.isInteger(e.to)&&!!MAPS[e.to];
+        pickArrival.disabled=!valid;returnDoor.disabled=!valid||e.to===curMap;
+        const target=valid?MAPS[e.to]:null;
+        for(const k of ['tx','ty']){const field=coords[k];if(!field)continue;const max=target?((k==='tx'?target.w:target.h)-1):null;field.max=max??'';field.disabled=!valid;}
+      };
+      sel.onchange=()=>{pushUndo();e.to=sel.value===''?null:+sel.value;e.tx=e.ty=null;syncDoorControls();after();};
+      const num=(k)=>{const i=el('input',{type:'number',class:'num',style:'width:60px',min:0,step:1,placeholder:'chọn trên bản đồ',value:e[k]==null?'':e[k]});coords[k]=i;i.onchange=()=>{const n=i.valueAsNumber,max=MAPS[e.to]?(k==='tx'?MAPS[e.to].w:MAPS[e.to].h)-1:null;if(i.value!==''&&(!Number.isInteger(n)||n<0||(max!=null&&n>max))){toast('Tọa độ phải nằm trong kích thước màn đích.');i.value=e[k]??'';return;}pushUndo();e[k]=i.value===''?null:n;after();};return i;};
+      syncDoorControls();
       body.append(el('div',{style:'border:1px solid #ffa94d;border-radius:10px;padding:8px;margin:6px 0'+(e.id===selId?';background:#2a2418':'')},
         el('div',{class:'lbl'},'🚪 ô ('+e.x+','+e.y+')'),
         el('div',{class:'row'},el('span',{class:'lbl'},'Đi tới'),sel),
-        el('div',{class:'row'},el('span',{class:'lbl'},'Đến ô x,y'),num('tx'),num('ty'),el('span',{class:'hint'},'để trống = điểm 🚩 xuất phát của màn đó')),
-        el('div',{class:'row'},btn('📍 Chọn',()=>{selId=e.id;draw();}),btn('↩ Tạo cửa quay lại bên kia',()=>{const t=e.to;if(t===curMap)return;syncCur();const d=MAPS[t],id='d'+Date.now().toString(36);const bx=e.tx!=null?e.tx:null;d.ents.push({id,t:'door',x:Math.max(0,Math.min(d.w-1,(e.tx!=null?e.tx:Math.floor(d.w/2))+1)),y:(e.ty!=null?e.ty:Math.floor(d.h/2)),name:'Cửa',tile:null,to:curMap,tx:e.x,ty:e.y+1>=M.h?e.y:e.y+1});toast('Đã tạo cửa quay lại ở '+mapName(t)+' (có thể kéo đi chỗ khác)');}),
+        el('div',{class:'row'},el('span',{class:'lbl'},'Ô đến X,Y'),num('tx'),num('ty'),pickArrival),
+        el('div',{class:'row'},btn('📍 Chọn cửa',()=>{selId=e.id;draw();}),returnDoor,
           btn('🗑',()=>{pushUndo();M.ents=M.ents.filter(q=>q.id!==e.id);selId=null;after();draw();}))));}
   }
   const contactCache=new WeakMap();
@@ -4474,7 +4474,7 @@ export function init2D(root,A){
     syncCur();after();fit();draw();cv.focus({preventScroll:true});
     toast('Đã áp dụng '+level.name+'. Có thể hoàn tác trong trình sửa.'+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
   }
-  async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true,connect=false,materials=null,linkFrom=curMap){
+  async function newOutlineMap(outline,w=M.w,h=M.h,level,stamps=[],origin=[0,0],useSource=true,materials=null){
     const current=M,index=curMap,revision=buildRevision,prepared=sheets.slice();
     const fresh=await buildOutlineMap(outline,w,h,level,prepared,stamps,useSource,null,origin);
     const dressing=surfaceDressing(fresh,await prepareOutlineDressing(fresh,prepared,materials));
@@ -4485,20 +4485,14 @@ export function init2D(root,A){
       fresh.name=name+' · '+i;
     }
     applySceneEdits(fresh,prepared,automaticPaintZones(fresh,makePaintLookup(prepared)));
-    const next=MAPS.length;
-    const other=connect?(linkFrom===index?current:MAPS[linkFrom]):null;
-    if(connect&&!other)throw Error('Màn đã chọn để nối không còn trong dự án.');
-    const source=other?clone(other):null;
-    if(source)addPair(source,fresh,linkFrom,next,prepared);
     syncCur();
-    if(source)MAPS[linkFrom]=source;
     sheets.push(...prepared.slice(sheets.length));curMap=MAPS.push(clone(fresh))-1;M=fresh;undo=[];redo=[];selId=null;sel=null;
     after();fit();draw();await save();
-    toast('Đã tạo '+fresh.name+(source?' và nối hai chiều với '+source.name:'.')+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
+    toast('Đã tạo '+fresh.name+'. Chưa đặt cửa hay nối màn.'+(dressing?' '+[dressing.summary,dressing.warnings].filter(Boolean).join(' '):''));
   }
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
     .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
-  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){if(materialDrag){materialDrag=null;setMaterialAnchor(null);}},installDirectionalSet,armCharacterPlacement,setAnimationScale,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){if(materialDrag){materialDrag=null;setMaterialAnchor(null);}},installDirectionalSet,armCharacterPlacement,setAnimationScale,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
   return api;
 }

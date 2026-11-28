@@ -153,9 +153,12 @@ document.addEventListener('keydown',event=>{
   event.preventDefault();openQuickSearch();
 });
 document.addEventListener('keydown',e=>{
-  if(document.activeElement!==$('#cv2')||cur!=='2d'||e.defaultPrevented)return;
-  if(e.key==='F1'){e.preventDefault();shortcutHelp();}
-  if(e.key==='F5'){e.preventDefault();$('#playbtn').click();}
+  if(cur!=='2d'||e.defaultPrevented)return;
+  const target=e.target;
+  if(target?.matches?.('input,textarea,select,[contenteditable="true"]'))return;
+  if(!(target===document.body||$('#app').contains(target)||target.closest?.('.outline-overlay')))return;
+  if(e.key==='F1'){e.preventDefault();if(target.closest?.('.outline-overlay'))window.dispatchEvent(new Event('outline-shortcuts'));else shortcutHelp();}
+  if(e.key==='F5'&&!target.closest?.('.outline-overlay')){e.preventDefault();$('#playbtn').click();}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'&&e2.map()){
     e.preventDefault();saveProjectFile(e2);
   }

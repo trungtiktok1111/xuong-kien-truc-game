@@ -148,6 +148,23 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  let applyButton,clearButton,restoreLevelButton,createLabel,commitBusy=false;
  const ov=el('section',{class:'outline-overlay',style:'position:fixed;inset:0;z-index:180;background:#101820f5;overflow:auto;display:grid;place-items:center;padding:16px;touch-action:pan-y'});
  const box=el('div',{class:'outline-workspace'});
+ let shortcutDialog=null;
+ const toggleOutlineShortcuts=()=>{
+  if(shortcutDialog){shortcutDialog.close();shortcutDialog.remove();shortcutDialog=null;return;}
+  const rows=[
+   ['Ctrl+Z / Ctrl+Y','Hoàn tác / làm lại'],['Ctrl+C → Ctrl+V','Sao chép vùng quét / bật dán vùng'],
+   ['L','Chọn công cụ tường; bấm lần lượt các điểm để tự vẽ đoạn nối'],
+   ['Mũi tên khi chọn tường','Mở rộng lựa chọn theo hướng đó; giữ phím để kéo dài vùng chọn'],
+   ['Q / E khi đặt mẫu','Xoay mẫu −15° / +15°'],['Cuộn chuột','Phóng to / thu nhỏ quanh con trỏ'],
+   ['Giữ chuột giữa + kéo','Di chuyển khung nhìn'],['Esc','Hủy thao tác đang vẽ hoặc đang đặt']
+  ];
+  shortcutDialog=el('dialog',{style:'max-width:min(620px,90vw);max-height:80vh;overflow:auto;background:#1c2a35;color:#f4f7fa;border:1px solid #527086;border-radius:12px;padding:18px'},
+   el('h3',{},'Phím tắt và chuột · Mặt bằng'),
+   el('dl',{style:'display:grid;grid-template-columns:minmax(150px,auto) 1fr;gap:8px 14px'},rows.flatMap(([key,desc])=>[el('dt',{style:'font-weight:700;color:#ffd27a'},key),el('dd',{style:'margin:0'},desc)])),
+   B('Đóng · F1',()=>{shortcutDialog?.close();shortcutDialog?.remove();shortcutDialog=null;}));
+  ov.append(shortcutDialog);shortcutDialog.addEventListener('close',()=>{shortcutDialog?.remove();shortcutDialog=null;},{once:true});shortcutDialog.showModal();
+ };
+ window.addEventListener('outline-shortcuts',toggleOutlineShortcuts);
  const aim=el('div',{class:'map-aim',hidden:true});
  const canvas=el('canvas',{width:'760',height:'465',style:'display:block;width:100%;height:auto;background:#141d24;border:1px solid #50606a;touch-action:none'});
  const c=canvas.getContext('2d'),status=el('p',{class:'hint'}),toolbar=el('div',{class:'row outline-tools'}),footer=el('div',{class:'row',style:'margin-top:10px'});
@@ -734,6 +751,9 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
    else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){
     e.preventDefault();e.shiftKey?travel(redo,undo):travel(undo,redo);
    }
+   else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){
+    e.preventDefault();travel(redo,undo);
+   }
    else if(e.key.toLowerCase()==='l'&&!e.ctrlKey&&!e.metaKey&&!placement&&box.dataset.page!=='preview'){e.preventDefault();select('wall');}
  };
  box.tabIndex=-1;
@@ -1121,21 +1141,15 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  const linkTargets=is3D?[]:editor.outlineConnectionTargets();
  const linkTarget=el('select',{'aria-label':'Màn để nối'},
   ...linkTargets.map(m=>el('option',{value:m.id},(m.id+1)+'. '+m.name+(m.current?' (đang mở)':''))));
- const connectExisting=B('Nối hai màn đã có',()=>runAction(()=>({message:editor.connectMap(+linkTarget.value)}),false));
- const createLinked=B('Tạo màn mới và nối',()=>createDraft(true));
  const playSaved=B('Chơi thử màn đã chọn',()=>runAction(()=>openPlay(()=>editor.outlinePlayData(+linkTarget.value)),false));
- const updateLinkActions=()=>{
-  const target=linkTargets.find(m=>m.id===+linkTarget.value);
-  connectExisting.disabled=commitBusy||!target||target.current;
- };
+ const updateLinkActions=()=>{playSaved.disabled=commitBusy||!linkTargets.some(m=>m.id===+linkTarget.value);};
  linkTarget.addEventListener('change',updateLinkActions);
  linkTarget.value=linkTargets.find(m=>m.current)?.id??'';
  updateLinkActions();
- const linkPanel=is3D?null:el('section',{class:'outline-link-panel','aria-label':'Tạo và liên kết màn'},
-  el('strong',{},'Tạo và liên kết màn'),
-  el('div',{class:'row'},el('label',{},'Màn để nối ',linkTarget),createLinked,
-   linkTargets.length>1?connectExisting:null,playSaved),
-  el('p',{class:'hint'},'Tạo màn từ hình đang vẽ và đặt lối đi hai chiều với màn đã chọn. Chơi thử màn đã chọn mở bản đã lưu của màn trong danh sách.'));
+ const linkPanel=is3D?null:el('section',{class:'outline-link-panel','aria-label':'Mặt bằng và liên kết màn'},
+  el('strong',{},'Mặt bằng và liên kết màn'),
+  el('div',{class:'row'},el('label',{},'Màn để chơi thử ',linkTarget),playSaved),
+  el('p',{class:'hint'},'Tạo màn chỉ thêm bố cục mới. Không đặt cửa hay nối cảnh tự động; hãy tự đặt cửa, màn đích và ô đến trong “Màn & cửa”.'));
  const actionStatus=el('p',{class:'outline-action-status',role:'status','aria-live':'polite'});
  function showActionStatus(message,isError=false){
   actionStatus.textContent=message;
@@ -1158,7 +1172,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   clearTrials();
   commitBusy=true;
   showActionStatus('Đang chuẩn bị bản đồ…');
-  const actions=[...buttons.children,...levelActions.children,scanMapButton,connectExisting,createLinked,playSaved,linkTarget];actions.forEach(b=>{b.disabled=true;});
+  const actions=[...buttons.children,...levelActions.children,scanMapButton,playSaved,linkTarget];actions.forEach(b=>{b.disabled=true;});
   try{
    const result=await action();
    showActionStatus(result?.message||result?.warning||'');
@@ -1292,6 +1306,8 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   control.urls.clear();
  }
  function closeOutline(){
+  window.removeEventListener('outline-shortcuts',toggleOutlineShortcuts);
+  shortcutDialog?.close();shortcutDialog?.remove();shortcutDialog=null;
   layoutObserver?.disconnect();
   cancelAnimationFrame(planFrame);
   for(const row of layerControls)releaseGallery(row);
@@ -1753,10 +1769,10 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   }),surfaceInfo));
  const surfacePanel=is3D?null:el('section',{class:'outline-link-panel','aria-label':'Mặt đất'},
   el('div',{class:'row'},el('strong',{},'Mặt đất'),surfaceMode),surfaceControls);
- function createDraft(connect=false){
+ function createDraft(){
   return runAction(async()=>{
    if(!loops.length)throw Error('Hãy tạo đường bao hoặc chọn một màn mẫu.');
-   await editor.newOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,true,connect,materials(),+linkTarget.value);
+   await editor.newOutlineMap(outlineData(),W,H,levelDraft,stamps,origin,true,materials());
   },true);
  }
  async function openPlay(load){

@@ -96,7 +96,7 @@ const keys=[
  ['Ctrl+Shift+kéo chuột trái','Dán lặp mẫu đã sao chép vào cả vùng kéo.'],
  ['Ctrl+Shift+V · Shift+kéo','Bật dán từng cụm · Trong chế độ dán, kéo theo hàng ngang hoặc dọc'],
  ['Ctrl+D · Ctrl + mũi tên','Nhân bản vùng chọn · Nhân bản vùng chọn theo hướng mũi tên'],
- ['Ctrl+Z · Ctrl+Shift+Z','Hoàn tác · Làm lại'],
+ ['Ctrl+Z · Ctrl+Y / Ctrl+Shift+Z','Hoàn tác · Làm lại'],
  ['Ctrl+S · F5 · F1','Lưu dự án · Chơi thử · Mở/đóng hướng dẫn phím']
 ];
 export function toggleShortcutHelp(panel){
@@ -106,7 +106,7 @@ export function toggleShortcutHelp(panel){
  const close=()=>{help.remove();focusCanvas();};
  const table=el('dl',{},keys.flatMap(([k,v])=>[el('dt',{},k),el('dd',{},v)]));
  const help=el('section',{class:'desktop-shortcuts',tabindex:'0','aria-label':'Phím tắt trên máy tính'},
-  el('h3',{},'Phím tắt trên máy tính'),el('p',{},'Các phím 2D hoạt động khi bạn đang thao tác trên bản đồ 2D.'),table,
+  el('h3',{},'Phím tắt trên máy tính'),el('p',{},'Các phím 2D hoạt động khi bạn đang thao tác trên bản đồ 2D hoặc mặt bằng. Phím chữ phụ thuộc công cụ đang mở; ô nhập văn bản giữ nguyên phím gõ.'),table,
   el('button',{class:'b',type:'button',onclick:close},'Ẩn phím tắt'));
  // Keep help in the panel layout, with its own scroll at short viewport heights.
  panel.querySelector('.pbody')?.before(help);
