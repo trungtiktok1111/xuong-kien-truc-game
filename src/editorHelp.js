@@ -19,8 +19,6 @@ const guide2D={
     'Giữ chuột trái và kéo khi đang chọn Kéo. Trên máy tính, Space + kéo dùng được khi đang cầm công cụ khác.'],
   paste:['Dán · Ctrl+V','Đặt bản sao của một vùng đã chép vào bản đồ.',
     'Di chuột để xem trước vị trí. Bấm chuột trái để đặt.','Nhấn Esc để thoát chế độ Dán.'],
-  obj:['Đối tượng · O','Đặt hoặc chỉnh những thứ có vai trò trong game như điểm xuất phát, NPC hoặc rương.',
-    'Chọn loại bên dưới rồi bấm một ô trống để đặt.','Bấm đối tượng có sẵn để xem thuộc tính. Kéo để dời vị trí.'],
   sheet:['Bảng ghép ô','Chọn mảnh hoặc cụm mảnh từ một bảng ảnh.',
     'Chọn tên bộ hình. Bấm một ô, hoặc kéo trên bảng để lấy nhiều ô liền nhau.','Di chuột ra bản đồ và bấm để đặt. Nhấn B nếu đang dùng công cụ khác.'],
   res:['Tài nguyên','Tìm hình, gắn nhãn và chọn cách dùng một mảnh.',

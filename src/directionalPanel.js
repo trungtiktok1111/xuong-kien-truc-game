@@ -1,10 +1,9 @@
+import {restAnimationState} from './anim.js';
 import {characterRoles} from './characterRoles.js';
 import {baseAnchorPicker} from './baseAnchors.js';
 import {readManifestAnimation,groupAnimationImages} from './sheetAnimation.js';
 import {el} from './util.js';
-import {directions,readDirectionalZip,buildDirectionalSet} from './directionalZip.js';
-const labels={idle:'Đứng',walk:'Đi',run:'Chạy',atk:'Tấn công',hit:'Trúng đòn',dash:'Lướt',dodge:'Né',jump:'Nhảy',jump_forward:'Nhảy tới',walk_4:'Đi 4',combo_4:'Liên chiêu 4'};
-
+import {readDirectionalZip,buildDirectionalSet} from './directionalZip.js';
 export function directionalPanel(editor){
  const button=(label,onclick)=>el('button',{class:'b',type:'button',onclick},label);
  const section=el('section',{class:'outline-stage','aria-label':'Animation/Animated'});
@@ -18,13 +17,11 @@ export function directionalPanel(editor){
    status.textContent='Bấm lên sàn để đặt '+characterRoles[role.value].label.toLowerCase()+'. Esc để hủy.';
   }
  });
- const action=el('select',{'aria-label':'Hoạt ảnh'});
- const direction=el('select',{'aria-label':'Hướng hoạt ảnh'},directions.map((label,i)=>el('option',{value:i},label)));
  const canvas=el('canvas',{width:96,height:96,draggable:'true','aria-label':'Kéo hoạt ảnh vào bản đồ'});
  const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;
  let selected,epoch=0,raf=0,anchor=4;
  const size=el('input',{class:'num',type:'number',min:10,max:400,step:1,required:''});
- const preview=el('div',{hidden:''},el('label',{},'Vai trò nhân vật ',role),applyRole,el('div',{class:'row'},action,direction),canvas,
+ const preview=el('div',{hidden:''},el('label',{},'Vai trò nhân vật ',role),applyRole,canvas,
   baseAnchorPicker(index=>{anchor=index;}),
   el('form',{class:'row',onsubmit:event=>{
    event.preventDefault();editor.setAnimationScale(selected.id,size.valueAsNumber/100);
@@ -32,24 +29,19 @@ export function directionalPanel(editor){
   }},el('label',{},'Kích thước (%) ',size),el('button',{class:'b',type:'submit'},'Đổi kích thước')));
  function paint(time){
   if(!section.isConnected||!selected)return;
-  const clip=selected.st[action.value],index=Number(direction.value);
-  const split=clip?.src.length>1;
-  const sheet=editor.sheets().find(s=>s.name===clip?.src[split?index:0]);
+  const clip=selected.st[restAnimationState(selected)];
+  const sheet=editor.sheets().find(s=>s.name===clip?.src[0]);
   ctx.clearRect(0,0,96,96);
   if(sheet?.img){
    const frame=Math.floor(Math.max(0,time-epoch)*clip.fps/1000)%clip.n;
    const scale=96/Math.max(clip.fw,clip.fh),w=clip.fw*scale,h=clip.fh*scale;
-   ctx.drawImage(sheet.img,frame*clip.fw,(split?0:index)*clip.fh,clip.fw,clip.fh,(96-w)/2,96-h,w,h);
+   ctx.drawImage(sheet.img,frame*clip.fw,0,clip.fw,clip.fh,(96-w)/2,96-h,w,h);
   }
   raf=requestAnimationFrame(paint);
  }
  function show(set){
   selected=set;preview.hidden=false;
   size.value=Math.round(100*(set.visualScale??1));
-  action.replaceChildren(...Object.entries(set.st).filter(([,clip])=>clip.n>0)
-   .map(([id])=>el('option',{value:id},labels[id]||(/^atk\d+$/.test(id)?'Tấn công '+id.slice(3):id))));
-  if(set.st.walk)action.value='walk';
-  updateDirections();
   epoch=performance.now();cancelAnimationFrame(raf);paint(epoch);
  }
  function refresh(){
@@ -57,13 +49,8 @@ export function directionalPanel(editor){
   library.replaceChildren(...sets.map(set=>button(set.name,()=>show(set))));
  }
  role.onchange=()=>{applyRole.textContent=role.value==='hero'?'Dùng làm nhân vật chính':'Đặt vào màn';};
- function updateDirections(){
-  direction.hidden=selected.st[action.value]?.dirs!==8;
-  if(direction.hidden)direction.value='0';
- }
- action.onchange=()=>{updateDirections();epoch=performance.now();};
  function placement(){
-  return {animation:selected,anchor,role:role.value,pose:{state:action.value,direction:Number(direction.value)}};
+  return {animation:selected,anchor,role:role.value};
  }
  canvas.ondragstart=event=>editor.startMaterialDrag(event,placement());
  canvas.ondragend=()=>editor.endMaterialDrag();

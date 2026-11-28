@@ -10,6 +10,10 @@ const ORD=[['cw','Vòng thuận: Nam→Tây→Bắc→Đông'],['ccw','Vòng ng�
 /* tên trùng (vd 8 hướng cùng tên) → đánh số theo thứ tự: tên, tên#2, tên#3… */
 export {findGrid};
 export function uniqNames(sheets){const seen=new Map();for(const s of sheets.slice(4)){const base=s.name.replace(/#\d+$/,'');const k=(seen.get(base)||0)+1;seen.set(base,k);const nn=k===1?base:base+'#'+k;if(s.name!==nn)s.name=nn;}}
+export function restAnimationState(set){
+  const states=set?.st||{};
+  return ['idle','walk','run',...Object.keys(states)].find(key=>states[key]?.src?.length);
+}
 export function makeAnims(cfg,sheets){uniqNames(sheets);
   const byName=n=>sheets.find(s=>s.name===n&&s.img);
   const get=id=>(cfg.anims||[]).find(a=>a.id===id);
@@ -27,7 +31,11 @@ export function makeAnims(cfg,sheets){uniqNames(sheets);
     let sl=c;if(set.ord==='ccw')sl=(dirs-c)%dirs;else if(set.ord==='rpg4'&&dirs===4)sl=[0,1,3,2][c];
     return (sl+(set.off||0))%dirs;}
   function pickState(set,want){const ok=n=>!!(set.st&&set.st[n]&&set.st[n].src&&set.st[n].src.length);
-    if(ok(want))return want;if(want==='run'&&ok('walk'))return 'walk';if(want==='idle'&&ok('walk'))return 'walk';if(/^atk\d+$/.test(want)&&ok('atk'))return 'atk';if(want==='run'||/^atk/.test(want)||want==='hit')return ok('idle')?'idle':ok('run')?'run':null;return ok('run')?'run':null;}
+    if(ok(want))return want;
+    if(want==='run'&&ok('walk'))return 'walk';
+    if(/^atk\d+$/.test(want)&&ok('atk'))return 'atk';
+    return restAnimationState(set);}
+
   /* vẽ khung hình hiện tại. sx,sy = tâm ô trên màn hình, s = cỡ 1 ô. Trả về false nếu không có hoạt ảnh. */
   function clipSec(set,stn){const sp=strip(set,stn,0);if(!sp)return 0;return sp.dur?sp.dur.reduce((p,q)=>p+q,0)/1000:sp.n/sp.fps;}
   function frame(cx,set,stn,d,tt,sx,sy,s,flipL,grounded=false,height=0,instanceScale=1,repeat=false){
