@@ -3912,6 +3912,7 @@ export function init2D(root,A){
     throw Error('Hãy chọn lại hoặc thêm lại tệp ZIP của lớp này.');
   }
   let materialDrag=null,materialAnchor=null;
+  let materialDragImage;
   function setMaterialAnchor(at){
     materialAnchor=at&&{...at,mapIndex:curMap};
     dirty=true;
@@ -3949,6 +3950,13 @@ export function init2D(root,A){
   });
   function startMaterialDrag(event,batch){
     materialDrag=batch;setMaterialAnchor(null);
+    if(!materialDragImage){
+      materialDragImage=Object.assign(document.createElement('canvas'),{width:1,height:1});
+      materialDragImage.style.cssText='position:fixed;left:0;top:0;pointer-events:none';
+      materialDragImage.setAttribute('aria-hidden','true');
+      document.body.append(materialDragImage);
+    }
+    event.dataTransfer.setDragImage(materialDragImage,0,0);
     event.dataTransfer.setData('application/x-xuong-material','1');
     event.dataTransfer.effectAllowed='copy';
   }
