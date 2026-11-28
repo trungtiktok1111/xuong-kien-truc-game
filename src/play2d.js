@@ -373,11 +373,12 @@ export function play2D(o){
   function checkWin(){if(over)return;if(winMode==='kill'&&!E.length&&!hidEn()&&(legacy||EN.some(e=>e.t==='enemy')))end(true);}
   function solidPush(o){for(const n of [...NP,...CH]){const dx=o.x-n.x,dy=o.y-n.y,d=Math.hypot(dx,dy),r=.6;if(d<r&&d>0){const nx=n.x+dx/d*r,ny=n.y+dy/d*r;if(traverse(o.x,o.y,nx,o.y,.28,false,postureHeight(o)))o.x=nx;if(traverse(o.x,o.y,o.x,ny,.28,false,postureHeight(o)))o.y=ny;}}}
   function upd(dt){
-    t+=dt;atkCD-=dt;P.inv-=dt;P.atkT-=dt;P.hitT-=dt;P.pkT=(P.pkT||0)-dt;if(P.pose&&t-(P.pose.startedAt||0)>=AN.clipSec(AN.get(CF.heroAnim),P.pose.state))P.pose=null;if(combatSequence&&!P.pose){if(combatSequence.index<combatSequence.states.length)playSkill(combatSequence.states[combatSequence.index++]);else{combatSequence=null;const set=activeMartialSet();atk.textContent=set?'Bộ: '+set.name:'Chiêu';}}if(over||L.dlgOpen)return;
+    t+=dt;atkCD-=dt;P.inv-=dt;P.atkT-=dt;P.hitT-=dt;P.pkT=(P.pkT||0)-dt;if(P.pose&&t-(P.pose.startedAt||0)>=AN.clipSec(AN.get(CF.heroAnim),P.pose.state))P.pose=null;if(over||L.dlgOpen){combatSequence=null;return;}
     doorsTick();
     let ix=0,iy=0;if(keys.ArrowLeft||keys.a)ix--;if(keys.ArrowRight||keys.d)ix++;if(keys.ArrowUp||keys.w)iy--;if(keys.ArrowDown||keys.s)iy++;
     if(stick){ix=stick.x;iy=stick.y;}
     if(ix||iy){if(combatSequence)interruptCombatSequence();if(PATH){PATH=null;GOAL=null;}}
+    else if(combatSequence&&!P.pose){if(combatSequence.index<combatSequence.states.length)playSkill(combatSequence.states[combatSequence.index++]);else{combatSequence=null;const set=activeMartialSet();atk.textContent=set?'Bộ: '+set.name:'Chiêu';}}
     if(!over&&!free(P.x,P.y,.28)){const g=snapFree(P.x,P.y,.28,1.5,false);if(g){P.x=g.x;P.y=g.y;}}
     if(SIDE){P.vy=Math.min(18,(P.vy||0)+30*dt);if((keys.ArrowUp||keys.w||keys.k||(stick&&stick.y<-.55))&&P.on){P.vy=-11.5;P.on=0;}
       const mx=(Math.abs(ix)>.15?Math.sign(ix)*Math.min(1,Math.abs(ix)):0)*CF.spd*(moveMode==='walk'?.55:1)*dt;if(mx&&traverse(P.x,P.y,P.x+mx,P.y,.28,false))P.x+=mx;if(Math.abs(ix)>.2){P.face=ix>0?1:-1;fx=ix>0?1:-1;fy=0;}
