@@ -87,8 +87,12 @@ export function outlineSupports(outline){
       let j=i+1;
       while(j+1<points.length&&straight(points[i],points[j],points[j+1]))j++;
       const a=points[i],b=points[j],dx=b[0]-a[0],dy=b[1]-a[1];
-      if(Math.hypot(dx,dy)>.5)out.push({id:'outline:'+li+':'+((start+i)%loop.length),outlineWall:true,
-        x:a[0]-1,y:a[1]-1,wallLine:{dx,dy,thickness:outline.thickness??WALL_THICKNESS}});
+      const id='outline:'+li+':'+((start+i)%loop.length);
+      if(Math.hypot(dx,dy)>.5&&!outline.removedWalls?.includes(id)){
+        const material=outline.wallOverrides?.[id];
+        out.push({id,outlineWall:true,x:a[0]-1,y:a[1]-1,
+          wallLine:{dx,dy,thickness:outline.thickness??WALL_THICKNESS,...(material!==undefined?{material}:{})}});
+      }
       i=j;
     }
     return out;
