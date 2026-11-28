@@ -1,8 +1,8 @@
 import {restAnimationState} from './anim.js';
 import {characterRoles} from './characterRoles.js';
 import {baseAnchorPicker} from './baseAnchors.js';
-import {readManifestAnimation,groupAnimationImages} from './sheetAnimation.js';
-import {el} from './util.js';
+import {readManifestAnimation,groupAnimationImages,readAnimationImageZip,readSideAnimationZip} from './sheetAnimation.js';
+import {el,expandPacks} from './util.js';
 import {readDirectionalZip,buildDirectionalSet} from './directionalZip.js';
 export function directionalPanel(editor){
  const button=(label,onclick)=>el('button',{class:'b',type:'button',onclick},label);
@@ -54,7 +54,7 @@ export function directionalPanel(editor){
  }
  canvas.ondragstart=event=>editor.startMaterialDrag(event,placement());
  canvas.ondragend=()=>editor.endMaterialDrag();
- const input=el('input',{type:'file',accept:'.zip',multiple:'','aria-label':'Nhập ZIP hoạt ảnh'});
+ const input=el('input',{type:'file',accept:'.zip,.rar',multiple:'','aria-label':'Nhập ZIP/RAR hoạt ảnh'});
  const images=el('input',{type:'file',accept:'.png',multiple:'','aria-label':'Nhập PNG hoạt ảnh'});
  const folder=el('input',{type:'file',webkitdirectory:'','aria-label':'Nhập thư mục PNG'});
  const name=el('input',{type:'text',placeholder:'Tên nhân vật nếu ảnh chưa có tên','aria-label':'Tên bộ hoạt ảnh'});
@@ -70,17 +70,36 @@ export function directionalPanel(editor){
     groups.push(...groupAnimationImages(await Promise.all(files.map(async file=>({
      name:file.name,path:file.webkitRelativePath,data:new Uint8Array(await file.arrayBuffer())
     }))),name.value.trim()));
-   }else for(const file of files){
-    try{
-     const data=new Uint8Array(await file.arrayBuffer());
-     const manifest=readManifestAnimation(data).filter(group=>Object.keys(group.clips).length);
-     const found=[...manifest,...readDirectionalZip(data)];
-     for(const group of found)if(group.name==='Hoạt ảnh')group.name=file.name.replace(/\.zip$/i,'');
-     if(!found.length)errors.push(file.name+': chưa nhận ra hoạt ảnh.');
-     groups.push(...found);
-    }catch(error){errors.push(file.name+': '+error.message);}
+   }else for(const archive of files){
+    const contents=/\.rar$/i.test(archive.name)?await expandPacks([archive],true):[archive];
+    for(const file of contents){
+     try{
+      if(file.archiveError)throw Error(file.archiveError);
+      const data=new Uint8Array(await file.arrayBuffer());
+      const archiveName=file.name.split(' / ').at(-1).replace(/\.(zip|rar)$/i,'');
+      const side=readSideAnimationZip(data,archiveName,name.value.trim());
+      if(side.length){
+       groups.push(...side);
+       continue;
+      }
+      const found=readDirectionalZip(data);
+      let manifestError='';
+      try{found.push(...readManifestAnimation(data).filter(group=>Object.keys(group.clips).length));}
+      catch(error){manifestError=' Manifest: '+error.message;}
+      if(!found.length)found.push(...readAnimationImageZip(data,name.value.trim()||archiveName));
+      for(const group of found)if(group.name==='Hoạt ảnh')group.name=archiveName;
+      if(!found.length)errors.push(file.name+': không tìm thấy bảng PNG có tên động tác hoặc bộ ảnh theo hướng.'+manifestError);
+      groups.push(...found);
+     }catch(error){errors.push(file.name+': '+error.message);}
+    }
    }
+   const sideGroups=groups.filter(group=>group.sideVariant);
+   const preferredSide=sideGroups.reduce((best,group)=>{
+    const count=Object.keys(group.clips).length,previous=Object.keys(best?.clips||{}).length;
+    return count>previous||count===previous&&Object.values(group.clips)[0].fw<Object.values(best.clips)[0].fw?group:best;
+   },null);
    for(const group of groups){
+    if(group.sideVariant&&group!==preferredSide)continue;
     if(!section.isConnected||editor.map()!==map)break;
     try{
      const {set,sheets}=await buildDirectionalSet(group);
@@ -91,7 +110,7 @@ export function directionalPanel(editor){
    }
    refresh();
    if(imported.size===1)show(imported.values().next().value);
-   if(fromImages&&imported.size)name.value='';
+   if(imported.size)name.value='';
    status.textContent=[imported.size?'Đã nạp '+imported.size+' nhân vật. Chọn nhân vật để đặt vai trò.':'',...errors].filter(Boolean).join(' ');
   }catch(error){status.textContent=error.message;}
   finally{importing=false;input.disabled=images.disabled=folder.disabled=false;input.value=images.value=folder.value='';}
@@ -99,7 +118,7 @@ export function directionalPanel(editor){
  input.onchange=()=>load([...input.files],false);
  images.onchange=()=>load([...images.files],true);
  folder.onchange=()=>load([...folder.files].filter(file=>/\.png$/i.test(file.name)),true);
- section.append(el('strong',{},'Animation/Animated'),el('label',{},'Nhập ZIP hoạt ảnh ',input),
+ section.append(el('strong',{},'Animation/Animated'),el('label',{},'Nhập ZIP/RAR hoạt ảnh ',input),
   name,el('label',{},'Nhập PNG hoạt ảnh ',images),el('label',{},'Nhập thư mục PNG ',folder),status,library,preview);
  refresh();return section;
 }

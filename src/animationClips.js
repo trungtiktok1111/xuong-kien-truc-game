@@ -3,6 +3,11 @@ export const characterNameKey=name=>name.trim().replace(/\s+/g,' ').normalize('N
 export function mergeAnimationClips(existing,incoming){
  const clips={...existing},keys=new Map();
  for(const [state,clip] of Object.entries(incoming)){
+  if(clip.sourceVariant&&clips[state]?.sourceVariant===clip.sourceVariant){
+   clips[state]=clip;
+   keys.set(state,state);
+   continue;
+  }
   const family=state.replace(/_\d+$/,'');
   const attack=/^atk\d*$/.test(state);
   const sameFamily=key=>attack?/^atk\d*$/.test(key):key===family||key.replace(/_\d+$/,'')===family;

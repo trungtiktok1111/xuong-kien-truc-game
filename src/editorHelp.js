@@ -93,6 +93,7 @@ const keys=[
  ['Cuộn · Chuột phải','Zoom tại con trỏ · Thao tác tại chỗ'],
  ['Ctrl+C / X · Delete','Sao chép / Cắt · Xóa vùng chọn'],
  ['Ctrl+V','Lặp nội dung đã sao chép trong vùng đích đang chọn. Nếu chưa chọn vùng đích, bật chế độ dán.'],
+ ['Ctrl+Shift+kéo chuột trái','Dán lặp mẫu đã sao chép vào cả vùng kéo.'],
  ['Ctrl+Shift+V · Shift+kéo','Bật dán từng cụm · Trong chế độ dán, kéo theo hàng ngang hoặc dọc'],
  ['Ctrl+D · Ctrl + mũi tên','Nhân bản vùng chọn · Nhân bản vùng chọn theo hướng mũi tên'],
  ['Ctrl+Z · Ctrl+Shift+Z','Hoàn tác · Làm lại'],

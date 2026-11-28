@@ -94,3 +94,96 @@ export function groupAnimationImages(files,character){
   '. Nhập tên và chọn lại các ảnh thuộc cùng nhân vật, hoặc nhập ZIP có tên nhân vật.');
  return [...groups].map(([name,images])=>readAnimationImages(images,name));
 }
+
+export function readAnimationImageZip(bytes,character){
+ const sheets=unzipSync(bytes,{filter:entry=>{
+  const parts=entry.name.split(/[\\/]/),basename=parts.pop().replace(/\.png$/i,'');
+  return entry.originalSize<=24*1024*1024&&/\.png$/i.test(entry.name)&&
+   !parts.some(part=>part.startsWith('.')||part==='__MACOSX')&&motion.test(basename);
+ }});
+ const files=Object.entries(sheets).map(([path,data])=>({name:path.split(/[\\/]/).at(-1),path,data}));
+ return groupAnimationImages(files,character);
+}
+
+const sideImage=/^(.+)_([LR])(?:_(\d+))?\.png$/i;
+const sideVariant=/^(?:(\d+)x(\d+)_Frames(?:HQ)?|x(\d+)_Spritesheets)$/i;
+
+function pngSize(bytes){
+ if(bytes.length<24)return null;
+ const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+ if(view.getUint32(0)!==0x89504e47)return null;
+ return [view.getUint32(16),view.getUint32(20)];
+}
+
+function sideAction(name){
+ const id=name.toLowerCase();
+ const aliases={attack1:'atk',attack6_injump:'atk6',idle1:'idle',hit1:'hit',
+  run_forward:'run',walk_forward:'walk',run_backpedal:'run_back',walk_backpedal:'walk_back',attack_combo:'combo'};
+ return aliases[id]||id.replace(/^attack(?=\d)/,'atk');
+}
+
+export function readSideAnimationZip(bytes,archiveName,chosenName){
+ const root=archiveName.replace(/\.zip$/i,''),variant=sideVariant.exec(root);
+ const files=unzipSync(bytes,{filter:entry=>{
+  const path=entry.name.split(/[\\/]/),name=path.pop();
+  return entry.originalSize<=24*1024*1024&&(variant&&sideImage.test(name)||/^smith_(?:die|idle_new|jump|punch|run|walk)\.png$/i.test(name));
+ }});
+ const groups=new Map();
+ for(const [path,data] of Object.entries(files)){
+  const dimensions=pngSize(data);
+  if(!dimensions)continue;
+  const name=path.split(/[\\/]/).at(-1);
+  if(/^smith_/i.test(name)){
+   const [width,height]=dimensions;
+   if(height!==258||width%height)continue;
+   const [action]=name.slice(6).toLowerCase().split('.');
+   const state=({die:'death',idle_new:'idle',punch:'atk'})[action]||action;
+   const smith=chosenName||'Smith';
+   if(!groups.has(smith))groups.set(smith,{name:smith,clips:{}});
+   groups.get(smith).clips[state]={grid:{n:width/height,fw:height,fh:height,cols:width/height},data};
+   continue;
+  }
+  const [,action,direction,index]=sideImage.exec(name);
+  const h=Number(variant[2]||variant[3]),w=Number(variant[1]||Math.round(h*300/160));
+  const character=chosenName||'Nhân vật L/R',key=sideAction(action);
+  if(!groups.has(character))groups.set(character,{name:character,clips:{},sideVariant:true});
+  const clips=groups.get(character).clips;
+  const clip=(clips[key]??={sideRows:[[],[]],fw:w,fh:h});
+  const row=clip.sideRows[direction.toUpperCase()==='R'?0:1];
+  if(index){
+   if(dimensions[0]===w&&dimensions[1]===h)row.push({data,index:Number(index)});
+  }else{
+   const cols=dimensions[0]/w,rows=dimensions[1]/h;
+   if(Number.isInteger(cols)&&Number.isInteger(rows)&&cols>0&&rows>0&&cols*rows<=128)
+    row.push({data,cols,n:cols*rows});
+  }
+ }
+ for(const group of groups.values()){
+  for(const [state,clip] of Object.entries(group.clips)){
+   if(!clip.sideRows)continue;
+   for(const row of clip.sideRows)row.sort((a,b)=>a.index-b.index);
+   const counts=clip.sideRows.map(row=>row[0]?.n||row.length);
+   if(!counts[0]||counts[0]!==counts[1])delete group.clips[state];
+   else clip.n=counts[0];
+  }
+ }
+ return [...groups.values()].filter(group=>Object.keys(group.clips).length);
+}
+
+export async function packSideAnimation({sideRows,fw,fh,n}){
+ const scale=Math.min(1,480/fw,Math.floor(8192/n)/fw);
+ const width=Math.floor(fw*scale),height=Math.round(fh*scale);
+ const canvas=document.createElement('canvas');canvas.width=width*n;canvas.height=height*2;
+ const ctx=canvas.getContext('2d');
+ for(const [direction,row] of sideRows.entries()){
+  for(const [index,entry] of row.entries()){
+   const bitmap=await createImageBitmap(new Blob([entry.data],{type:'image/png'}));
+   try{
+    if(entry.cols){
+     for(let i=0;i<n;i++)ctx.drawImage(bitmap,(i%entry.cols)*fw,Math.floor(i/entry.cols)*fh,fw,fh,i*width,direction*height,width,height);
+    }else ctx.drawImage(bitmap,index*width,direction*height,width,height);
+   }finally{bitmap.close();}
+  }
+ }
+ return {canvas,fw:width,fh:height,n};
+}

@@ -1,5 +1,5 @@
 import {unzipSync} from 'fflate';
-import {packSheet} from './sheetAnimation.js';
+import {packSheet,packSideAnimation} from './sheetAnimation.js';
 
 export const directions=['Nam','Tây Nam','Tây','Tây Bắc','Bắc','Đông Bắc','Đông','Đông Nam'];
 const aliases={rotations:'idle',stand:'idle',attack:'atk',hurt:'hit'};
@@ -101,9 +101,10 @@ export async function buildDirectionalSet(group){
  for(const [state,clip] of Object.entries(group.clips)){
   const {data,rows,size,n,horizontal,frames}=clip;
   const name=group.name+' · '+state+' · '+crypto.randomUUID().slice(0,8);
-  if(clip.grid){
-   const {canvas,fw,fh,n}=await packSheet(clip);
-   st[state]={src:[name],dirs:1,n,fw,fh,fps:10,ax:fw/2,ay:fh,fixedGround:true};
+  if(clip.grid||clip.sideRows){
+   const {canvas,fw,fh,n}=await (clip.sideRows?packSideAnimation(clip):packSheet(clip));
+   st[state]={src:[name],dirs:clip.sideRows?2:1,n,fw,fh,fps:10,ax:fw/2,ay:fh,fixedGround:true};
+   if(clip.sideRows)st[state].sourceVariant='side-series';
    sheets.push({name,url:canvas.toDataURL(),tw:fw,margin:0});
    continue;
   }
