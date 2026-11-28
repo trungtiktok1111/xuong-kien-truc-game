@@ -1,3 +1,4 @@
+import {characterRoles} from './characterRoles.js';
 import {characterNameKey,mergeAnimationClips} from './animationClips.js';
 import {baseAnchorPoints} from './baseAnchors.js';
 import {cropContactFrame} from './cropContact.js';
@@ -3955,7 +3956,7 @@ export function init2D(root,A){
     if(file)return (await readOutlineFile(file,style)).materials;
     throw Error('Hãy chọn lại hoặc thêm lại tệp ZIP của lớp này.');
   }
-  let materialDrag=null,materialAnchor=null;
+  let materialDrag=null,materialAnchor=null,characterPlacement=null;
   let materialDragImage;
   function setMaterialAnchor(at,batch=materialDrag){
     materialAnchor=at&&{...at,batch,mapIndex:curMap};
@@ -3981,7 +3982,29 @@ export function init2D(root,A){
     drawMapName('Điểm neo · X '+coord.format(x)+' · Y '+coord.format(y),[px-8,Math.max(25,py-11),px+8],color);
     cx.restore();
   }
-  cv.addEventListener('pointerdown',()=>{if(materialAnchor)setMaterialAnchor(null);},true);
+  cv.addEventListener('pointerdown',event=>{
+    if(materialAnchor)setMaterialAnchor(null);
+    if(event.button!==0||!characterPlacement)return;
+    const {batch,map}=characterPlacement;
+    characterPlacement=null;
+    if(map!==M)return;
+    event.preventDefault();event.stopImmediatePropagation();
+    if(batch.role==='hero')setAnimatedHero(batch.animation.id);
+    else void placeMaterialBatch(batch,materialDropPoint(event)).catch(error=>toast(error.message));
+  },true);
+  cv.addEventListener('pointermove',event=>{
+    if(characterPlacement?.map===M)setMaterialAnchor(materialDropPoint(event),characterPlacement.batch);
+  });
+  cv.addEventListener('pointerleave',()=>{if(characterPlacement)setMaterialAnchor(null);});
+  cv.addEventListener('keydown',event=>{
+    if(event.key!=='Escape'||!characterPlacement)return;
+    event.stopImmediatePropagation();characterPlacement=null;setMaterialAnchor(null);
+  },true);
+  function armCharacterPlacement(batch){
+    batch.bounds=zBounds(actorFoot(0,0,batch.animation.visualScale??1));
+    characterPlacement={batch,map:M};
+    cv.focus({preventScroll:true});
+  }
   cv.addEventListener('dragover',event=>{
     if(!materialDrag)return;
     event.preventDefault();event.dataTransfer.dropEffect='copy';
@@ -3992,11 +4015,12 @@ export function init2D(root,A){
     const batch=materialDrag;
     if(!batch)return;
     event.preventDefault();materialDrag=null;setMaterialAnchor(null);
+    if(batch.animation&&batch.role==='hero'){setAnimatedHero(batch.animation.id);return;}
     const at=materialDropPoint(event);
     void placeMaterialBatch(batch,at).catch(error=>toast(error.message));
   });
   function startMaterialDrag(event,batch){
-    materialDrag=batch;setMaterialAnchor(null);
+    characterPlacement=null;materialDrag=batch;setMaterialAnchor(null);
     if(batch.animation){
       const scale=batch.animation.visualScale??1;
       batch.bounds=zBounds(actorFoot(0,0,scale));
@@ -4057,7 +4081,10 @@ export function init2D(root,A){
       if(batch.animation){
         if(!map.cfg.anims?.some(set=>set.id===batch.animation.id))throw Error('Bộ hoạt ảnh chưa có trong màn.');
         if(!floor(x,y,.22))throw Error('Hãy đặt hoạt ảnh trên sàn.');
-        parts.push({...newEnt('npc',x-.5,y-.5),name:batch.animation.name,anim:batch.animation.id,animationPose:batch.pose,tile:null,text:''});
+        const role=characterRoles[batch.role]||characterRoles.villager;
+        const pose=role.type==='npc'?batch.pose:undefined;
+        parts.push({...newEnt(role.type,x-.5,y-.5),...role.stats,name:batch.animation.name,anim:batch.animation.id,
+          characterRole:batch.role,animationPose:pose,tile:null,text:role.text});
       }else for(const {e,sheet} of entries){
         const sid=await loadBuiltinSheet(sheet,prepared);
         if(!floor(e.x+x+1,e.y+y+1,0))throw Error('Một phần cụm nằm ngoài sàn.');
@@ -4074,7 +4101,7 @@ export function init2D(root,A){
     placementQueue=job.catch(()=>{});
     return job;
   }
-  async function installDirectionalSet(set,assets,map,targetId){
+  async function installDirectionalSet(set,assets,map){
     const prepared=sheets.slice(),count=sheets.length,assetNames=new Map();
     for(const asset of assets){
       const sid=await loadBuiltinSheet(asset,prepared);
@@ -4082,33 +4109,26 @@ export function init2D(root,A){
     }
     if(M!==map||sheets.length!==count)throw Error('Màn đang chỉnh đã đổi. Hãy nạp lại.');
     const sets=M.cfg.anims||[];
-    const target=targetId?sets.find(item=>item.id===targetId):
-      sets.find(item=>characterNameKey(item.name)===characterNameKey(set.name));
-    if(targetId&&!target)throw Error('Nhân vật đã chọn không còn trong màn.');
+    const matching=sets.filter(item=>characterNameKey(item.name)===characterNameKey(set.name));
+    const target=matching.find(item=>item.id===M.cfg.heroAnim)||matching[0];
     for(const clip of Object.values(set.st))clip.src=clip.src.map(name=>assetNames.get(name)??name);
     const merged=target?{...target,st:mergeAnimationClips(target.st,set.st).clips}:set;
     pushUndo();
     sheets.push(...prepared.slice(count));
-    M.cfg.anims=target?sets.map(item=>item===target?merged:item):[...sets,merged];
-    anK='';after();draw();
-    return merged;
-  }
-  function mergeDirectionalSets(sourceId,targetId){
-    const sets=M.cfg.anims||[];
-    const source=sets.find(item=>item.id===sourceId),target=sets.find(item=>item.id===targetId);
-    if(!source||!target||source===target)return null;
-    const {clips,keys}=mergeAnimationClips(target.st,source.st);
-    const merged={...target,st:clips};
-    pushUndo();
-    M.cfg.anims=sets.filter(item=>item!==source).map(item=>item===target?merged:item);
-    if(M.cfg.heroAnim===sourceId)M.cfg.heroAnim=targetId;
-    if(M.cfg.beforeOutlineHero?.heroAnim===sourceId)M.cfg.beforeOutlineHero.heroAnim=targetId;
-    for(const entity of M.ents){
-      if(entity.anim!==sourceId)continue;
-      entity.anim=targetId;
-      const pose=entity.animationPose;
-      if(pose&&keys.has(pose.state))pose.state=keys.get(pose.state);
+    for(const duplicate of matching){
+      if(duplicate===target)continue;
+      const {clips,keys}=mergeAnimationClips(merged.st,duplicate.st);
+      merged.st=clips;
+      if(M.cfg.beforeOutlineHero?.heroAnim===duplicate.id)M.cfg.beforeOutlineHero.heroAnim=target.id;
+      for(const entity of M.ents){
+        if(entity.anim!==duplicate.id)continue;
+        entity.anim=target.id;
+        const pose=entity.animationPose;
+        if(pose&&keys.has(pose.state))pose.state=keys.get(pose.state);
+      }
     }
+    M.cfg.anims=target?sets.filter(item=>item===target||!matching.includes(item))
+      .map(item=>item===target?merged:item):[...sets,merged];
     anK='';after();draw();
     return merged;
   }
@@ -4352,6 +4372,6 @@ export function init2D(root,A){
   function clearOutline(){pushUndo();M.ents=M.ents.filter(e=>!e.wallId?.startsWith('outline:'));delete M.cfg.outline;if(!acceptStructure())return false;after();fit();draw();}
   const outlineUsedSources=()=>[M,...MAPS].flatMap(map=>Object.values(map.cfg.outlineMaterials?.layers||{})
     .flatMap(layer=>(layer.assets||(layer.asset?[layer.asset]:[])).map(asset=>typeof asset==='string'?layer.source:asset.source||layer.source)));
-  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){if(materialDrag){materialDrag=null;setMaterialAnchor(null);}},installDirectionalSet,mergeDirectionalSets,setAnimatedHero,setAnimationScale,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
+  const api={ready,showAssembly(){useTool('inventory');},applySceneMaterials,materialMapIndex:()=>curMap,startMaterialDrag,endMaterialDrag(){if(materialDrag){materialDrag=null;setMaterialAnchor(null);}},installDirectionalSet,armCharacterPlacement,setAnimatedHero,setAnimationScale,connectMap,mapConnectionBox,outlineConnectionTargets,outlinePlayData,showStockScenes,exportPNG,outlineGridBounds,applyOutline,replaceWithOutlineMap,newOutlineMap,resizeOutlineGrid,outlineLayerChoices,outlineUsedSources,outlinePackSources:stockPackList,clearOutline,readProject,restoreProject,startSample,builtinOutlineSample,setProjectMeta,fit,show(){dirty=true;setTimeout(fit,30);},gameData,sheets:()=>sheets,map:()=>M,hasClip:()=>!!clip};
   return api;
 }

@@ -2,7 +2,7 @@ import {unzipSync,strFromU8} from 'fflate';
 
 function stateName(name){
  const key=name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
- return ({standing_idle:'idle',run_armed:'run',walk_2:'walk',standing_overhead_slash:'atk',punch_1:'atk',attack_13:'atk',hurt_1:'hit',idle_3:'idle',walk_3:'walk'})[key]||key;
+ return ({stand:'idle',sprint:'run',attack:'atk',punch:'atk',slash:'atk',hurt:'hit',standing_idle:'idle',run_armed:'run',walk_2:'walk',standing_overhead_slash:'atk',punch_1:'atk',attack_13:'atk',hurt_1:'hit',idle_3:'idle',walk_3:'walk'})[key]||key;
 }
 
 export function readManifestAnimation(bytes){
@@ -75,4 +75,22 @@ export async function packSheet({data,grid}){
   }
   return {canvas,fw:w,fh:h,n};
  }finally{bitmap.close();}
+}
+
+const motion=/(?:^|[ _.-])((?:crouched[_ -]walking|jump[_ -]forward|idle|stand|walk|run|sprint|attack|atk|punch|slash|combo|hurt|hit|jump|dash|dodge|block|death|cast|spell)(?:[ _.-]*[0-9]+)?)$/i;
+
+export function groupAnimationImages(files,character){
+ const groups=new Map(),unknown=[];
+ for(const file of files){
+  const path=(file.path||file.name).split(/[\\/]/),base=path.pop().replace(/\.png$/i,'');
+  const match=motion.exec(base);
+  const prefix=match?base.slice(0,match.index).trim():'';
+  const name=prefix||path.at(-1)||character;
+  if(!name){unknown.push(file.name);continue;}
+  if(!groups.has(name))groups.set(name,[]);
+  groups.get(name).push({...file,name:match?match[1]+'.png':file.name});
+ }
+ if(unknown.length)throw Error('Các PNG này cần tên nhân vật: '+unknown.slice(0,3).join(', ')+
+  '. Nhập tên và chọn lại các ảnh thuộc cùng nhân vật, hoặc nhập ZIP có tên nhân vật.');
+ return [...groups].map(([name,images])=>readAnimationImages(images,name));
 }
