@@ -7,6 +7,9 @@ export function outlineWallImage(outline,sheets){
  images.modules=(outline?.wallModules||[]).map(module=>({...module,sheetData:sheets.find(sheet=>sheet?.name===module.sheet)})).filter(module=>module.sheetData?.img);
  return images;
 }
+// A single named wall material's image, for a wall run whose wallOverrides entry
+// names it — independent of the scene-wide wallMaterial(s)/wallModules above.
+export function wallMaterialImage(name,sheets){return sheets.find(sheet=>sheet?.name===name)?.img;}
 export function outline2D(data,angle=false,ents=[]){
  if(!data?.loops?.length)return null;
  const variants=cached.get(data)||[];const index=Number(angle);
@@ -45,7 +48,21 @@ export function outline2D(data,angle=false,ents=[]){
  });
  const points=loops.flat(),u=points.map(p=>angle?p[0]:p[0]-p[1]),v=points.map(p=>angle?p[1]:(p[0]+p[1])/2);
  const bounds=[Math.min(...u),Math.min(...v),Math.max(...u),Math.max(...v)];
- const result={loops,walls,perimeter,floorThickness:data.floorThickness??.35,supports:outlineSupports(data),bounds,front:data.front??DEFAULT_OUTLINE_WALL_HEIGHT,rear:data.rear??DEFAULT_OUTLINE_WALL_HEIGHT};
+ const supports=outlineSupports(data);
+ // Tag each fine render segment with the (filtered/overridden) support run it sits
+ // on: `removed` lets the wall face be skipped while the floor skirt (drawFloorSlab,
+ // which reads the same walls array) still draws there unchanged; `material` lets
+ // that one run's face use a different texture than the scene default.
+ for(const seg of walls){
+  const mid=[(seg.a[0]+seg.b[0])/2,(seg.a[1]+seg.b[1])/2];
+  const owner=supports.find(support=>{
+   const {a,length,u:du}=wallSpan(support),x=mid[0]-a[0],y=mid[1]-a[1],d=x*du[0]+y*du[1];
+   return Math.abs(x*du[1]-y*du[0])<=.05&&d>=-.05&&d<=length+.05;
+  });
+  if(!owner)seg.removed=true;
+  else if(owner.wallLine.material!==undefined)seg.material=owner.wallLine.material;
+ }
+ const result={loops,walls,perimeter,floorThickness:data.floorThickness??.35,supports,bounds,front:data.front??DEFAULT_OUTLINE_WALL_HEIGHT,rear:data.rear??DEFAULT_OUTLINE_WALL_HEIGHT};
  variants[index]=result;cached.set(data,variants);return cutGateOpenings(result,ents,angle);
 }
 function cutGateOpenings(geo,ents,angle){

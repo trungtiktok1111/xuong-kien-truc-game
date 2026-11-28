@@ -42,7 +42,7 @@ export function outlineCollision3D(outline,grid){
  if(!outline?.loops?.length||outline.floorCollision===false)return ()=>true;
  const [w,,h]=grid;
  const ground=mapCollision({w,h,blk:new Uint8Array(w*h),cfg:{outline:{...outline,floorCollision:true}}}).floor;
- const zones=wallSegments3D(outline).filter(w=>w.height>0).map(w=>({k:'line',pts:[w.a,w.b],th:w.thickness,height:w.height}));
+ const zones=wallSegments3D(outline).filter(w=>w.height>0&&!w.removed).map(w=>({k:'line',pts:[w.a,w.b],th:w.thickness,height:w.height}));
  const heights=[...new Set(zones.map(z=>z.height))].map(h=>[h,indexPaintZones(zones.filter(z=>z.height===h))]);
  return (x,z,y,r=.25)=>!!ground?.fits(x,z,r)&&!heights.some(([height,hit])=>y<height-.02&&hit(x,z,r));
 }
@@ -89,7 +89,7 @@ export function outlineMesh3D(outline){
  const wallUnit=new THREE.BoxGeometry(1,1,1);
  const foundation=new THREE.Mesh(slab,floorMat);foundation.name='Sàn đường bao';group.add(foundation);
  for(const w of wallSegments3D(outline)){
-  if(!(w.height>0))continue;
+  if(!(w.height>0)||w.removed)continue;
   const [x,z]=w.a,[u,v]=w.b;
   const m=new THREE.Mesh(wallUnit,wallMat);m.name='Tường bao';
   m.position.set((x+u)/2,w.height/2,(z+v)/2);
