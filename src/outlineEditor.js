@@ -3,7 +3,7 @@ import {directionalPanel} from './directionalPanel.js';
 import {drawSurfaceTerrain} from './surfaceContours.js';
 import {surfaceLevels,surfaceLevelById,surfacePieces} from './surfaceLibrary.js';
 import {diamondOutline,newSurface,planSurface,surfaceFromLevel,surfaceTypes,surfaceWater} from './surfaceTerrain.js';
-import {WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS} from './wall2d.js';
+import {WALL_THICKNESS,WALL_MIN_THICKNESS,WALL_MAX_THICKNESS,outlineSupports} from './wall2d.js';
 import {DEFAULT_OUTLINE_WALL_HEIGHT,fitDraftGrid} from './outlineGrid.js';
 import {captureOutlineTiles,placeOutlineTiles} from './outlineMaterials.js';
 import {levelLibrary} from './outlineLevels.js';
@@ -138,6 +138,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  let placement=null,previewAt=null,selection=null,levelDraft=null,activeTab=initialTab;
  let cursor=null;
  let gates=structuredClone(map.cfg.outline?.gates||[]),gatePreview=null;
+ let selectedWall=null,removedWalls=structuredClone(map.cfg.outline?.removedWalls||[]),wallOverrides=structuredClone(map.cfg.outline?.wallOverrides||{});
  const gateWidth=el('input',{type:'number',min:1.5,max:16,step:.25,value:3,'aria-label':'Bề rộng cổng 3D'});
  const gateDest=el('select',{'aria-label':'Màn đích của cổng 3D'},el('option',{value:''},'Không chuyển màn'),...(editor.sceneChoices?.()||[]).map(m=>el('option',{value:m.id},m.name)));
  const originLevel=outlineLevels.find(level=>level.id===map.cfg.outlineTemplate)||
@@ -287,6 +288,14 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
    c.beginPath();points(loops[i]);c.closePath();c.strokeStyle=!pieces.length&&i===picked?'#f5c86e':'#b7d3c5';c.lineWidth=!pieces.length&&i===picked?2:1;c.stroke();
    if(!pieces.length&&i===picked)for(const [x,y] of loops[i]){c.fillStyle='#ffda91';c.fillRect(xp(x)-1.5,yp(y)-1.5,3,3);}
   }
+  refreshWallControls();
+  if(mode==='wall'){
+   for(const run of outlineSupports({loops,thickness:+thickness.value,removedWalls,wallOverrides})){
+    const a=[run.x+1,run.y+1],b=[a[0]+run.wallLine.dx,a[1]+run.wallLine.dy];
+    c.beginPath();c.moveTo(xp(a[0]),yp(a[1]));c.lineTo(xp(b[0]),yp(b[1]));
+    c.strokeStyle=run.id===selectedWall?'#f9cb6a':'#76dfbd';c.lineWidth=run.id===selectedWall?4:2;c.stroke();
+   }
+  }
   if(is3D&&(gates.length||mode==='gate'||mode==='ungate')){
    for(const g of [...gates,...(gatePreview?[gatePreview]:[])]){
     c.strokeStyle=g===gatePreview?'#f9cb6a':'#76dfbd';c.lineWidth=g===gatePreview?2:4;c.beginPath();
@@ -427,14 +436,14 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   if(mode==='rect')return [a,[b[0],a[1]],b,[a[0],b[1]]];
   return ellipseLoop((a[0]+b[0])/2,(a[1]+b[1])/2,rx,ry);
  }
- function select(next){pending=[];placement=null;previewAt=null;selection=null;mode=next;gatePreview=null;draw();}
- function draft(previous=loops){return {base:copy(baseLoops),pieces:copy(pieces),loops:copy(previous),w:W,h:H,level:levelDraft,stamps,origin,gates,surface,propEdits,front:front.value,rear:rear.value,thickness:thickness.value,floorThickness:floorThickness.value,collision:collision.checked};}
+ function select(next){pending=[];placement=null;previewAt=null;selection=null;mode=next;gatePreview=null;selectedWall=null;draw();}
+ function draft(previous=loops){return {base:copy(baseLoops),pieces:copy(pieces),loops:copy(previous),w:W,h:H,level:levelDraft,stamps,origin,gates,surface,propEdits,front:front.value,rear:rear.value,thickness:thickness.value,floorThickness:floorThickness.value,collision:collision.checked,removedWalls:[...removedWalls],wallOverrides:{...wallOverrides}};}
  function record(previous=loops){undo.push(draft(previous));if(undo.length>40)undo.shift();redo.length=0;}
  function travel(from,to){
   if(!from.length)return;
   to.push(draft());const next=from.pop();
   const resized=next.w!==W||next.h!==H||next.origin!==origin;
-  loops=next.loops;baseLoops=next.base;pieces=next.pieces;pickedPiece=null;propEdits=next.propEdits||[];stamps=next.stamps;W=next.w;H=next.h;origin=next.origin;gates=next.gates;surface=next.surface??null;levelDraft=next.level;front.value=next.front;rear.value=next.rear;thickness.value=next.thickness;floorThickness.value=next.floorThickness??.35;collision.checked=next.collision;
+  loops=next.loops;baseLoops=next.base;pieces=next.pieces;pickedPiece=null;propEdits=next.propEdits||[];stamps=next.stamps;W=next.w;H=next.h;origin=next.origin;gates=next.gates;surface=next.surface??null;levelDraft=next.level;front.value=next.front;rear.value=next.rear;thickness.value=next.thickness;floorThickness.value=next.floorThickness??.35;collision.checked=next.collision;removedWalls=next.removedWalls||[];wallOverrides=next.wallOverrides||{};
   if(resized)resetGridView();
   picked=-1;select('select');
  }
@@ -615,6 +624,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   if(surface){drag={start:p,surface:true};pending=[p,p];canvas.setPointerCapture?.(e.pointerId);draw();return;}
   if(placement){commitPlacement(p);return;}
   if(mode==='polygon'){pending.push(p);draw();return;}
+  if(mode==='wall'){selectedWall=nearestWallRun(p);draw();return;}
   if(mode==='scan'){drag={start:p,scan:true};selection=[p,p];}
   else if(['ellipse','rect','corridor'].includes(mode)){drag={start:p};pending=[p,p];}
   else{
@@ -714,6 +724,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
    else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){
     e.preventDefault();e.shiftKey?travel(redo,undo):travel(undo,redo);
    }
+   else if(e.key.toLowerCase()==='l'&&!e.ctrlKey&&!e.metaKey&&!placement){e.preventDefault();select('wall');}
  };
  box.tabIndex=-1;
  operation.onchange=draw;
@@ -725,15 +736,52 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   value:map.cfg.outline?.floorThickness??.35,style:'width:68px'});
  const slabDepth=()=>Math.max(0,Math.min(4,Number(floorThickness.value)||0));
  const collision=el('input',{type:'checkbox'});collision.checked=map.cfg.outline?.floorCollision!==false;
- for(const [key,label] of [['select','Chỉnh điểm'],['move','Di chuyển đường'],['polygon','Đa giác'],['rect','Chữ nhật'],['ellipse','Hình elip'],['scan','Quét chọn'],['corridor','Nối hành lang']]){
+ for(const [key,label] of [['select','Chỉnh điểm'],['move','Di chuyển đường'],['polygon','Đa giác'],['rect','Chữ nhật'],['ellipse','Hình elip'],['scan','Quét chọn'],['corridor','Nối hành lang'],['wall','Chọn đoạn tường']]){
   const button=B(label,()=>select(key));modeButtons.set(key,button);toolbar.append(button);
+ }
+ function nearestWallRun(p){
+  const runs=outlineSupports({loops,thickness:+thickness.value,removedWalls,wallOverrides});
+  let best=null,dist=10/s;
+  for(const run of runs){
+   const a=[run.x+1,run.y+1],dx=run.wallLine.dx,dy=run.wallLine.dy,length=dx*dx+dy*dy;
+   const t=length?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/length)):0;
+   const d=Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);
+   if(d<dist){dist=d;best=run.id;}
+  }
+  return best;
+ }
+ const wallMaterialSelect=el('select',{'aria-label':'Vật liệu riêng cho đoạn tường'});
+ const wallDeleteButton=B('Xoá đoạn này',()=>{
+  if(!selectedWall)return;
+  if(removedWalls.includes(selectedWall)){record();removedWalls=removedWalls.filter(id=>id!==selectedWall);draw();return;}
+  if((map.ents||[]).some(e=>e.wallId===selectedWall)){toast('Đoạn tường có cổng. Hãy xóa cổng trước.');return;}
+  record();removedWalls=[...removedWalls,selectedWall];draw();
+ });
+ wallMaterialSelect.onchange=()=>{
+  if(!selectedWall)return;
+  record();wallOverrides={...wallOverrides};
+  if(wallMaterialSelect.value)wallOverrides[selectedWall]=wallMaterialSelect.value;
+  else delete wallOverrides[selectedWall];
+  draw();
+ };
+ const wallControls=el('span',{class:'row',hidden:true},wallDeleteButton,el('label',{},'Vật liệu riêng ',wallMaterialSelect));
+ function refreshWallControls(){
+  const active=mode==='wall'&&selectedWall;
+  wallControls.hidden=!active;
+  if(!active)return;
+  const removed=removedWalls.includes(selectedWall);
+  wallDeleteButton.textContent=removed?'Khôi phục đoạn này':'Xoá đoạn này';
+  const names=map.cfg.outline?.wallMaterials||(map.cfg.outline?.wallMaterial?[map.cfg.outline.wallMaterial]:[]);
+  wallMaterialSelect.replaceChildren(el('option',{value:''},'— mặc định —'),...names.map(name=>el('option',{value:name},name)));
+  wallMaterialSelect.value=wallOverrides[selectedWall]||'';
+  wallMaterialSelect.disabled=removed||!names.length;
  }
  toolbar.append(B('Khép đường',finish),
   B('Xóa đường đã chọn',()=>{if(removePiece())return;if(picked>=0){record();(pieces.length?baseLoops:loops).splice(picked,1);if(pieces.length)rebuildPieces();picked=-1;draw();}}));
  copyButton=B('Sao chép',copyScan);pasteButton=B('Dán',armClipboard);
  scanMapButton=B('Tạo màn từ vùng quét',createScannedMap);
  centerButton=B('Đặt giữa',()=>commitPlacement([W/2,H/2]));
- toolbar.append(copyButton,pasteButton,scanMapButton,corridorWidth,centerButton);
+ toolbar.append(copyButton,pasteButton,scanMapButton,corridorWidth,centerButton,wallControls);
  if(is3D)toolbar.append(B('Lắp cổng 3D',()=>select('gate')),B('Gỡ cổng 3D',()=>select('ungate')),
    el('label',{},'Rộng cổng ',gateWidth),gateDest,el('small',{class:'hint',id:'gate-plan-status'}));
  function hitGate(p){
@@ -770,7 +818,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
  undoButton=B('Hoàn tác',()=>travel(undo,redo));redoButton=B('Làm lại',()=>travel(redo,undo));
  const setup=el('div',{class:'row outline-setup'},el('label',{},'Cách đặt ',operation),el('label',{},snap,' Bám 1 ô'),
   undoButton,redoButton,B('Khôi phục lúc mở',()=>{
-   record();loops=copy(original);baseLoops=copy(savedPieces?.base||original);pieces=copy(savedPieces?.items||[]);pickedPiece=null;surface=is3D?null:structuredClone(map.cfg.outline?.surface||null);stamps=[];gates=structuredClone(map.cfg.outline?.gates||[]);W=map.w;H=map.h;origin=[0,0];levelDraft=null;
+   record();loops=copy(original);baseLoops=copy(savedPieces?.base||original);pieces=copy(savedPieces?.items||[]);pickedPiece=null;surface=is3D?null:structuredClone(map.cfg.outline?.surface||null);stamps=[];gates=structuredClone(map.cfg.outline?.gates||[]);removedWalls=structuredClone(map.cfg.outline?.removedWalls||[]);wallOverrides=structuredClone(map.cfg.outline?.wallOverrides||{});W=map.w;H=map.h;origin=[0,0];levelDraft=null;
    front.value=map.cfg.outline?.front??DEFAULT_OUTLINE_WALL_HEIGHT;rear.value=map.cfg.outline?.rear??DEFAULT_OUTLINE_WALL_HEIGHT;thickness.value=map.cfg.outline?.thickness??WALL_THICKNESS;collision.checked=map.cfg.outline?.floorCollision!==false;
    resetGridView();picked=-1;select('select');
   }));
@@ -993,6 +1041,7 @@ export function openOutlineEditor(editor,initialTab='shapes',dock=null){
   wallMaterial:!levelDraft?map.cfg.outline?.wallMaterial:undefined,
   wallMaterials:!levelDraft?map.cfg.outline?.wallMaterials:undefined,
   wallModules:!levelDraft?map.cfg.outline?.wallModules:undefined,
+  removedWalls:[...removedWalls],wallOverrides:{...wallOverrides},
   ...(is3D?{gates:copy(gates),floorCollision:collision.checked}:{})});
  async function runAction(action,close){
   if(commitBusy||!readGrid())return;
