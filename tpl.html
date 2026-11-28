@@ -36,7 +36,7 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
 .libgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}.libitem{background:#202c38;border-radius:10px;padding:8px;font-size:12px}.libitem canvas{image-rendering:pixelated;max-width:100%}
 .num{width:64px;padding:8px;border-radius:8px;border:1px solid #3a4a5c;background:#202c38;color:#fff;font-size:14px}
 .shp{border:2px solid transparent;border-radius:10px;background:#202c38;color:#cfd8e2;font-size:11px;padding:4px;display:flex;flex-direction:column;align-items:center}.shp.on{border-color:#ffd24a}
-.matgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;margin-bottom:8px}
+.matgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:6px;margin-bottom:8px}
 .mat{border:2px solid transparent;border-radius:10px;background:#202c38;color:#cfd8e2;font-size:11px;padding:4px;display:flex;flex-direction:column;align-items:center;gap:2px}.mat.on{border-color:#ffd24a}.matimg{width:40px;height:40px;image-rendering:pixelated;border-radius:6px}
 .sl{flex:1;min-width:120px}
 #toast{position:fixed;left:50%;top:60px;transform:translateX(-50%);background:#000c;color:#fff;padding:9px 16px;border-radius:18px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:99;max-width:90%;text-align:center}
@@ -62,7 +62,9 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
  #bar{height:56px;padding:6px 14px;gap:6px}
  #bar .tabbtn{border-radius:8px}
  #v2d[style*="display: flex"]{display:grid!important;grid-template-columns:82px minmax(0,1fr) clamp(290px,27vw,380px);grid-template-rows:minmax(0,1fr) 36px}
- #v2d .map-aim{grid-area:1/2;max-width:min(265px,70%)}
+ #v2d[style*="display: flex"].assembly-wide{grid-template-columns:82px minmax(0,1fr)}
+ #v2d.assembly-wide #pn2{display:none}
+ #v2d .map-aim{grid-area:1/2/2/3;max-width:min(265px,70%)}
  #cv2{grid-area:1/2;min-height:0;height:100%;width:100%}
  #cv2:focus-visible{outline:1px solid #86b7db;outline-offset:-1px}
  #pn2{grid-area:1/3/3/4;width:auto;min-width:0;min-height:0}
@@ -90,14 +92,14 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
  .build-selection strong{font-size:13px;color:#eef1f5}
  .build-filters{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:6px}
  .build-search{border:1px solid #466072;border-radius:7px;background:#13232f;color:#eef1f5;padding:6px 8px;min-width:0;font:inherit}
- .build-materials{display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:6px}
- .build-material{display:grid;justify-items:center;gap:4px;padding:5px;border-radius:8px;border:1px solid #3d5364;background:#202e3a;color:#e5edf2;cursor:pointer;min-width:0}
- .build-material canvas{display:block;width:50px;height:50px;image-rendering:pixelated;border-radius:5px;background:repeating-conic-gradient(#1a2630 0% 25%,#243543 0% 50%) 0 0/16px 16px}
- .build-material span{font-size:11px;line-height:1.25;overflow-wrap:anywhere}
+ .build-materials{display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:6px}
+ .build-material{display:grid;justify-items:center;gap:4px;padding:3px;border-radius:6px;border:1px solid #3d5364;background:#202e3a;color:#e5edf2;cursor:pointer;min-width:0}
+ .build-material canvas{display:block;width:100%;height:auto;aspect-ratio:1;image-rendering:pixelated;border-radius:5px;background:repeating-conic-gradient(#1a2630 0% 25%,#243543 0% 50%) 0 0/16px 16px}
+ .build-material span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
  .build-material:hover,.build-material[aria-pressed=true]{background:#304858;border-color:#f1cb7e}
  .build-pages{justify-content:space-between;margin-top:7px}
  .build-pages .b:disabled{opacity:.45}
- @media (max-width:600px){.build-materials{grid-template-columns:repeat(auto-fill,minmax(72px,1fr))}}
+ @media (max-width:600px){.build-materials{grid-template-columns:repeat(auto-fill,minmax(40px,1fr))}}
  .sheet-control{display:grid;gap:4px;margin:0 0 8px;color:#c7d7e3;font-size:12px}
  .sheet-set,.desktop-tab-more{background:#263a4a;color:#e8edf3;border:1px solid #466072;border-radius:7px;padding:6px;min-width:0;max-width:100%;font:inherit}
  .sheet-control .sheet-set{width:100%}
@@ -130,24 +132,33 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
 .outline-levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;overflow:auto;scrollbar-gutter:stable;padding:1px 5px 2px 1px}
 .outline-levels small{color:#b4c5d3}.outline-levels strong{font-weight:600}.outline-actions{margin-top:8px}
 .outline-actions .b:not(:disabled):nth-child(2),.outline-level-actions .b:not(:disabled):last-child{background:#2e7558}
-.outline-live-view{margin:8px 0 12px;padding:8px;border:1px solid #435667;border-radius:8px}
-.outline-live-view canvas{display:block;width:100%;height:auto;margin-top:6px;border-radius:5px;background:#152327}
-.outline-live-view canvas[hidden],.outline-live-view p:empty{display:none}
+#pn2.has-materials>.ptabs,#pn2.has-materials>.pbody{display:none}
+.scene-materials-dock{min-height:0;flex:1;overflow:auto;padding:8px}
+.scene-materials-actions{position:sticky;top:0;z-index:6;padding:6px 0;background:#192834}
+.scene-materials-dock .outline-stage-controls{grid-template-columns:minmax(0,1fr)}
+.scene-materials-dock input[type=file],.scene-materials-dock select{max-width:100%}
 .outline-stage-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-top:8px}
 .outline-stage{display:grid;align-content:start;gap:6px;min-width:0;padding:8px;background:var(--panel2,#233442);border:1px solid #405766;border-radius:8px}
 .outline-stage label{display:grid;gap:3px}
 .outline-stage select{width:100%;min-width:0}
+.outline-stage .outline-source-list{display:flex;gap:4px;flex-wrap:wrap}
+.outline-stage .outline-source-chip{max-width:100%;overflow-wrap:anywhere;padding:3px 7px;font-size:.78em;border:1px solid #587181;border-radius:12px;background:#314657;color:#f0dcae;cursor:pointer}
+.outline-stage .outline-source-chip:hover{background:#435b6d;border-color:#8ca8b6}
 .outline-stage .row{gap:4px}
 .outline-stage .b{padding:4px 6px;font-size:.86em}
 .outline-stage details{min-width:0}
 .outline-stage details summary{cursor:pointer;color:#f5d99e}
 .outline-stage input[type=search]{width:100%;min-width:0;margin-top:6px}
+.outline-pixel-report{display:grid;justify-items:center;gap:3px;font-size:.85em}
 .outline-selected{display:flex;gap:4px;flex-wrap:wrap}
+.outline-drag-item{cursor:grab;padding:2px}
+.outline-drag-item[aria-pressed=true]{outline:2px solid #62ace6}
+.outline-stage canvas[draggable=true]{display:block;image-rendering:pixelated;cursor:grab}
 .outline-selected .outline-thumb{width:38px;height:34px}
 .outline-gallery{max-height:300px;overflow:auto;overscroll-behavior:contain;padding:2px}
 .outline-gallery-label{font-size:.83rem;font-weight:600;margin:9px 0 4px}
 .outline-gallery-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(64px,1fr));gap:5px}
-.outline-stage .outline-material-card{min-width:0;display:grid;gap:4px;grid-template-rows:46px auto;border:1px solid #526776;text-align:center;overflow-wrap:anywhere;padding:4px}
+.outline-stage .outline-material-card{min-width:0;display:grid;gap:4px;grid-template-rows:auto auto;border:1px solid #526776;text-align:center;overflow-wrap:anywhere;padding:4px}
 .outline-material-card[aria-pressed=true]{border-color:#ffce7c;background:#504335;box-shadow:inset 0 0 0 1px #ffce7c}
 .outline-thumb{display:grid;place-items:center;overflow:hidden;background:#14212a;border-radius:4px;color:#ccd7df;font-size:.7rem}
 .outline-thumb img{display:block;width:100%;height:100%;object-fit:contain;max-height:46px}
@@ -175,7 +186,7 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
  .outline-tools{order:3}
  .outline-setup{order:4}
  .outline-library{order:5}
- .outline-live-view{order:6}.outline-actions,.outline-action-status{order:10}
+ .outline-actions,.outline-action-status{order:10}
  .outline-workspace .hint:not(.outline-view-tools .hint){order:7}
  .outline-grid-size{order:8}.outline-grid-note{order:8}
  .outline-workspace>details:not(.editor-guide){order:9}
@@ -192,6 +203,27 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
  .outline-workspace>*{grid-column:2;min-width:0}
  .outline-canvas-wrap{grid-column:1;grid-row:1/span 12;align-self:start}
  .outline-canvas-wrap canvas{max-height:calc(100vh - 28px)}
+}
+/* Outline editing uses the full desktop viewport. */
+.outline-workspace-header{display:flex}
+.outline-workspace-header h2{margin:0 auto 0 0;font-size:1.12rem}
+.outline-workspace>section[hidden]{display:none!important}
+.outline-plan-page,.outline-settings-page{display:contents}
+@media(min-width:901px) and (pointer:fine){
+ .outline-overlay{padding:0!important;place-items:stretch!important;overflow:hidden!important}
+ .outline-workspace{width:100%;height:100%;border:0;border-radius:0;padding:8px 12px;box-sizing:border-box;display:flex;flex-direction:column;min-height:0}
+ .outline-workspace-header{display:flex;flex:none;margin-bottom:6px}
+ .outline-workspace-header h2{margin:0 auto 0 0;font-size:1.12rem}
+ .outline-plan-page,.outline-settings-page{display:none}
+ .outline-workspace[data-page=plan] .outline-plan-page{display:flex;flex-direction:column;flex:1;min-height:0}
+ .outline-workspace[data-page=settings] .outline-settings-page{display:block;flex:1;min-height:0;overflow:auto}
+ .outline-layout{flex:1;min-height:0;margin:0;align-items:stretch;grid-template-columns:minmax(0,1fr) clamp(220px,17vw,340px)}
+ .outline-drawing-area{min-height:0;min-width:0;display:flex;flex-direction:column}
+ .outline-canvas-wrap{flex:1;min-height:0}
+ .outline-canvas-wrap canvas{position:absolute;inset:0;width:100%!important;height:100%!important;box-sizing:border-box}
+ .outline-library{overflow:auto}
+ .outline-patterns,.outline-levels{max-height:none}
+ .outline-actions{flex:none}
 }
 .pack-results,.installed-packs{margin:8px 0;padding:8px;border:1px solid #34485a;border-radius:8px;overflow-wrap:anywhere}
 .pack-result{padding:6px 0;border-top:1px solid #34485a}
@@ -231,7 +263,7 @@ canvas.main{flex:1;min-height:0;min-width:0;width:100%;display:block;touch-actio
 
 .zip-scene-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:12px}.zip-scene-card{display:flex;flex-direction:column;gap:7px;padding:11px;border:1px solid #334d60;border-radius:10px}.zip-scene-card h3,.zip-scene-card p{margin:0}.zip-scene-card img{width:100%;aspect-ratio:16/9;object-fit:contain;background:#17222b;border-radius:5px}.zip-scene-card button{align-self:flex-start;margin-top:auto}.zip-pack-choices{max-height:240px;overflow:auto}.zip-pack-choices>div:not([hidden]){display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:9px;padding:6px;border-bottom:1px solid #334d60}.zip-pack-choices small{display:block;color:#a8bac7}.zip-pack-choices span{overflow-wrap:anywhere}.zip-pack-choices label{white-space:nowrap}
 </style></head><body><div id="app">
-<div id="bar"><h1>Xưởng Kiến Trúc Game</h1><button class="tabbtn" data-v="2d">🗺 2D</button><button class="tabbtn" data-v="3d">🧱 3D</button><button id="outlinebtn" class="tabbtn">Đường bao</button><button id="levelbtn" class="tabbtn">Màn mẫu</button><button id="zipscenebtn" class="tabbtn">Cảnh ZIP</button><button id="studiobtn" class="tabbtn">Dự án game</button><button id="playbtn" class="tabbtn" style="background:#2e8b57;color:#fff">🎮 Chơi</button><button id="chkbtn" class="tabbtn" style="background:#3a6ea5;color:#fff">✅ Kiểm</button><button id="helpbtn" class="tabbtn" title="Phím tắt F1">Phím tắt</button><button id="relbtn" class="tabbtn" style="background:#b8742a;color:#fff">🚀 Xuất</button></div>
+<div id="bar"><h1>Xưởng Kiến Trúc Game</h1><button id="assemble2dbtn" class="tabbtn" data-v="2d" type="button">Ráp Cảnh 2D</button><button class="tabbtn" data-v="3d">🧱 3D</button><button id="outlinebtn" class="tabbtn">Đường bao</button><button id="zipscenebtn" class="tabbtn">Cảnh ZIP</button><button id="studiobtn" class="tabbtn">Dự án game</button><button id="playbtn" class="tabbtn" style="background:#2e8b57;color:#fff">🎮 Chơi</button><button id="chkbtn" class="tabbtn" style="background:#3a6ea5;color:#fff">✅ Kiểm</button><button id="helpbtn" class="tabbtn" title="Phím tắt F1">Phím tắt</button><button id="relbtn" class="tabbtn" style="background:#b8742a;color:#fff">🚀 Xuất</button></div>
 <section id="xuong-startup" aria-label="Trạng thái khởi động">
  <div class="startup-card">
   <h2>Xưởng Kiến Trúc Game</h2>

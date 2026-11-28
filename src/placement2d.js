@@ -85,17 +85,19 @@ function projectedContact(map, group, x, y, profile) {
 
 export function automaticPaintZones(map, lookup, groups) {
   if (map.cfg?.autoObjectCollision===false) return [];
-  const layer=map.layers?.[2];
   const result=[];
-  for (const group of groups || paintedPieces(layer,map.w,map.h)) for (const i of group.cells) {
-    const profile=lookup(layer[i]);
+  for(const layerId of [2,3]){
+   const layer=map.layers?.[layerId];
+   for (const group of (layerId===2&&groups)||paintedPieces(layer,map.w,map.h)) for (const i of group.cells) {
+    const profile=lookup(layer[i],layerId);
     if (!profile) continue;
     const parts=Array.isArray(profile)?profile:[profile];
     for(const [n,part] of parts.entries()){
       const [x,y]=projectedContact(map,group,i%map.w,Math.floor(i/map.w),part);
-      result.push({id:'painted:'+i+(n?':'+n:''),k:part.kind,x:x-part.w/2,y:y-part.h/2,
+      result.push({id:(layerId===2?'painted:':'painted-upper:')+i+(n?':'+n:''),k:part.kind,x:x-part.w/2,y:y-part.h/2,
         w:part.w,h:part.h,rot:0,estimated:part.estimated!==false});
     }
+  }
   }
   return result;
 }

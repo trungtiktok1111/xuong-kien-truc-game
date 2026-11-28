@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {REFERENCE_HEIGHT, guessTileWidth, anchorFactor, packScale} from '../src/outlineAnchors.js';
+import {REFERENCE_HEIGHT, guessTileWidth, anchorFactor, packScale, outlineObjectSize, scaleOutlineHouse} from '../src/outlineAnchors.js';
 
 test('guessTileWidth mirrors the existing prop heuristic ratios',()=>{
  assert.equal(guessTileWidth(95,0),100);
@@ -49,4 +49,28 @@ test('packScale lets a valid manual override win over an automatically detected 
  assert.equal(packScale({door},2.5).via,'manual');
  assert.equal(packScale({door},2.5).factor,2.5);
  assert.equal(packScale({door}).via,'door'); // no override given: automatic still applies
+});
+
+test('the same kind of prop at different raster resolutions fits the same world height',()=>{
+ const small=outlineObjectSize({w:20,h:35},'chair','props');
+ const large=outlineObjectSize({w:80,h:140},'chair','props');
+ assert.equal(small.bodyHeight,large.bodyHeight);
+ assert.equal(small.radius,large.radius);
+ assert.ok(small.bodyHeight<outlineObjectSize({w:80,h:140},'hero','character').bodyHeight);
+ assert.ok(outlineObjectSize({w:80,h:140},'oak-tree','props').bodyHeight>1.2);
+ assert.equal(outlineObjectSize({w:80,h:140},'hero','character',null,null,1.8).bodyHeight,1.2);
+});
+test('a house scale changes the graphic and wall segments with the footprint',()=>{
+ const house={w:2,h:3,ents:[{x:0,y:0,sc:1,col:[{k:'seg',a:[0,0],b:[1,1],th:.1}]}]};
+ const scaled=scaleOutlineHouse(house,2);
+ assert.deepEqual([scaled.w,scaled.h,scaled.ents[0].x,scaled.ents[0].sc],[4,6,1,2]);
+ assert.deepEqual(scaled.ents[0].col[0].b,[2,2]);
+});
+
+
+test('a prop follows its pack door anchor using the same projected vertical unit',()=>{
+ const scale=packScale({door:{w:120,h:147}});
+ const item=outlineObjectSize({w:50,h:85},'obj','props',scale);
+ assert.equal(item.tileWidth,200);
+ assert.equal(item.bodyHeight,.85);
 });

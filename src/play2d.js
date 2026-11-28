@@ -1,14 +1,16 @@
+import {miniatureHouseHeadroom} from './miniatureHouse.js';
+import {drawSurfaceTerrain,surfaceTerrainTile} from './surfaceContours.js';
 import {campaignStart,mapLinkLanding} from './mapLinks2d.js';
 import {bridgeHeight,bridgeRails,drawSettlementBridge,pickBridge} from './settlementBridge.js';
 import {tiledDepth} from './tiledScene.js';
 import {actorFootprint,actorHeights,bodyHeight,fitsUnderRoof,lowestCeiling,roofPlane,roofBlockedFootprint} from './headroom2d.js';
-import {constructionContext,isRoof,roofBearing,headroomIssue} from './constructionRules2d.js';
+import {constructionContext,isRoof,roofBearing,roofOnGround,headroomIssue} from './constructionRules2d.js';
 import {builtWallFaces,isMapLink,portalAnchor} from './wall2d.js';
 import {gateWalls} from './gate2d.js';
-import {paintedPieces,sceneEntityLayer} from './placement2d.js';
-import {tileFoot} from './spriteFoot.js';
+import {automaticPaintZones,estimateContact,makePaintProfile,paintedPieces,roofTextureDirection,sceneEntityLayer} from './placement2d.js';
+import {tileFoot,tileSpan} from './spriteFoot.js';
 import {mapCollision} from './mapCollision.js';
-import {outline2D,clipOutline,stoneBackdrop,stoneWall,outlineWallImage,drawFloorCollision} from './outline2d.js';
+import {outline2D,clipOutline,stoneBackdrop,drawFloorSlab,stoneWall,outlineWallImage,drawFloorCollision} from './outline2d.js';
 import {createLogic} from './logic.js';
 import {el} from './util.js';
 import {zonesHit,zRaster,zPath,decoZones} from './zones.js';
@@ -17,18 +19,47 @@ import {makeAnims} from './anim.js';
 import {slab,shore,tile192,mirF} from './isoslab.js';
 import {bakeLayer0,noiseOverlay,paintSlab,drawFog} from './groundfx.js';
 const HERO=88,FOES=[108,109,120,121,122,111,110],TD=2;
+function playPaintZones(map,sheets){
+  if(map.cfg?.autoObjectCollision===false)return map.placementZones||[];
+  const saved=map.placementZones||[];
+  const existing=new Set(saved.map(zone=>zone.id));
+  const profiles=new Map();
+  const canvas=document.createElement('canvas');
+  const context=canvas.getContext('2d',{willReadFrequently:true});
+  const generated=automaticPaintZones(map,(value)=>{
+    if(profiles.has(value))return profiles.get(value);
+    const raw=value-1,idx=(raw>>3)&4095,sheet=sheets[raw>>15],flip=raw&7;
+    let profile=null;
+    if(sheet?.img&&!roofTextureDirection(sheet.name,true)){
+      const size=sheet.tw,step=size+(sheet.margin||0);
+      let contact=null;
+      try{
+        canvas.width=canvas.height=size;
+        context.drawImage(sheet.img,idx%sheet.cols*step,Math.floor(idx/sheet.cols)*step,size,size,0,0,size,size);
+        contact=estimateContact(context.getImageData(0,0,size,size).data,size,flip);
+      }catch{/* Use the default ground contact when pixel data is unavailable. */}
+      profile=makePaintProfile('solid',contact||{u:.5,v:.87,width:.38});
+    }
+    profiles.set(value,profile);
+    return profile;
+  });
+  return [...saved,...generated.filter(zone=>!existing.has(zone.id))];
+}
+
 export function play2D(o){
   const M=o.M,W=M.w,H=M.h,sheets=o.sheets;const CF=Object.assign({hp:5,spd:4.2,dmg:1,rng:1.35,hero:{sid:TD,idx:HERO},win:'auto'},M.cfg||{});const EN=(M.ents||[]).map(e=>e.door?Object.assign({},e,{door:Object.assign({},e.door)}):e),legacy=!EN.length;const VW=CF.view||'rpg',SIDE=VW==='side',ISO=VW==='iso',ANG=ISO&&CF.proj==='angle',decos=EN.filter(e=>e.t==='deco');
   const bridge=CF.settlement?.plan?.bridge;
   const build=decos.some(isRoof)?constructionContext(M):null;
-  const ceilings=build?.headroom()||[],playerSize=actorHeights(CF);
+  const structuralCeilings=build?.headroom()||[],houseCeilings=miniatureHouseHeadroom(decos);
+  const ceilings=[...structuralCeilings,...houseCeilings],playerSize=actorHeights(CF);
   const DCL=decos.flatMap(e=>{
-    if(!isRoof(e))return headroomIssue(e,ceilings,CF)?[]:[e];
+    if(!isRoof(e))return headroomIssue(e,structuralCeilings,CF)?[]:[e];
     const support=roofBearing(e,build);
-    return support?[{...e,roofBase:support.base,roofRise:support.rise,ceiling:roofPlane(e,support)}]:[];
+    return support?[{...e,roofBase:support.base,roofRise:support.rise,ceiling:roofPlane(e,support)}]:[roofOnGround(e)];
   });
   const coverDepth=e=>e.tiledLayer===undefined?e.y+(ANG?0:e.x):tiledDepth(e,W,H,ANG);
-  const covers=DCL.filter(d=>d.placedProp&&sceneEntityLayer(d)===3&&(isRoof(d)||d.tiledLayer!==undefined)).sort((a,b)=>coverDepth(a)-coverDepth(b));
+  const housePlanes=new Map(houseCeilings.map(plane=>[plane.id,plane]));
+  const covers=DCL.filter(d=>!d.groundedRoof&&d.placedProp&&sceneEntityLayer(d)===3&&(isRoof(d)||d.tiledLayer!==undefined)).sort((a,b)=>coverDepth(a)-coverDepth(b));
   const coverSet=new Set(covers);
   const fitsAt=(x,y,r,top)=>fitsUnderRoof(ceilings,actorFootprint(x,y,r),top+bridgeHeight(bridge,x,y));
   const postureHeight=e=>e===P?(P.crouching?playerSize.crouching:playerSize.standing):(e.height||1.2);
@@ -66,9 +97,11 @@ export function play2D(o){
     ov.append(note);
   }
   const AN=makeAnims(CF,sheets);
-  const collision=mapCollision(M);
+  const placementZones=playPaintZones(M,sheets);
+  const collision=mapCollision({...M,placementZones});
   const portalFloor=CF.outline?.loops?.length?mapCollision({...M,cfg:{...CF,outline:{...CF.outline,floorCollision:true}}}).floor:null;
-  const ZP=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(DCL.filter(e=>!e.door)),...bridgeRails(bridge)],DRS=DCL.filter(e=>e.door);let ZS=ZP,ZR=zRaster(ZS,W,H);
+  const ZP=[...((M.cfg&&M.cfg.zones)||[]),...decoZones(DCL.filter(e=>!e.door).map(e=>
+    /Vách núi đá/i.test(sheets[e.tile?.sid]?.name||'')?{...e,groundContact:'rock'}:e)),...bridgeRails(bridge)],DRS=DCL.filter(e=>e.door);let ZS=ZP,ZR=zRaster(ZS,W,H);
   /* cửa hai trạng thái: tìm đường coi cửa là đi qua được (ZP); va chạm thật (ZS) theo trạng thái hiện tại */
   const setDoor=(e,st)=>{const v=e.door.v&&e.door.v[st];if(!v||e.door.st===st)return;e.door.st=st;if(v.tile)e.tile=v.tile;e.col=v.col&&v.col.length?v.col:undefined;rebuildZ();};
   function rebuildZ(){ZS=DRS.length?[...ZP,...decoZones(DRS)]:ZP;ZR=zRaster(ZS,W,H);}
@@ -77,7 +110,7 @@ export function play2D(o){
   function nearDoor(r){let b=null,bd=r;for(const e of DRS){const c=doorCtr(e),d=Math.hypot(c.x-P.x,c.y-P.y);if(d<bd){bd=d;b=e;}}return b;}
   function doorsTick(){for(const e of DRS){const c=doorCtr(e),d=Math.hypot(c.x-P.x,c.y-P.y);if(e.door.st==='dong'&&d<(e.door.rOpen||1.3))setDoor(e,'mo');else if(e.door.st==='mo'&&e.door.auto&&d>(e.door.rClose||2.6))setDoor(e,'dong');}}
   function toggleDoor(){const e=nearDoor(1.7);if(!e)return false;setDoor(e,e.door.st==='mo'?'dong':'mo');return true;}
-  const blocked=(x,y)=>!collision.free(x+.5,y+.5,0)||!!ZR[y*W+x]||!fitsAt(x+.5,y+.5,.28,1.2);
+  const blocked=(x,y)=>!collision.free(x+.5,y+.5,0)||!!ZR[y*W+x]||!fitsAt(x+.5,y+.5,.28,playerSize.standing);
   let CQ=16;for(const sh of sheets)if(sh&&sh.img&&sh.tw>CQ)CQ=Math.min(48,sh.tw);
   while(W*H*CQ*CQ>2.2e7&&CQ>16)CQ-=8;
   const FOG=(M.cfg&&M.cfg.fog)|0;
@@ -85,7 +118,7 @@ export function play2D(o){
   const bakedOk=v=>{const t=(v-1)>>3,sh=sheets[t>>12];return !!(sh&&sh.img&&(!sh.iso||(sh.iso===2?!(sh.wat&&sh.wat.includes(t&4095)):!(((v-1)&7)&4))));};
   function mk(top){const c=document.createElement('canvas');c.width=W*CQ;c.height=H*CQ;const g=c.getContext('2d');g.imageSmoothingEnabled=CQ>16;g.imageSmoothingQuality='high';const h2=CQ/2;
     const SM=top===2&&!(M.cfg&&M.cfg.smooth===false)&&!ANG;
-    const ls=top===2?[0,1]:(top?[3]:[0,1,2]);for(const l of ls){const a=M.layers[l];
+    const ls=top===2?[0,1]:(top?[3]:[0,1,2]);for(const l of ls){const a=l===0&&CF.outline?.surface?M.layers[l].map(v=>surfaceTerrainTile(M,sheets[(v-1)>>15])?0:v):M.layers[l];
       if(l===0&&SM){const pt=(g2,v,dx,dy,s)=>{const n=v-1,f=n&7,t=n>>3,sid=t>>12,idx=t&4095,sh=sheets[sid];if(!sh||!sh.img)return;if(sh.iso){paintSlab(g2,sh.img,(idx%sh.cols)*(sh.tw+sh.margin),Math.floor(idx/sh.cols)*(sh.tw+sh.margin),sh.tw,sh.iso===2?(sh.cy||0):0,dx,dy,s,f&3);return;}const sx=(idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(idx/sh.cols)*(sh.tw+sh.margin),hh=s/2;
           if(!f)g2.drawImage(sh.img,sx,sy,sh.tw,sh.tw,dx,dy,s,s);else{g2.save();g2.translate(dx+hh,dy+hh);if(f&4){g2.rotate(Math.PI/2);g2.scale(1,-1);}if(f&1)g2.scale(-1,1);if(f&2)g2.scale(1,-1);g2.drawImage(sh.img,sx,sy,sh.tw,sh.tw,-hh,-hh,s,s);g2.restore();}};
         bakeLayer0(g,{W,H,Q:CQ,a,paint:pt,smooth:true,ok:bakedOk});continue;}
@@ -97,7 +130,7 @@ export function play2D(o){
     return sheet?.img&&!sheet.iso;
   })));
   const base=ISO?null:mk(false),top=ISO?null:mk(true),gnd=hasBakedGround?mk(2):null;
-  const SL=[];if(ISO){for(const l of [0,1])for(let i=0;i<W*H;i++){const v=M.layers[l][i];if(!v)continue;const t=(v-1)>>3,sid=t>>12,sh=sheets[sid];if(sh&&sh.img&&sh.iso&&!(SMG&&l===0&&bakedOk(v)))SL.push({x:i%W,y:(i/W)|0,sid,idx:t&4095,l,f:(v-1)&7});}SL.sort(ANG?((a,b)=>(a.y-b.y)||(a.x-b.x)||a.l-b.l):((a,b)=>(a.x+a.y)-(b.x+b.y)||a.l-b.l));}
+  const SL=[];if(ISO){for(const l of [0,1])for(let i=0;i<W*H;i++){const v=M.layers[l][i];if(!v)continue;const t=(v-1)>>3,sid=t>>12,sh=sheets[sid];if(sh&&sh.img&&sh.iso&&!(l===0&&surfaceTerrainTile(M,sh))&&!(SMG&&l===0&&bakedOk(v)))SL.push({x:i%W,y:(i/W)|0,sid,idx:t&4095,l,f:(v-1)&7});}SL.sort(ANG?((a,b)=>(a.y-b.y)||(a.x-b.x)||a.l-b.l):((a,b)=>(a.x+a.y)-(b.x+b.y)||a.l-b.l));}
   const images=new Map();
   const mkG=l=>ISO?paintedPieces(M.layers[l],W,H).map(group=>{
     const {x0,y0,cells}=group,value=M.layers[l][cells[0]];
@@ -164,8 +197,8 @@ export function play2D(o){
       for(const e of EN){
         if(headroomIssue(e,ceilings,CF))continue;
         const cx0=e.x+.5,cy0=e.y+.5;
-        if(e.t==='enemy')add('E',{x:cx0,y:cy0,hp:e.hp||2,mhp:e.hp||2,dmg:e.dmg==null?1:e.dmg,spd:e.spd||1.7,ch:e.chase||6,ai:e.ai||'wander',tl:e.tile||{sid:TD,idx:108},dx:0,dy:0,wt:0,fl:0,name:e.name,anim:e.anim,height:bodyHeight(e,CF)},e);
-        else if(e.t==='npc')add('NP',{x:cx0,y:cy0,tl:e.tile||{sid:TD,idx:96},name:e.name,text:e.text,dlg:e.dlg,anim:e.anim,height:bodyHeight(e,CF)},e);
+        if(e.t==='enemy')add('E',{x:cx0,y:cy0,hp:e.hp||2,mhp:e.hp||2,dmg:e.dmg==null?1:e.dmg,spd:e.spd||1.7,ch:e.chase||6,ai:e.ai||'wander',tl:e.tile||{sid:TD,idx:108},dx:0,dy:0,wt:0,fl:0,name:e.name,anim:e.anim,visualScale:e.visualScale,height:bodyHeight(e,CF)},e);
+        else if(e.t==='npc')add('NP',{x:cx0,y:cy0,tl:e.tile||{sid:TD,idx:96},name:e.name,text:e.text,dlg:e.dlg,anim:e.anim,visualScale:e.visualScale,height:bodyHeight(e,CF)},e);
         else if(e.t==='chest')add('CH',{x:cx0,y:cy0,tl:e.tile,gives:e.gives,amt:e.amt||1,open:0,openHeight:bodyHeight(e,CF,true)},e);
         else if(e.t==='goal')add('GL',{x:cx0,y:cy0,tl:e.tile},e);}
     }
@@ -322,11 +355,13 @@ export function play2D(o){
     let pX=()=>0,pY=()=>0;
     const geo=ISO&&outline2D(CF.outline,ANG,EN);
     const wallImage=outlineWallImage(CF.outline,sheets);
-    if(ANG){const cw=s*1.5,ch=cw*ANG_R,ox0=w/2-CEN.x*cw,oy0=h/2-CEN.y*ch,hw=cw/2;pX=(x,y)=>ox0+x*cw;pY=(x,y)=>oy0+y*ch;VIEW={iso:1,ang:1,ox0,oy0,cw,ch};if(geo){stoneBackdrop(cx,w,h);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
+    if(ANG){const cw=s*1.5,ch=cw*ANG_R,ox0=w/2-CEN.x*cw,oy0=h/2-CEN.y*ch,hw=cw/2;pX=(x,y)=>ox0+x*cw;pY=(x,y)=>oy0+y*ch;VIEW={iso:1,ang:1,ox0,oy0,cw,ch};if(geo){stoneBackdrop(cx,w,h);drawFloorSlab(cx,geo,(x,y)=>[pX(x,y),pY(x,y)],s*.75);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
+      if(CF.outline?.surface)drawSurfaceTerrain(cx,W,H,CF.outline.surface,(x,y)=>[pX(x,y),pY(x,y)],{sheets,materials:CF.outline.surfaceMaterials});
       if(gnd){cx.save();cx.transform(cw/CQ,0,0,ch/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();}
       for(const q of SL){const X=pX(q.x,q.y),Y=pY(q.x,q.y);if(X>w||X<-cw||Y>h||Y<-2*cw)continue;const sh=sheets[q.sid];if(sh&&sh.A)tileAng(cx,sh.A,q.idx,X,Y,cw);}
       if(geo)cx.restore();}
-    else if(ISO){const hw=s*.75,hh=s*.375,ox0=w/2-(CEN.x-CEN.y)*hw,oy0=h/2-(CEN.x+CEN.y)*hh;pX=(x,y)=>ox0+(x-y)*hw;pY=(x,y)=>oy0+(x+y)*hh;VIEW={iso:1,ox0,oy0,hw,hh};if(geo){stoneBackdrop(cx,w,h);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
+    else if(ISO){const hw=s*.75,hh=s*.375,ox0=w/2-(CEN.x-CEN.y)*hw,oy0=h/2-(CEN.x+CEN.y)*hh;pX=(x,y)=>ox0+(x-y)*hw;pY=(x,y)=>oy0+(x+y)*hh;VIEW={iso:1,ox0,oy0,hw,hh};if(geo){stoneBackdrop(cx,w,h);drawFloorSlab(cx,geo,(x,y)=>[pX(x,y),pY(x,y)],s*.75);cx.save();clipOutline(cx,geo,(x,y)=>[pX(x,y),pY(x,y)]);}else{cx.fillStyle='#1b2a1f';cx.fillRect(0,0,w,h);}
+      if(CF.outline?.surface)drawSurfaceTerrain(cx,W,H,CF.outline.surface,(x,y)=>[pX(x,y),pY(x,y)],{sheets,materials:CF.outline.surfaceMaterials});
       if(gnd){cx.save();cx.transform(hw/CQ,hh/CQ,-hw/CQ,hh/CQ,ox0,oy0);cx.drawImage(gnd,0,0);cx.restore();}
       for(const q of SL){const X=pX(q.x,q.y)-hw,Y=pY(q.x,q.y);if(X>w||X<-2*hw||Y>h||Y<-2*hw)continue;const sh=sheets[q.sid],sx=(q.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(q.idx/sh.cols)*(sh.tw+sh.margin);if(sh.iso===2)tile192(cx,sh.img,sx,sy,sh.tw,sh.cy||0,X+hw,Y,hw,sh.wat&&sh.wat.includes(q.idx)?mirF(q.x,q.y):0);else slab(cx,sh.img,sx,sy,sh.tw,X+hw,Y,hw,q.f);}
       {const wc=SL.filter(q=>q.f&4);if(wc.length)shore(cx,wc,(x,y)=>[pX(x,y),pY(x,y)],hw);}
@@ -354,24 +389,36 @@ export function play2D(o){
       cx.fill();cx.restore();
     }
     const actorTop=(q,sid,idx)=>oy+(q.y-(grounded?tileFoot(sheets[sid],idx):.7))*s;
+    const fitActor=(q,sid,idx,top)=>{
+      const visual=q.visualScale??1;
+      if(!CF.outline?.surface&&visual===1)return;
+      const sh=sheets[sid],extent=tileSpan(sh,idx),foot=oy+q.y*s;
+      const scale=visual*(CF.outline?.surface?top*.75/Math.max(.05,extent):1);
+      const x=ox+q.x*s;cx.translate(x,foot);cx.scale(scale,scale);cx.translate(-x,-foot);
+    };
     for(const n of ents){if(n.wall){stoneWall(cx,n.wall,ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s],ISO?s*.75:s,w,h,geo,wallImage);continue;}if(n.dc){const d=n.dc,sh=d.tile&&sheets[d.tile.sid];
       if(d.placedProp){
         const project=ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s];
         drawPlacedProp(cx,d,sh,placedPropFrame(d,project,s,ANG?'angle':ISO?'iso':'top'));
         continue;
       }
-      const sp=ISO?sprOf(d,sh,ANG):(sh?{img:sh.img,tw:sh.tw,cols:sh.cols,margin:sh.margin,sc:d.sc,oy:d.oy||0}:null),ws=((sp?sp.sc:d.sc)||3)*s;const X=ANG?pX(d.x+.5,d.y+1):ISO?pX(d.x+1,d.y+1):ox1+(d.x+.5)*s,Y=ANG?pY(d.x+.5,d.y+1):ISO?pY(d.x+1,d.y+1):oy1+(d.y+1)*s;if(sp&&sp.img){const sx=(d.tile.idx%sp.cols)*(sp.tw+sp.margin),sy=Math.floor(d.tile.idx/sp.cols)*(sp.tw+sp.margin);cx.drawImage(sp.img,sx,sy,sp.tw,sp.tw,X-ws/2+(d.ox||0)*ws,Y-ws+(sp.oy||0)*ws,ws,ws);}if(d.cv)TC.push({d,X,Y,ws});continue;}if(n.grp){const g=n.grp,k2=s*.95/CQ,wp=ANG?g.c.width*s*1.5/CQ:g.c.width*k2,hp=ANG?g.c.height*s*1.5*ANG_R/CQ:g.c.height*k2;cx.drawImage(g.c,pX(g.xc,g.yb)-wp/2,pY(g.xc,g.yb)-hp,wp,hp);continue;}if(ISO){const q=n.p?P:(n.e||n.n||n.c||n.g);ox=pX(q.x,q.y)-q.x*s;oy=pY(q.x,q.y)-q.y*s-bridgeHeight(bridge,q.x,q.y)*bridgeUnit;}if(n.c){const c=n.c;if(c.tl)tile(c.tl.sid,c.tl.idx,ox+(c.x-.5)*s,oy+(c.y-.5)*s,s,0);else{cx.font=(s*.7)+'px serif';cx.textAlign='center';ico(c.open?'chest2':'chest',ox+c.x*s,oy+c.y*s,s*1.2);}continue;}if(n.g){const g=n.g;if(g.tl)tile(g.tl.sid,g.tl.idx,ox+(g.x-.5)*s,oy+(g.y-.5)*s,s,0);else{cx.font=(s*.8)+'px serif';cx.textAlign='center';ico('flag',ox+g.x*s,oy+g.y*s,s*1.2);}continue;}if(n.n){const q=n.n;actorShadow(q);if(!(q.anim&&AN.drawChar(cx,q,q.anim,ox+q.x*s,oy+q.y*s,s,t,{iso:ISO,ang:ANG,grounded})))fbk(q,ox+(q.x-.5)*s,actorTop(q,q.tl.sid,q.tl.idx),s,0);continue;}const q=n.p?P:n.e;actorShadow(q);
+      const sp=ISO?sprOf(d,sh,ANG):(sh?{img:sh.img,tw:sh.tw,cols:sh.cols,margin:sh.margin,sc:d.sc,oy:d.oy||0}:null),ws=((sp?sp.sc:d.sc)||3)*s;const X=ANG?pX(d.x+.5,d.y+1):ISO?pX(d.x+1,d.y+1):ox1+(d.x+.5)*s,Y=ANG?pY(d.x+.5,d.y+1):ISO?pY(d.x+1,d.y+1):oy1+(d.y+1)*s;if(sp&&sp.img){const sx=(d.tile.idx%sp.cols)*(sp.tw+sp.margin),sy=Math.floor(d.tile.idx/sp.cols)*(sp.tw+sp.margin);cx.drawImage(sp.img,sx,sy,sp.tw,sp.tw,X-ws/2+(d.ox||0)*ws,Y-ws+(sp.oy||0)*ws,ws,ws);}if(d.cv)TC.push({d,X,Y,ws});continue;}if(n.grp){const g=n.grp,k2=s*.95/CQ,wp=ANG?g.c.width*s*1.5/CQ:g.c.width*k2,hp=ANG?g.c.height*s*1.5*ANG_R/CQ:g.c.height*k2;cx.drawImage(g.c,pX(g.xc,g.yb)-wp/2,pY(g.xc,g.yb)-hp,wp,hp);continue;}if(ISO){const q=n.p?P:(n.e||n.n||n.c||n.g);ox=pX(q.x,q.y)-q.x*s;oy=pY(q.x,q.y)-q.y*s-bridgeHeight(bridge,q.x,q.y)*bridgeUnit;}if(n.c){const c=n.c;if(c.tl)tile(c.tl.sid,c.tl.idx,ox+(c.x-.5)*s,oy+(c.y-.5)*s,s,0);else{cx.font=(s*.7)+'px serif';cx.textAlign='center';ico(c.open?'chest2':'chest',ox+c.x*s,oy+c.y*s,s*1.2);}continue;}if(n.g){const g=n.g;if(g.tl)tile(g.tl.sid,g.tl.idx,ox+(g.x-.5)*s,oy+(g.y-.5)*s,s,0);else{cx.font=(s*.8)+'px serif';cx.textAlign='center';ico('flag',ox+g.x*s,oy+g.y*s,s*1.2);}continue;}if(n.n){const q=n.n;actorShadow(q);if(!(q.anim&&AN.drawChar(cx,q,q.anim,ox+q.x*s,oy+q.y*s,s,t,{iso:ISO,ang:ANG,grounded,scale:q.visualScale,height:CF.outline?.surface?q.height:0}))){cx.save();fitActor(q,q.tl.sid,q.tl.idx,q.height||1.2);fbk(q,ox+(q.x-.5)*s,actorTop(q,q.tl.sid,q.tl.idx),s,0);cx.restore();}continue;}const q=n.p?P:n.e;actorShadow(q);
       if(n.p){if(P.inv>0&&Math.floor(t*14)%2)continue;
         cx.save();
         if(P.crouching){const y=oy+P.y*s;cx.translate(0,y);cx.scale(1,playerSize.crouching/playerSize.standing);cx.translate(0,-y);}
-        if(!(CF.heroAnim&&AN.drawChar(cx,P,CF.heroAnim,ox+P.x*s,oy+P.y*s,s,t,{iso:ISO,ang:ANG,grounded,pk:q.pkT>0,atk:P.atkT>0?(P.cs||1):0,aid:P.atkN,chain:P.cs>1,hit:P.hitT>0}))){const hs=sheets[CF.hero.sid];if(hs&&/đã gỡ/.test(hs.name)){cx.fillStyle='#e0b050';cx.beginPath();cx.arc(ox+P.x*s,oy+(P.y-.3)*s,s*.3,0,6.3);cx.fill();}else tile(CF.hero.sid,CF.hero.idx,ox+(P.x-.5)*s,actorTop(P,CF.hero.sid,CF.hero.idx),s,P.face<0);}cx.restore();}
-      else{const e=n.e;cx.globalAlpha=e.fl>0?.5:1;if(!(e.anim&&AN.drawChar(cx,e,e.anim,ox+e.x*s,oy+e.y*s,s,t,{iso:ISO,ang:ANG,grounded,pk:q.pkT>0,hit:e.fl>0,atk:Math.hypot(P.x-e.x,P.y-e.y)<.8})))fbk(e,ox+(e.x-.5)*s,actorTop(e,e.tl.sid,e.tl.idx),s,e.x<P.x);cx.globalAlpha=1;cx.fillStyle='#000a';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7,3);cx.fillStyle='#e74c3c';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7*Math.max(0,e.hp)/e.mhp,3);}}
+        if(CF.outlineHero&&!CF.heroAnim&&sheets[CF.hero.sid]?.img){
+          const actor={...CF.outlineHero,tile:CF.hero,x:P.x-1,y:P.y-1};
+          if(CF.outline?.surface)actor.sc=playerSize.standing*.75/Math.max(.05,tileSpan(sheets[actor.tile.sid],actor.tile.idx));
+          drawPlacedProp(cx,actor,sheets[actor.tile.sid],placedPropFrame(actor,()=>[ox+P.x*s,oy+P.y*s],ISO?s:s/.75,ISO?'iso':'top'));
+        }else if(!(CF.heroAnim&&AN.drawChar(cx,P,CF.heroAnim,ox+P.x*s,oy+P.y*s,s,t,{iso:ISO,ang:ANG,grounded,height:CF.outline?.surface?playerSize.standing:0,pk:q.pkT>0,atk:P.atkT>0?(P.cs||1):0,aid:P.atkN,chain:P.cs>1,hit:P.hitT>0}))){const hs=sheets[CF.hero.sid];if(hs&&/đã gỡ/.test(hs.name)){cx.fillStyle='#e0b050';cx.beginPath();cx.arc(ox+P.x*s,oy+(P.y-.3)*s,s*.3,0,6.3);cx.fill();}else{fitActor(P,CF.hero.sid,CF.hero.idx,playerSize.standing);tile(CF.hero.sid,CF.hero.idx,ox+(P.x-.5)*s,actorTop(P,CF.hero.sid,CF.hero.idx),s,P.face<0);}}cx.restore();}
+      else{const e=n.e;cx.globalAlpha=e.fl>0?.5:1;if(!(e.anim&&AN.drawChar(cx,e,e.anim,ox+e.x*s,oy+e.y*s,s,t,{iso:ISO,ang:ANG,grounded,scale:e.visualScale,height:CF.outline?.surface?e.height:0,pk:q.pkT>0,hit:e.fl>0,atk:Math.hypot(P.x-e.x,P.y-e.y)<.8}))){cx.save();fitActor(e,e.tl.sid,e.tl.idx,e.height||1.2);fbk(e,ox+(e.x-.5)*s,actorTop(e,e.tl.sid,e.tl.idx),s,e.x<P.x);cx.restore();}cx.globalAlpha=1;cx.fillStyle='#000a';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7,3);cx.fillStyle='#e74c3c';cx.fillRect(ox+(e.x-.35)*s,oy+(e.y-.8)*s,s*.7*Math.max(0,e.hp)/e.mhp,3);}}
     for(const q of TC){const d=q.d,zb=d.zb||[-(d.fx||1),-(d.fy||1),d.fx||1,d.fy||1],x0=d.x+1+zb[0]-.7,y0=d.y+1+zb[1]-.7,ins=P.x>x0&&P.x<x0+zb[2]+1.4&&P.y>y0&&P.y<y0+zb[3]+1.4;d._a=(d._a==null?1:d._a)+((ins?.3:1)-(d._a==null?1:d._a))*.2;const sh=sheets[d.cv.sid];if(!sh||!sh.img)continue;const sx=(d.cv.idx%sh.cols)*(sh.tw+sh.margin),sy=Math.floor(d.cv.idx/sh.cols)*(sh.tw+sh.margin);cx.globalAlpha=d._a;cx.drawImage(sh.img,sx,sy,sh.tw,sh.tw,q.X-q.ws/2+(d.ox||0)*q.ws,q.Y-q.ws+(d.oy||0)*q.ws,q.ws,q.ws);cx.globalAlpha=1;}
     if(ISO)for(const g of OVG){const ins=P.x>g.x0-.4&&P.x<g.x1+.4&&P.y>g.y0-.4&&P.y<g.y1+.4;g.a+=((ins?.35:1)-g.a)*.18;const k2=s*.95/CQ,wp=g.c.width*k2,hp=g.c.height*k2;cx.globalAlpha=g.a;cx.drawImage(g.c,pX(g.xc,g.yb)-wp/2,pY(g.xc,g.yb)-hp,wp,hp);cx.globalAlpha=1;}
     for(const d of covers){
       const project=ISO?(x,y)=>[pX(x,y),pY(x,y)]:(x,y)=>[ox1+x*s,oy1+y*s];
       const footprint=actorFootprint(P.x,P.y,.28);
-      const inside=!!d.ceiling&&Number.isFinite(lowestCeiling([d.ceiling],footprint))&&fitsUnderRoof([d.ceiling],footprint,postureHeight(P));
+      const ceiling=d.ceiling||housePlanes.get(d.id);
+      const inside=!!ceiling&&Number.isFinite(lowestCeiling([ceiling],footprint))&&fitsUnderRoof([ceiling],footprint,postureHeight(P));
       cx.globalAlpha=inside?.4:1;
       drawPlacedProp(cx,d,sheets[d.tile?.sid],placedPropFrame(d,project,s,ANG?'angle':ISO?'iso':'top'));
     }
@@ -386,8 +433,8 @@ export function play2D(o){
       else if(dbgMode===2||window.__dbg){cx.fillStyle='rgba(40,220,90,.2)';cx.beginPath();for(const [a,b] of [[0,0],[W,0],[W,H],[0,H]]){const q=Tq(a,b);cx.lineTo(q[0],q[1]);}cx.closePath();cx.fill();}
       cx.save();if(collision.floor)clipOutline(cx,collision.floor,Tq);
       cx.fillStyle='rgba(255,40,40,.5)';for(let i=0;i<W*H;i++)if(collision.tileBlocked(i)){const x=i%W,y=(i/W)|0;cx.beginPath();for(const [a,b] of [[x,y],[x+1,y],[x+1,y+1],[x,y+1]]){const q=Tq(a,b);cx.lineTo(q[0],q[1]);}cx.closePath();cx.fill();}
-      cx.restore();cx.strokeStyle='#ff8a8a';cx.lineWidth=1.5;for(const q of ZS){if(q.k==='line'){cx.save();cx.strokeStyle='rgba(255,40,40,.5)';cx.lineWidth=(q.th||.6)*s;cx.lineJoin='round';zPath(cx,q,Tq);cx.stroke();cx.restore();}else{zPath(cx,q,Tq);cx.fill();cx.stroke();}}
-      for(const q of M.placementZones||[]){
+      cx.restore();cx.fillStyle='rgba(255,40,40,.30)';cx.strokeStyle='#ff8a8a';cx.lineWidth=1.5;for(const q of ZS){if(q.k==='line'){cx.save();cx.strokeStyle='rgba(255,40,40,.5)';cx.lineWidth=(q.th||.6)*s;cx.lineJoin='round';zPath(cx,q,Tq);cx.stroke();cx.restore();}else{zPath(cx,q,Tq);cx.fill();cx.stroke();}}
+      for(const q of placementZones){
         cx.fillStyle=q.estimated===false?'rgba(255,40,40,.5)':'rgba(255,170,45,.45)';
         cx.strokeStyle=q.estimated===false?'#ff8a8a':'#ffbd69';
         zPath(cx,q,Tq);cx.fill();cx.stroke();
@@ -456,15 +503,15 @@ export function playGame(o){const D=o.M;if(!D.maps||D.maps.length<2)return play2
   };
   const run=(i,sp)=>{
     cur=play2D({M:{...maps[i]},sheets:o.sheets,spawn:sp,canUseDoor:landing,onExit:()=>{stopped=true;o.onExit&&o.onExit();},
-      onTick:q=>{try{localStorage.setItem(key,JSON.stringify({i,x:q.x,y:q.y,hp:q.hp,score:q.score}));}catch(e){}},
+      onTick:q=>{if(o.preview)return;try{localStorage.setItem(key,JSON.stringify({i,x:q.x,y:q.y,hp:q.hp,score:q.score}));}catch(e){}},
       onDoor:d=>{
         const dp=landing(d);
         if(!dp)return;
-        try{localStorage.setItem(key,JSON.stringify({i:d.to,x:dp.x,y:dp.y,hp:d.hp,score:d.score}));}catch(e){}
+        if(!o.preview)try{localStorage.setItem(key,JSON.stringify({i:d.to,x:dp.x,y:dp.y,hp:d.hp,score:d.score}));}catch(e){}
         const c=cur;setTimeout(()=>{c.stop(true);if(!stopped)run(d.to,{...dp,hp:d.hp,score:d.score});},0);
       }});
   };
-  let sv=null;try{sv=JSON.parse(localStorage.getItem(key)||'null');}catch(e){}
+  let sv=null;if(!o.preview)try{sv=JSON.parse(localStorage.getItem(key)||'null');}catch(e){}
   if(sv&&maps[sv.i]){
     const ov=el('div',{style:'position:fixed;inset:0;z-index:300;background:#10161d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#fff;font:700 22px system-ui'});
     const b=(t,f,c)=>el('div',{style:'padding:12px 26px;border-radius:20px;color:#2a1a08;font-size:18px;background:'+c,onclick:()=>{ov.remove();f();}},t);

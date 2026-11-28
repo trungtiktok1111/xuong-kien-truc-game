@@ -1,15 +1,19 @@
-import {spriteBottom} from './spriteFoot.js';
+import {spriteBottom,spriteVerticalBounds} from './spriteFoot.js';
 import {el,toast,packBytes,expandPacks} from './util.js';
 import {unzipSync} from 'fflate';
 /* Hoạt ảnh nhân vật 2D: bộ hoạt ảnh = các trạng thái (đứng/chạy/đánh/trúng đòn), mỗi trạng thái là 1 dải ảnh nhiều khung.
    Hướng: 1 ảnh nhiều hàng (mỗi hàng 1 hướng) HOẶC mỗi hướng 1 ảnh (tên có số, vd CHAR_0_Run … CHAR_7_Run). */
-export const STATES=[['idle','Đứng yên'],['run','Chạy'],['atk','Đánh'],['hit','Trúng đòn']];
-const LOOP={idle:1,run:1,atk:0,hit:0,pickup:0};
+export const STATES=[['idle','Đứng yên'],['walk','Đi'],['run','Chạy'],['atk','Đánh'],['hit','Trúng đòn']];
+const LOOP={idle:1,walk:1,run:1,atk:0,hit:0,pickup:0};
 const ORD=[['cw','Vòng thuận: Nam→Tây→Bắc→Đông'],['ccw','Vòng ngược: Nam→Đông→Bắc→Tây'],['rpg4','4 hướng kiểu RPG: Nam,Tây,Đông,Bắc']];
 
 /* tên trùng (vd 8 hướng cùng tên) → đánh số theo thứ tự: tên, tên#2, tên#3… */
 export {findGrid};
 export function uniqNames(sheets){const seen=new Map();for(const s of sheets.slice(4)){const base=s.name.replace(/#\d+$/,'');const k=(seen.get(base)||0)+1;seen.set(base,k);const nn=k===1?base:base+'#'+k;if(s.name!==nn)s.name=nn;}}
+export function restAnimationState(set){
+  const states=set?.st||{};
+  return ['idle','walk','run',...Object.keys(states)].find(key=>states[key]?.src?.length);
+}
 export function makeAnims(cfg,sheets){uniqNames(sheets);
   const byName=n=>sheets.find(s=>s.name===n&&s.img);
   const get=id=>(cfg.anims||[]).find(a=>a.id===id);
@@ -27,24 +31,33 @@ export function makeAnims(cfg,sheets){uniqNames(sheets);
     let sl=c;if(set.ord==='ccw')sl=(dirs-c)%dirs;else if(set.ord==='rpg4'&&dirs===4)sl=[0,1,3,2][c];
     return (sl+(set.off||0))%dirs;}
   function pickState(set,want){const ok=n=>!!(set.st&&set.st[n]&&set.st[n].src&&set.st[n].src.length);
-    if(ok(want))return want;if(/^atk\d+$/.test(want)&&ok('atk'))return 'atk';if(want==='run'||/^atk/.test(want)||want==='hit')return ok('idle')?'idle':ok('run')?'run':null;return ok('run')?'run':null;}
+    if(ok(want))return want;
+    if(want==='run'&&ok('walk'))return 'walk';
+    if(/^atk\d+$/.test(want)&&ok('atk'))return 'atk';
+    return restAnimationState(set);}
+
   /* vẽ khung hình hiện tại. sx,sy = tâm ô trên màn hình, s = cỡ 1 ô. Trả về false nếu không có hoạt ảnh. */
   function clipSec(set,stn){const sp=strip(set,stn,0);if(!sp)return 0;return sp.dur?sp.dur.reduce((p,q)=>p+q,0)/1000:sp.n/sp.fps;}
-  function frame(cx,set,stn,d,tt,sx,sy,s,flipL,grounded=false){
+  function frame(cx,set,stn,d,tt,sx,sy,s,flipL,grounded=false,height=0,instanceScale=1,repeat=false){
     const sp=strip(set,stn,d);if(!sp)return false;
-    const base=stn.replace(/\d+$/,'');let f;
-    if(sp.dur){const tot=sp.dur.reduce((p,q)=>p+q,0)/1000;let T=LOOP[base]?tt%tot:Math.min(tt,tot-.001);let acc=0;f=sp.n-1;for(let i=0;i<sp.n;i++){acc+=sp.dur[i]/1000;if(T<acc){f=i;break;}}}
-    else{f=Math.floor(tt*sp.fps);f=LOOP[base]?f%sp.n:Math.min(sp.n-1,f);}
-    const k=s/16*(set.sc||1),dw=sp.fw*k,dh=sp.fh*k;
+    const base=stn.replace(/\d+$/,''),loop=repeat||LOOP[base];let f;
+    if(sp.dur){const tot=sp.dur.reduce((p,q)=>p+q,0)/1000;let T=loop?tt%tot:Math.min(tt,tot-.001);let acc=0;f=sp.n-1;for(let i=0;i<sp.n;i++){acc+=sp.dur[i]/1000;if(T<acc){f=i;break;}}}
+    else{f=Math.floor(tt*sp.fps);f=loop?f%sp.n:Math.min(sp.n-1,f);}
+    const align=grounded||set.visualScale!=null;
+    const reference=align&&(height||set.visualScale!=null)?(strip(set,'idle',d)||strip(set,'walk',d)||strip(set,'run',d)||sp):null;
+    const bounds=reference?spriteVerticalBounds(reference.I,0,reference.sy,reference.fw,reference.fh):null;
+    const k=(bounds?s*.75*(height||1.2)/Math.max(1,bounds[1]-bounds[0]):s/16*(set.sc||1))*(set.visualScale??1)*instanceScale,dw=sp.fw*k,dh=sp.fh*k;
     const dy=(set.oy||0)*s/16;
-    const foot=grounded?spriteBottom(sp.I,f*sp.fw,sp.sy,sp.fw,sp.fh):sp.ay;
-    const y=grounded?sy-Math.max(foot*k,sp.ay*k-dy):sy+s*.32-sp.ay*k+dy;
+    const foot=align?(set.st[stn].fixedGround&&reference?spriteBottom(reference.I,0,reference.sy,reference.fw,reference.fh)*sp.fh/reference.fh:spriteBottom(sp.I,f*sp.fw,sp.sy,sp.fw,sp.fh)):sp.ay;
+    const y=bounds?sy-foot*k:grounded?sy-Math.max(foot*k,sp.ay*k-dy):sy+s*.32-sp.ay*k+dy;
     const sm=cx.imageSmoothingEnabled;cx.imageSmoothingEnabled=sp.fh>=96;if(cx.imageSmoothingEnabled)cx.imageSmoothingQuality='high';
     if(flipL){cx.save();cx.translate(sx,0);cx.scale(-1,1);cx.drawImage(sp.I,f*sp.fw,sp.sy,sp.fw,sp.fh,-sp.ax*k,y,dw,dh);cx.restore();}
     else cx.drawImage(sp.I,f*sp.fw,sp.sy,sp.fw,sp.fh,sx-sp.ax*k,y,dw,dh);
     cx.imageSmoothingEnabled=sm;return true;}
   function drawChar(cx,q,id,sx,sy,s,t,hint){
     const set=get(id);if(!set)return false;
+    const pose=hint?.pose;
+    if(pose&&set.st?.[pose.state])return frame(cx,set,pose.state,pose.direction,t,sx,sy,s,false,hint.grounded,hint.height,hint.scale,true);
     if(q.lx!==undefined){let dx=q.x-q.lx,dy=q.y-q.ly;if(hint&&hint.iso&&!hint.ang){const a=dx-dy,b=(dx+dy)*.5;dx=a;dy=b;}if(Math.abs(dx)+Math.abs(dy)>.0004){q.mvt=t;const m=Math.hypot(dx,dy);q.afx=dx/m;q.afy=dy/m;if(Math.abs(dx)>.0002)q.aface=dx>0?1:-1;}}q.lx=q.x;q.ly=q.y;
     const want=hint&&hint.pk&&set.st&&set.st.pickup?'pickup':hint&&hint.hit?'hit':hint&&hint.atk?('atk'+(hint.atk>1?hint.atk:'')):(t-(q.mvt===undefined?-9:q.mvt)<.12?'run':'idle');
     const stn=pickState(set,want);if(!stn)return false;
@@ -52,7 +65,7 @@ export function makeAnims(cfg,sheets){uniqNames(sheets);
     const dirs=dirsOf(set.st[stn]);const d=dirIdx(set,dirs,q.afx||0,q.afy===undefined?1:q.afy,q.aface||1);
     const fl=dirs===1&&((q.aface||1)<0)!==!!set.fl;
     let tt=want==='idle'&&stn!=='idle'?0:t-q.ast0;const sk=set.st[stn];if(sk&&sk.skip1&&hint&&hint.chain){const sp0=strip(set,stn,d);if(sp0)tt+=sp0.dur?sp0.dur[0]/1000:1/sp0.fps;}
-    return frame(cx,set,stn,d,tt,sx,sy,s,fl,hint?.grounded);}
+    return frame(cx,set,stn,d,tt,sx,sy,s,fl,hint?.grounded,hint?.height,hint?.scale);}
   return {get,strip,frame,drawChar,dirsOf,dirIdx,clipSec,pickState};
 }
 

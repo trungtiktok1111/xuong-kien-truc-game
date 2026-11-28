@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {automaticPaintZones,daXoayArchProfiles,estimateContact,indexPaintZones,makePaintProfile,paintedPieces,paintFamily,propContact,resizeProp,roofTextureDirection,sceneEntityLayer,turnProp} from '../src/placement2d.js';
 import {drawPlacedProp,placedPropBounds,placedPropFrame} from '../src/proj.js';
+import {cropContactFrame} from '../src/cropContact.js';
+import {decoZones,zonesHit} from '../src/zones.js';
 import {mapCollision} from '../src/mapCollision.js';
 
 test('painted props choose foot profile by role and keep open or unknown multipart assets clear',()=>{
@@ -144,4 +146,28 @@ test('roof textures use a sloped, elevated surface and cycle facing without movi
   assert.deepEqual(calls.at(-1).map(n=>Math.round(n)),[20,10,60,80,0,0,1,1]);
   for(const facing of ['N','W','S','E']){turnProp(e);assert.equal(e.roofDirection,facing);}
   assert.deepEqual([e.x,e.y],[3,4]);
+});
+
+
+test('corn contact lines up with each actual stalk and ignores the projected foliage',()=>{
+  const contacts=cropContactFrame('Vat-kenney-nong-trai',8,'', [20,77,262,275].map(v=>v/296));
+  assert.equal(contacts.length,8);
+  const project=(x,y)=>[.75*(x-y),.375*(x+y)];
+  for(const surfaceGenerated of [false,true])for(const spriteFlip of [0,1]){
+    const e={id:'surface-crop-5-5',t:'deco',x:5,y:5,sc:1.8,ox:.04,oy:.07,
+      contactProjection:'iso',surfaceGenerated,spriteFlip,cropContacts:contacts,zb:[-.5,-.5,1,1]};
+    const frame=placedPropFrame(e,project,1,'iso'),zones=decoZones([e]);
+    assert.equal(zones.length,8);
+    for(let i=0;i<zones.length;i++){
+      const {x,y,w,h}=zones[i], [u,v]=contacts[i];
+      const [sx,sy]=project(x+w/2,y+h/2);
+      assert.ok(Math.abs(sx-(frame.x+(spriteFlip?1-u:u)*frame.size))<1e-9);
+      assert.ok(Math.abs(sy-(frame.y+v*frame.size))<1e-9);
+      assert.equal(zonesHit(zones,x+w/2,y+h/2,0),true);
+    }
+    assert.equal(zonesHit(zones,5,5,0),false);
+    assert.deepEqual(decoZones([{...e,sceneLayer:1}]),[]);
+  }
+  const imported=cropContactFrame('Gói nông trại',0,'Isometric/cornDouble_S.png',[.1,.2,.8,.9]);
+  assert.equal(imported.length,8);
 });

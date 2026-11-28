@@ -1,3 +1,4 @@
+import {detailedSurface} from './surfaceTerrain.js';
 import {indexPaintZones} from './placement2d.js';
 export function rasterOutline(loops,w,h){
  const mask=new Uint8Array(w*h);
@@ -78,14 +79,24 @@ export function mapCollision(map){
    (geometry.mask.some(v=>!v)&&geometry.mask.every((v,i)=>v||blk[i]));
   if(generated)floor=geometry;
  }
+ const terrain=outline?.surface?detailedSurface(w,h,outline.surface):null;
  const paintBlocked=map.placementZones?.length?indexPaintZones(map.placementZones):null;
  const tileBlocked=i=>!!blk[i]&&(!floor||!!floor.mask[i]);
  function free(x,y,r,skipFloor=false){
   if(!Number.isFinite(x)||!Number.isFinite(y)||x-r<0||y-r<0||x+r>=w||y+r>=h||!skipFloor&&floor&&!floor.fits(x,y,r))return false;
   for(let j=Math.floor(y-r);j<=Math.floor(y+r);j++)for(let i=Math.floor(x-r);i<=Math.floor(x+r);i++){
-   if(!tileBlocked(j*w+i))continue;
+   const index=j*w+i;
+   if(!tileBlocked(index)||terrain?.blocked[index])continue;
    const dx=Math.max(i-x,0,x-i-1),dy=Math.max(j-y,0,y-j-1);
    if(dx*dx+dy*dy<=r*r)return false;
+  }
+  if(terrain){
+   const {scale,w:stride,blocked}=terrain.detail,u=x*scale,v=y*scale,radius=r*scale;
+   for(let j=Math.floor(v-radius);j<=Math.floor(v+radius);j++)for(let i=Math.floor(u-radius);i<=Math.floor(u+radius);i++){
+    if(!blocked[j*stride+i])continue;
+    const dx=Math.max(i-u,0,u-i-1),dy=Math.max(j-v,0,v-j-1);
+    if(dx*dx+dy*dy<=radius*radius)return false;
+   }
   }
   return !paintBlocked?.(x,y,r);
  }

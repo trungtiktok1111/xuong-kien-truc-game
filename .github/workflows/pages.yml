@@ -19,10 +19,12 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: bash build.sh
+      - run: npm test
+      - run: npm run build
       - run: |
           mkdir -p site
           cp index.html site/index.html
+          cp -R anim m3d nen scene scenery vat site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

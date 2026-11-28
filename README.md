@@ -2,6 +2,14 @@
 
 Ứng dụng **một file HTML** để tự thiết kế bản đồ 2D (chéo 2.5D), công trình 3D voxel, rồi biến thành game chơi được. Dùng tài nguyên do chính người dùng tự tạo (gói tranh võ hiệp riêng); kho này có kèm bộ mảnh Kenney chọn lọc theo giấy phép CC0.
 
+## Mặt đất trong Đường Bao 2D
+
+Chọn **Đường bao → Mặt đất → Phủ kín hình thoi** để tạo nền trống đi được trên toàn bộ lưới. Mở **Màn mẫu · 30** để chọn bố cục cố định theo sáu nhóm địa hình. Mỗi màn có vị trí xuất phát và đích riêng. Mẫu mở ở **Bố cục thô** với các đường viền địa hình bo cong. Chọn **Phối vật liệu** để bật cảnh hoàn thiện và chọn vật liệu cho các lớp. Có thể bật hoặc tắt địa hình, công trình, mạng đường và từng loại mặt nước.
+
+Mở **Mảnh mặt đất · 30** để chọn và xoay mảnh ghép, bấm vào lưới để đặt hoặc kéo để đổi kích thước. **Ráp vùng** là cọ hình chữ nhật cho các vùng tự tô. Các vùng được ráp theo thứ tự đặt và có thể hoàn tác. Nước và vách núi dùng cùng hình dạng chi tiết để hiển thị và chặn bước chân. Nhà ghép Kenney dùng chiều cao cửa và mái theo điểm neo của bộ mảnh. Nhân vật chỉ qua được khi đủ khoảng trống, kể cả khi cúi. Đường qua vùng nước trong đất liền được nối bằng cầu. Với cảnh biển, dùng vùng **Cầu** để đặt lối vượt nước tại vị trí mong muốn.
+
+Dùng **Chơi thử bản nháp** để kiểm tra tuyến đi. Dùng **Tạo màn mới từ hình này** để giữ cảnh hầm hiện tại và thêm màn mặt đất riêng.
+
 ## Tự phối vật liệu Đường Bao 2D
 
 Mở **2D → Đường Bao → Tự phối vật liệu Đường Bao**. Chọn gói ZIP và mảnh ráp riêng cho từng lớp **Nền**, **Phủ nền**, **Tường bao**, **Vật dụng** và **Nhà**. Dùng **Thử lần lượt** để xem từng mảnh tương thích ngay trong bản xem trước, hoặc dùng **Trước**, **Sau** và **Bỏ qua**. Dùng **Áp dụng vào bản đồ**, **Chơi thử bản nháp** hoặc **Tạo màn mới từ hình này**. Xưởng chừa hành lang và kiểm tra va chạm khi đặt đạo cụ.
@@ -19,6 +27,14 @@ Mở **2D → Đường Bao → Tự phối vật liệu Đường Bao**. Chọn
 Các bộ phối Kenney đi kèm ứng dụng và có thể dùng ngay khi mất kết nối đến kho gói. Nếu ZIP đã chọn khớp bộ Kenney Miniature, Xưởng đọc trực tiếp các mảnh trong ZIP đó. Các ảnh gốc dùng cho bộ phối và giấy phép CC0 của Kenney nằm trong `assets/kenney-outline.zip`.
 
 Dùng `shape: "square"` cho ảnh vật liệu vuông nhìn từ trên xuống. Mặc định ảnh sàn dùng góc isometric 2:1. `anchor` là điểm chân trên ảnh gốc tính bằng pixel. `tileWidth` là bề rộng pixel ứng với một ô bản đồ. Có thể chỉ khai báo sàn hoặc chỉ khai báo đạo cụ và phối với gói khác.
+
+### Tỉ lệ, nhân vật và bộ đã lưu
+
+Đường Bao 2D dùng 1,5 m cho một ô cao. Xưởng ưu tiên chiều cao `heightMeters` khai báo cho mảnh trong `outline-materials.json`. Với ảnh thiếu số đo, Xưởng ước lượng từ cửa, tường, nhân vật hoặc nhóm vật dụng, động vật và cây cối. Cỡ mạch nền, chiều cao và độ dày tường, cùng phần chỉnh tỉ lệ theo gói vẫn có thể chỉnh riêng.
+
+Chọn ảnh trong lớp **Nhân vật**. Ảnh đầu là nhân vật điều khiển khi chơi. Các ảnh chọn thêm là nhân vật phụ đứng trong cảnh. Ảnh PNG nhập riêng là hình tĩnh.
+
+Dùng **Lưu…** hoặc **Lưu bộ mới…**, rồi chọn bộ trong **Bộ đã lưu → Mở**. Xưởng lưu các ZIP đang dùng cùng bộ chọn trong trình duyệt đó. Lưu bộ chọn có thể thực hiện trước khi áp dụng bản đồ.
 
 ## Điểm neo khi đặt mảnh 2D
 

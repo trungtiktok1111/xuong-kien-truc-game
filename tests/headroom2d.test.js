@@ -1,3 +1,5 @@
+import {miniatureHouseHeadroom,FARM_HOUSE_SCALE} from '../src/miniatureHouse.js';
+import {scaleOutlineHouse} from '../src/outlineAnchors.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {actorFootprint,actorHeights,bodyFootprint,bodyHeight,clearanceBelow,fitsUnderRoof,roofPlane} from '../src/headroom2d.js';
@@ -34,4 +36,16 @@ test('closed chest and lid are tested separately; other tall props and walls use
   assert.ok(headroomIssue({t:'deco',x:5,y:5,placedProp:true,bodyHeight:1.4},[roof],{}));
   assert.ok(headroomIssue({t:'deco',x:3,y:5,wallLine:{dx:4,dy:0,height:1.2}},[roof],{}));
   assert.equal(headroomIssue({t:'deco',x:3,y:5,wallLine:{dx:4,dy:0,height:.95}},[roof],{}),'');
+});
+
+test('miniature houses enforce door height and honor the scaled floor and roof contact',()=>{
+ const door={id:'a',name:'woodWallDoorway W',x:1.5,y:2.5,housePart:{door:true,side:1,scale:1}};
+ const roof={id:'b',name:'roof S',x:1.5,y:2.5,housePart:{roof:true,scale:1}};
+ const legacy=miniatureHouseHeadroom([{...door,housePart:undefined,surfaceGenerated:true},roof]);
+ assert.ok(!fitsUnderRoof(legacy,actorFootprint(3,3.5,.28),1.2));
+ assert.ok(fitsUnderRoof(legacy,actorFootprint(3,3.5,.28),.68));
+ const scaled=scaleOutlineHouse({w:1,h:1,ents:[door,roof]},FARM_HOUSE_SCALE);
+ const planes=miniatureHouseHeadroom(scaled.ents);
+ assert.ok(fitsUnderRoof(planes,actorFootprint(3*FARM_HOUSE_SCALE,3.5*FARM_HOUSE_SCALE,.28),1.2));
+ assert.ok(!fitsUnderRoof(planes,actorFootprint(2.5*FARM_HOUSE_SCALE,3.5*FARM_HOUSE_SCALE,.28),1.8));
 });

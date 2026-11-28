@@ -28,18 +28,22 @@ export function constructionContext(map,placementZones=map.placementZones){
     return !!ground&&[[0,0],[-r,0],[r,0],[0,-r],[0,r]].every(([dx,dy])=>
       ground[Math.floor(y+dy)*map.w+Math.floor(x+dx)]);
   };
-  let bearings,planes;
+  let bearings,planes,objects;
   const bearingSurfaces=()=>bearings??=roofSupports(map,floor);
   const ctx={floor,bearingSurfaces,headroom:()=>planes??=(map.ents||[]).filter(isRoof).flatMap(roof=>{
     const bearing=roofBearing(roof,ctx);
     return bearing?[roofPlane(roof,bearing)]:[];
   }),free:collision.free,manual:map.cfg?.zones||[],
-    objects:decoZones(map.ents),walls:[...(map.ents||[]).filter(e=>e.wallLine),...outlineSupports(outline)],gates:(map.ents||[]).filter(e=>e.gateAssembly),markers:(map.ents||[]).filter(e=>['start','goal','door','npc','chest'].includes(e.t))};
+    get objects(){return objects??=decoZones((map.ents||[]).map(e=>isRoof(e)&&!roofBearing(e,ctx)?roofOnGround(e):e));},walls:[...(map.ents||[]).filter(e=>e.wallLine),...outlineSupports(outline)],gates:(map.ents||[]).filter(e=>e.gateAssembly),markers:(map.ents||[]).filter(e=>['start','goal','door','npc','chest'].includes(e.t))};
   return ctx;
 }
 
 export function isRoof(e){
   return e.t==='deco'&&!e.flat&&!e.wallLine&&!!(e.roofDirection||(e.roofSurface??roofTextureDirection(e.name,true)));
+}
+
+export function roofOnGround(entity){
+  return {...entity,groundedRoof:true,roofBase:0,roofRise:0};
 }
 
 export function isBearingColumn(name){
